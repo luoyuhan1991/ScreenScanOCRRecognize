@@ -17,23 +17,25 @@ def parse_command_line_args():
     解析命令行参数
     
     Returns:
-        tuple: (roi_choice, gpu_choice, lang_choice, ocr_choice) 或 None（如果没有提供参数）
+        tuple: (roi_choice, gpu_choice, lang_choice, ocr_choice, match_choice, banlist_file) 或 None（如果没有提供参数）
     """
     if len(sys.argv) < 2:
         return None
     
-    # 格式: python main.py [roi_choice] [gpu_choice] [lang_choice] [ocr_choice]
-    # 示例: python main.py 1 1 1 1  (全屏、自动GPU、中英文、paddle)
-    # 示例: python main.py 2 1 1 2  (选择ROI、自动GPU、中英文、easy)
+    # 格式: python main.py [roi_choice] [gpu_choice] [lang_choice] [ocr_choice] [match_choice] [banlist_file]
+    # 示例: python main.py 1 1 1 1 1  (全屏、自动GPU、中英文、paddle、启用匹配，使用默认banlist)
+    # 示例: python main.py 2 1 1 2 0 custom.txt  (选择ROI、自动GPU、中英文、easy、禁用匹配，使用custom.txt)
     
     try:
         roi_choice = sys.argv[1] if len(sys.argv) > 1 else None
         gpu_choice = sys.argv[2] if len(sys.argv) > 2 else None
         lang_choice = sys.argv[3] if len(sys.argv) > 3 else None
         ocr_choice = sys.argv[4] if len(sys.argv) > 4 else None
+        match_choice = sys.argv[5] if len(sys.argv) > 5 else None
+        banlist_file = sys.argv[6] if len(sys.argv) > 6 else None
         
-        print(f"[命令行模式] ROI选项: {roi_choice}, GPU选项: {gpu_choice}, 语言选项: {lang_choice}, OCR选项: {ocr_choice}")
-        return (roi_choice, gpu_choice, lang_choice, ocr_choice)
+        print(f"[命令行模式] ROI选项: {roi_choice}, GPU选项: {gpu_choice}, 语言选项: {lang_choice}, OCR选项: {ocr_choice}, 匹配选项: {match_choice}, Banlist文件: {banlist_file or '默认'}")
+        return (roi_choice, gpu_choice, lang_choice, ocr_choice, match_choice, banlist_file)
     except Exception as e:
         print(f"解析命令行参数失败: {e}，将使用交互式输入")
         return None
@@ -62,7 +64,7 @@ def main():
     
     if cmd_args:
         # 使用命令行参数
-        roi_choice, gpu_choice, lang_choice, ocr_choice = cmd_args
+        roi_choice, gpu_choice, lang_choice, ocr_choice, match_choice, banlist_file = cmd_args
     else:
         # 交互式输入
         # 询问是否使用ROI
@@ -76,6 +78,25 @@ def main():
         print("1. PaddleOCR（默认，推荐）")
         print("2. EasyOCR")
         ocr_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
+        
+        # 询问是否启用文字匹配
+        print("\n是否启用文字匹配功能？")
+        print("1. 启用（默认）")
+        print("2. 禁用")
+        match_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
+        
+        # 如果启用匹配，询问是否使用自定义banlist文件
+        banlist_file = None
+        if match_choice != '2':
+            print("\n是否使用自定义关键词文件？")
+            print(f"1. 使用默认文件 docs/banlist.txt（默认）")
+            print("2. 使用自定义文件")
+            custom_file_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
+            if custom_file_choice == '2':
+                banlist_file = input("请输入关键词文件路径: ").strip()
+                if not banlist_file:
+                    print("未输入文件路径，将使用默认文件")
+                    banlist_file = None
     
     roi = None
     if roi_choice == '2':
@@ -96,14 +117,28 @@ def main():
         from src.paddle_ocr import recognize_and_print, init_reader
         ocr_name = "PaddleOCR"
     
+    # 文字匹配功能选择
+    match_choice = match_choice if match_choice else '1'
+    enable_matching = match_choice == '1'
+    if enable_matching:
+        print("\n启用文字匹配功能")
+    else:
+        print("\n禁用文字匹配功能")
+    
     # 使用默认设置：自动检测GPU、中文简体+英文
     use_gpu = None  # 自动检测GPU
     languages = None  # 默认中文简体 + 英文
+    
+    # 设置默认的banlist文件
+    if banlist_file is None:
+        banlist_file = "docs/banlist.txt"
     
     print("\n[默认设置]")
     print(f"OCR引擎: {ocr_name}")
     print("GPU加速: 自动检测")
     print("OCR语言: 中文简体 + 英文")
+    if match_choice != '2':
+        print(f"关键词匹配文件: {banlist_file}")
     
     print("\n" + "=" * 60)
     print("配置完成，开始扫描...")
@@ -140,7 +175,7 @@ def main():
             
             # 如果扫描成功，进行OCR识别并保存结果
             if screenshot:
-                recognize_and_print(
+                ocr_results = recognize_and_print(
                     screenshot, 
                     languages=languages,
                     save_dir=scan_folder, 
@@ -148,6 +183,11 @@ def main():
                     use_gpu=use_gpu,
                     roi=roi
                 )
+                
+                # 如果启用文字匹配，进行关键词匹配
+                if enable_matching and ocr_results:
+                    from src.text_matcher import match_and_display
+                    match_and_display(ocr_results, txt_file=banlist_file, duration=3)
             
             # 等待5秒
             print("\n等待5秒后进行下一次扫描...")

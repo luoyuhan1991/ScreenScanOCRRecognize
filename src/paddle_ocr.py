@@ -97,9 +97,14 @@ def recognize_and_print(image, languages=None, save_dir="output",
 
     try:
         print(f"[DEBUG] 开始OCR识别...")
+        print(f"[DEBUG] 图像尺寸: {img_array.shape}")
         # 执行OCR识别（使用ocr方法）
         result = ocr.ocr(img_array)
         print(f"[DEBUG] OCR识别完成，结果类型: {type(result)}")
+        print(f"[DEBUG] OCR结果长度: {len(result) if result else 0}")
+        if result and len(result) > 0:
+            print(f"[DEBUG] result[0] 类型: {type(result[0])}")
+            print(f"[DEBUG] result[0] 内容: {result[0]}")
 
         # 提取识别结果
         extracted_text = []
