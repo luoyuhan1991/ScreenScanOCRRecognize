@@ -9,8 +9,7 @@ import sys
 import time
 from datetime import datetime
 from src.scan_screen import scan_screen, select_roi_interactive
-from src.ocr_recognize import recognize_and_print, init_reader
-from scripts.cleanup_old_files import start_cleanup_thread
+from src.cleanup_old_files import start_cleanup_thread
 
 
 def parse_command_line_args():
@@ -18,22 +17,23 @@ def parse_command_line_args():
     解析命令行参数
     
     Returns:
-        tuple: (roi_choice, gpu_choice, lang_choice) 或 None（如果没有提供参数）
+        tuple: (roi_choice, gpu_choice, lang_choice, ocr_choice) 或 None（如果没有提供参数）
     """
     if len(sys.argv) < 2:
         return None
     
-    # 格式: python main.py [roi_choice] [gpu_choice] [lang_choice]
-    # 示例: python main.py 1 1 1  (全屏、自动GPU、中英文)
-    # 示例: python main.py 2 1 1  (选择ROI、自动GPU、中英文)
+    # 格式: python main.py [roi_choice] [gpu_choice] [lang_choice] [ocr_choice]
+    # 示例: python main.py 1 1 1 1  (全屏、自动GPU、中英文、paddle)
+    # 示例: python main.py 2 1 1 2  (选择ROI、自动GPU、中英文、easy)
     
     try:
         roi_choice = sys.argv[1] if len(sys.argv) > 1 else None
         gpu_choice = sys.argv[2] if len(sys.argv) > 2 else None
         lang_choice = sys.argv[3] if len(sys.argv) > 3 else None
+        ocr_choice = sys.argv[4] if len(sys.argv) > 4 else None
         
-        print(f"[命令行模式] ROI选项: {roi_choice}, GPU选项: {gpu_choice}, 语言选项: {lang_choice}")
-        return (roi_choice, gpu_choice, lang_choice)
+        print(f"[命令行模式] ROI选项: {roi_choice}, GPU选项: {gpu_choice}, 语言选项: {lang_choice}, OCR选项: {ocr_choice}")
+        return (roi_choice, gpu_choice, lang_choice, ocr_choice)
     except Exception as e:
         print(f"解析命令行参数失败: {e}，将使用交互式输入")
         return None
@@ -62,7 +62,7 @@ def main():
     
     if cmd_args:
         # 使用命令行参数
-        roi_choice, gpu_choice, lang_choice = cmd_args
+        roi_choice, gpu_choice, lang_choice, ocr_choice = cmd_args
     else:
         # 交互式输入
         # 询问是否使用ROI
@@ -71,6 +71,12 @@ def main():
         print("2. 选择ROI区域")
         roi_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
         
+        # 询问使用哪种OCR实现
+        print("\n选择OCR实现：")
+        print("1. PaddleOCR（默认，推荐）")
+        print("2. EasyOCR")
+        ocr_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
+    
     roi = None
     if roi_choice == '2':
         roi = select_roi_interactive()
@@ -79,11 +85,23 @@ def main():
         else:
             print(f"已设置ROI区域: {roi}")
     
+    # 选择OCR实现
+    ocr_choice = ocr_choice if ocr_choice else '1'
+    if ocr_choice == '2':
+        print("\n使用 EasyOCR")
+        from src.easy_ocr import recognize_and_print, init_reader
+        ocr_name = "EasyOCR"
+    else:
+        print("\n使用 PaddleOCR（默认）")
+        from src.paddle_ocr import recognize_and_print, init_reader
+        ocr_name = "PaddleOCR"
+    
     # 使用默认设置：自动检测GPU、中文简体+英文
     use_gpu = None  # 自动检测GPU
     languages = None  # 默认中文简体 + 英文
     
     print("\n[默认设置]")
+    print(f"OCR引擎: {ocr_name}")
     print("GPU加速: 自动检测")
     print("OCR语言: 中文简体 + 英文")
     
@@ -91,10 +109,10 @@ def main():
     print("配置完成，开始扫描...")
     print("=" * 60)
     
-    # 预先初始化EasyOCR，确保GPU被正确检测和使用
-    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在预加载OCR模型...")
+    # 预先初始化OCR，确保GPU被正确检测和使用
+    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在预加载{ocr_name}模型...")
     init_reader(languages=languages, use_gpu=use_gpu, force_reinit=True)
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR模型加载完成\n")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {ocr_name}模型加载完成\n")
     
     # 启动独立的清理线程
     cleanup_thread = start_cleanup_thread(output_dir, max_age_hours=1, interval_minutes=10)
@@ -116,7 +134,8 @@ def main():
             screenshot, timestamp = scan_screen(
                 save_dir=scan_folder, 
                 timestamp=timestamp,
-                roi=roi
+                roi=roi,
+                padding=10
             )
             
             # 如果扫描成功，进行OCR识别并保存结果

@@ -121,7 +121,7 @@ def select_roi_interactive():
         return None
 
 
-def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None):
+def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, padding=10):
     """
     扫描当前屏幕并保存截图
     
@@ -130,16 +130,28 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None):
         save_file (bool): 是否保存文件，默认为 True
         timestamp (str): 时间戳，用于生成文件名。如果为None，则自动生成
         roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全屏）
+        padding (int): 边距（像素），默认为10。用于扩展ROI区域，避免文字太靠近边框
     
     Returns:
         tuple: (PIL.Image截图对象, str时间戳)，如果出错返回 (None, None)
     """
     try:
+        # 获取屏幕尺寸
+        screen = ImageGrab.grab()
+        screen_width, screen_height = screen.size
+        
         # 捕获屏幕（支持ROI）
         if roi is not None:
             x1, y1, x2, y2 = roi
+            
+            # 添加边距，避免文字太靠近边框
+            x1 = max(0, x1 - padding)
+            y1 = max(0, y1 - padding)
+            x2 = min(screen_width, x2 + padding)
+            y2 = min(screen_height, y2 + padding)
+            
             screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 使用ROI区域: ({x1}, {y1}, {x2}, {y2})")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 使用ROI区域: ({x1}, {y1}, {x2}, {y2}), 边距: {padding}px")
         else:
             screenshot = ImageGrab.grab()
         
