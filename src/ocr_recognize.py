@@ -19,13 +19,14 @@ _languages = ['ch_sim', 'en']  # 中文简体和英文
 _use_gpu = False  # 是否使用GPU，自动检测
 
 
-def init_reader(languages=None, use_gpu=None):
+def init_reader(languages=None, use_gpu=None, force_reinit=False):
     """
     初始化 EasyOCR 阅读器
     
     Args:
         languages (list): 语言列表，默认为 ['ch_sim', 'en']
         use_gpu (bool): 是否使用GPU，默认为None（自动检测）
+        force_reinit (bool): 是否强制重新初始化，默认为False
     
     Returns:
         easyocr.Reader: OCR阅读器对象
@@ -38,11 +39,25 @@ def init_reader(languages=None, use_gpu=None):
     if use_gpu is None:
         # 自动检测GPU - 直接使用 PyTorch 的检测结果
         import torch
-        _use_gpu = torch.cuda.is_available()
+        new_use_gpu = torch.cuda.is_available()
+        print(f"[调试] torch.cuda.is_available() = {new_use_gpu}")
+        if new_use_gpu:
+            print(f"[调试] GPU设备: {torch.cuda.get_device_name(0)}")
     else:
-        _use_gpu = use_gpu
+        new_use_gpu = use_gpu
+        print(f"[调试] 使用指定的GPU设置: {new_use_gpu}")
     
-    if _reader is None:
+    # 检查是否需要重新初始化
+    # 1. reader为None（首次初始化）
+    # 2. 强制重新初始化
+    # 3. GPU状态发生变化（从CPU变成GPU）
+    need_reinit = (_reader is None or 
+                   force_reinit or 
+                   (new_use_gpu and not _use_gpu))
+    
+    _use_gpu = new_use_gpu
+    
+    if need_reinit:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在初始化 EasyOCR（首次运行会下载模型，请稍候）...")
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] GPU加速: {'启用' if _use_gpu else '未启用（使用CPU）'}")
         try:
@@ -60,7 +75,7 @@ def init_reader(languages=None, use_gpu=None):
 
 def preprocess_image(image):
     """
-    图像预处理，提高OCR识别准确率（简化版，减少过度处理）
+    图像预处理，提高OCR识别准确率
     
     Args:
         image: PIL.Image对象
@@ -82,12 +97,18 @@ def preprocess_image(image):
         # 转换为灰度图
         gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
         
-        # 轻微对比度增强（使用CLAHE - 自适应直方图均衡化）
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        # 增强对比度（使用CLAHE - 自适应直方图均衡化）
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(gray)
         
+        # 添加锐化处理，提高文字边缘清晰度
+        kernel = np.array([[-1, -1, -1],
+                          [-1,  9, -1],
+                          [-1, -1, -1]])
+        sharpened = cv2.filter2D(enhanced, -1, kernel)
+        
         # 转换回RGB格式（EasyOCR需要RGB）
-        result = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
+        result = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2RGB)
         
         return result
     except Exception as e:
@@ -152,7 +173,7 @@ def postprocess_text(text):
 
 
 def recognize_text(image, languages=None, use_preprocessing=True, 
-                   min_confidence=0.3, use_gpu=None, roi=None):
+                   min_confidence=0.15, use_gpu=None, roi=None):
     """
     对图片进行OCR文字识别
     
@@ -160,7 +181,7 @@ def recognize_text(image, languages=None, use_preprocessing=True,
         image: PIL.Image对象或图片文件路径
         languages (list): OCR语言列表，默认为 ['ch_sim', 'en']
         use_preprocessing (bool): 是否使用图像预处理，默认为True
-        min_confidence (float): 最小置信度阈值，默认为0.3（降低阈值以提高识别率）
+        min_confidence (float): 最小置信度阈值，默认为0.15（降低以提高识别率）
         use_gpu (bool): 是否使用GPU，默认为None（自动检测）
         roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
     
@@ -198,35 +219,32 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             # 将 PIL Image 转换为 numpy 数组
             img_array = np.array(image)
         
-        # 进行OCR识别，使用更宽松的参数
+        # 进行OCR识别，使用优化后的参数
         print(f"[调试] 开始OCR识别...")
         results = _reader.readtext(
             img_array,
             detail=1,  # 返回详细信息（边界框、置信度）
             paragraph=False,  # 不自动合并段落
-            width_ths=0.7,  # 宽度阈值，提高以增加合并
-            height_ths=0.7,  # 高度阈值，提高以增加合并
-            contrast_ths=0.3,  # 对比度阈值，降低
+            width_ths=0.5,  # 宽度阈值，提高以增加合并
+            height_ths=0.5,  # 高度阈值，提高以增加合并
+            contrast_ths=0.2,  # 对比度阈值，降低
             adjust_contrast=0.5,  # 对比度调整
-            text_threshold=0.5,  # 文本阈值，降低
-            low_text=0.3,  # 低文本阈值，降低
-            link_threshold=0.3,  # 链接阈值，降低
+            text_threshold=0.4,  # 文本阈值，降低
+            low_text=0.2,  # 低文本阈值，降低
+            link_threshold=0.2,  # 链接阈值，降低
             canvas_size=2560,  # 画布大小
-            mag_ratio=1.0  # 放大比例
+            mag_ratio=2.0  # 放大比例
         )
         print(f"[调试] OCR识别完成，共识别到 {len(results)} 个结果")
         
         # 提取所有识别到的文字，按位置排序
         text_items = []
         for (bbox, text, confidence) in results:
-            print(f"[调试] 识别结果: text='{text}', confidence={confidence:.3f}")
             if confidence >= min_confidence:
                 # 计算文本的Y坐标（用于排序）
                 y_coord = np.mean([point[1] for point in bbox])
                 text_items.append((y_coord, text, confidence))
-        
-        print(f"[调试] 筛选后剩余 {len(text_items)} 个结果（置信度 >= {min_confidence}）")
-        
+                
         # 按Y坐标排序（从上到下）
         text_items.sort(key=lambda x: x[0])
         

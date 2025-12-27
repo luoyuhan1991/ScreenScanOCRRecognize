@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime
 from src.scan_screen import scan_screen, select_roi_interactive
-from src.ocr_recognize import recognize_and_print
+from src.ocr_recognize import recognize_and_print, init_reader
 from scripts.cleanup_old_files import start_cleanup_thread
 
 
@@ -90,6 +90,11 @@ def main():
     print("\n" + "=" * 60)
     print("配置完成，开始扫描...")
     print("=" * 60)
+    
+    # 预先初始化EasyOCR，确保GPU被正确检测和使用
+    print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在预加载OCR模型...")
+    init_reader(languages=languages, use_gpu=use_gpu, force_reinit=True)
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR模型加载完成\n")
     
     # 启动独立的清理线程
     cleanup_thread = start_cleanup_thread(output_dir, max_age_hours=1, interval_minutes=10)
