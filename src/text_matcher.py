@@ -60,7 +60,7 @@ class TextMatcher:
     
     def match(self, ocr_results):
         """
-        匹配OCR结果中的关键词
+        匹配OCR结果中的关键词（基于字符串包含）
         
         Args:
             ocr_results (list): OCR识别结果列表，每个元素是包含'text'键的字典
@@ -82,12 +82,14 @@ class TextMatcher:
         # 检查每个关键词是否在OCR结果中
         for keyword in self.keywords:
             for ocr_text in ocr_texts:
-                if keyword in ocr_text or ocr_text in keyword:
+                # 检查关键词是否包含在OCR结果中
+                if keyword in ocr_text:
                     matched_keywords.append(keyword)
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 匹配成功: '{keyword}' (OCR: '{ocr_text}')")
                     break
         
         if matched_keywords:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 匹配到关键词: {matched_keywords}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 总共匹配到 {len(matched_keywords)} 个关键词")
         
         return matched_keywords
 
@@ -176,13 +178,13 @@ class FloatingTextDisplay:
         self.root.geometry(f"+{x}+{y}")
 
 
-def match_and_display(ocr_results, txt_file="keywords.txt", duration=3, position="center"):
+def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center"):
     """
     匹配关键词并显示
     
     Args:
         ocr_results (list): OCR识别结果列表
-        txt_file (str): 关键词TXT文件路径
+        txt_file (str): 关键词TXT文件路径，默认为 docs/banlist.txt
         duration (int): 显示时长（秒）
         position (str): 显示位置
     

@@ -56,47 +56,20 @@ def main():
     print("按 Ctrl+C 停止程序")
     print("=" * 60)
     
-    # 配置选项
-    print("\n[配置选项]")
-    
     # 检查是否使用命令行参数
     cmd_args = parse_command_line_args()
     
     if cmd_args:
-        # 使用命令行参数
         roi_choice, gpu_choice, lang_choice, ocr_choice, match_choice, banlist_file = cmd_args
     else:
-        # 交互式输入
-        # 询问是否使用ROI
-        print("\n是否要选择ROI（感兴趣区域）？")
-        print("1. 全屏扫描（默认）")
-        print("2. 选择ROI区域")
-        roi_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
-        
-        # 询问使用哪种OCR实现
-        print("\n选择OCR实现：")
-        print("1. PaddleOCR（默认，推荐）")
-        print("2. EasyOCR")
-        ocr_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
-        
-        # 询问是否启用文字匹配
-        print("\n是否启用文字匹配功能？")
-        print("1. 启用（默认）")
-        print("2. 禁用")
-        match_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
-        
-        # 如果启用匹配，询问是否使用自定义banlist文件
-        banlist_file = None
-        if match_choice != '2':
-            print("\n是否使用自定义关键词文件？")
-            print(f"1. 使用默认文件 docs/banlist.txt（默认）")
-            print("2. 使用自定义文件")
-            custom_file_choice = input("请输入选项 (1/2，直接回车默认1): ").strip()
-            if custom_file_choice == '2':
-                banlist_file = input("请输入关键词文件路径: ").strip()
-                if not banlist_file:
-                    print("未输入文件路径，将使用默认文件")
-                    banlist_file = None
+        # 使用默认参数
+        roi_choice = '2'
+        gpu_choice = None
+        lang_choice = None
+        ocr_choice = '1'
+        match_choice = '1'
+        banlist_file = "docs/banlist.txt"
+        print("\n[使用默认配置]")
     
     roi = None
     if roi_choice == '2':
@@ -133,7 +106,7 @@ def main():
     if banlist_file is None:
         banlist_file = "docs/banlist.txt"
     
-    print("\n[默认设置]")
+    print("\n[配置信息]")
     print(f"OCR引擎: {ocr_name}")
     print("GPU加速: 自动检测")
     print("OCR语言: 中文简体 + 英文")
