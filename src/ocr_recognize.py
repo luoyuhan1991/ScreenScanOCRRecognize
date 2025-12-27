@@ -7,7 +7,7 @@ OCR识别模块
 
 import os
 from datetime import datetime
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance
 import easyocr
 import numpy as np
 import cv2
@@ -16,27 +16,50 @@ import cv2
 # 全局 EasyOCR 阅读器（延迟初始化）
 _reader = None
 _languages = ['ch_sim', 'en']  # 中文简体和英文
+_use_gpu = False  # 是否使用GPU，自动检测
 
 
-def init_reader(languages=None):
+def detect_gpu():
+    """
+    检测系统是否支持GPU加速
+    
+    Returns:
+        bool: 是否可以使用GPU
+    """
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
+        return False
+
+
+def init_reader(languages=None, use_gpu=None):
     """
     初始化 EasyOCR 阅读器
     
     Args:
         languages (list): 语言列表，默认为 ['ch_sim', 'en']
+        use_gpu (bool): 是否使用GPU，默认为None（自动检测）
     
     Returns:
         easyocr.Reader: OCR阅读器对象
     """
-    global _reader, _languages
+    global _reader, _languages, _use_gpu
     
     if languages is None:
         languages = _languages
     
+    if use_gpu is None:
+        # 自动检测GPU
+        _use_gpu = detect_gpu()
+    else:
+        _use_gpu = use_gpu
+    
     if _reader is None:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在初始化 EasyOCR（首次运行会下载模型，请稍候）...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] GPU加速: {'启用' if _use_gpu else '未启用（使用CPU）'}")
         try:
-            _reader = easyocr.Reader(languages, gpu=False)  # gpu=False 使用CPU
+            _reader = easyocr.Reader(languages, gpu=_use_gpu)
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EasyOCR 初始化完成")
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EasyOCR 初始化失败: {e}")
@@ -47,7 +70,7 @@ def init_reader(languages=None):
 
 def preprocess_image(image):
     """
-    图像预处理，提高OCR识别准确率
+    图像预处理，提高OCR识别准确率（简化版，减少过度处理）
     
     Args:
         image: PIL.Image对象
@@ -69,24 +92,12 @@ def preprocess_image(image):
         # 转换为灰度图
         gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
         
-        # 应用自适应阈值二值化（提高文字对比度）
-        # 使用自适应阈值可以更好地处理不同光照条件
-        binary = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY, 11, 2
-        )
-        
-        # 降噪处理
-        denoised = cv2.fastNlMeansDenoising(binary, None, 10, 7, 21)
-        
-        # 轻微锐化（增强文字边缘）
-        kernel = np.array([[-1, -1, -1],
-                           [-1,  9, -1],
-                           [-1, -1, -1]])
-        sharpened = cv2.filter2D(denoised, -1, kernel)
+        # 轻微对比度增强（使用CLAHE - 自适应直方图均衡化）
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
         
         # 转换回RGB格式（EasyOCR需要RGB）
-        result = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2RGB)
+        result = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
         
         return result
     except Exception as e:
@@ -95,9 +106,49 @@ def preprocess_image(image):
         return np.array(image.convert('RGB'))
 
 
+def optimize_image_resolution(image, min_width=640, max_width=2560):
+    """
+    优化图像分辨率，找到最佳识别尺寸
+    
+    Args:
+        image: PIL.Image对象
+        min_width (int): 最小宽度，默认640（降低以避免过度放大小图像）
+        max_width (int): 最大宽度，默认2560
+    
+    Returns:
+        PIL.Image: 优化后的图像
+    """
+    try:
+        width, height = image.size
+        
+        # 如果宽度在合理范围内，不处理
+        if min_width <= width <= max_width:
+            return image
+        
+        # 计算缩放比例
+        if width < min_width:
+            # 放大图像
+            scale = min_width / width
+        else:
+            # 缩小图像
+            scale = max_width / width
+        
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        
+        # 使用高质量的重采样方法
+        optimized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        return optimized
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 图像分辨率优化失败，使用原始图像: {e}")
+        return image
+
+
 def postprocess_text(text):
     """
     后处理文本，修复常见的OCR错误
+    （当前版本保留方法结构，暂不实现具体逻辑）
     
     Args:
         text (str): 原始OCR识别文本
@@ -105,50 +156,13 @@ def postprocess_text(text):
     Returns:
         str: 后处理后的文本
     """
-    if not text:
-        return text
-    
-    lines = text.split('\n')
-    processed_lines = []
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        
-        # 修复常见的OCR错误
-        # 修复常见的字符混淆
-        replacements = {
-            'rn': 'm',  # rn 经常被误识别为 m
-            'vv': 'w',  # vv 经常被误识别为 w
-            'ii': 'n',  # ii 经常被误识别为 n
-        }
-        
-        # 修复文件名扩展名（.py, .txt等）
-        if line.endswith('py') and not line.endswith('.py'):
-            line = line[:-2] + '.py'
-        elif line.endswith('txt') and not line.endswith('.txt'):
-            line = line[:-3] + '.txt'
-        elif line.endswith('png') and not line.endswith('.png'):
-            line = line[:-3] + '.png'
-        
-        # 修复常见单词
-        common_fixes = {
-            'Vaw': 'View',
-            'Seiection': 'Selection',
-            'Terminai': 'Terminal',
-        }
-        
-        for wrong, correct in common_fixes.items():
-            if wrong in line:
-                line = line.replace(wrong, correct)
-        
-        processed_lines.append(line)
-    
-    return '\n'.join(processed_lines)
+    # 保留方法结构，暂不实现具体后处理逻辑
+    # 未来可以根据需要添加文本纠错、格式化等功能
+    return text
 
 
-def recognize_text(image, languages=None, use_preprocessing=True, min_confidence=0.3):
+def recognize_text(image, languages=None, use_preprocessing=True, 
+                   min_confidence=0.3, use_gpu=None, roi=None):
     """
     对图片进行OCR文字识别
     
@@ -156,7 +170,9 @@ def recognize_text(image, languages=None, use_preprocessing=True, min_confidence
         image: PIL.Image对象或图片文件路径
         languages (list): OCR语言列表，默认为 ['ch_sim', 'en']
         use_preprocessing (bool): 是否使用图像预处理，默认为True
-        min_confidence (float): 最小置信度阈值，默认为0.3（降低阈值以获取更多结果）
+        min_confidence (float): 最小置信度阈值，默认为0.3（降低阈值以提高识别率）
+        use_gpu (bool): 是否使用GPU，默认为None（自动检测）
+        roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
     
     Returns:
         str: 识别出的文字内容，如果出错返回空字符串
@@ -166,11 +182,24 @@ def recognize_text(image, languages=None, use_preprocessing=True, min_confidence
     try:
         # 初始化阅读器（如果尚未初始化）
         if _reader is None:
-            init_reader(languages)
+            init_reader(languages, use_gpu)
         
         # 如果传入的是文件路径，则打开图片
         if isinstance(image, str):
             image = Image.open(image)
+        
+        # 调试信息
+        print(f"[调试] 图像类型: {type(image)}, 尺寸: {image.size}")
+        print(f"[调试] languages: {languages}, use_preprocessing: {use_preprocessing}")
+        print(f"[调试] min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
+        
+        # 应用ROI裁剪
+        if roi is not None:
+            x1, y1, x2, y2 = roi
+            image = image.crop((x1, y1, x2, y2))
+        
+        # 优化图像分辨率
+        image = optimize_image_resolution(image)
         
         # 图像预处理
         if use_preprocessing:
@@ -179,22 +208,34 @@ def recognize_text(image, languages=None, use_preprocessing=True, min_confidence
             # 将 PIL Image 转换为 numpy 数组
             img_array = np.array(image)
         
-        # 进行OCR识别，使用更详细的参数
+        # 进行OCR识别，使用更宽松的参数
+        print(f"[调试] 开始OCR识别...")
         results = _reader.readtext(
             img_array,
             detail=1,  # 返回详细信息（边界框、置信度）
             paragraph=False,  # 不自动合并段落
-            width_ths=0.7,  # 宽度阈值，用于合并文本
-            height_ths=0.7   # 高度阈值，用于合并文本
+            width_ths=0.7,  # 宽度阈值，提高以增加合并
+            height_ths=0.7,  # 高度阈值，提高以增加合并
+            contrast_ths=0.3,  # 对比度阈值，降低
+            adjust_contrast=0.5,  # 对比度调整
+            text_threshold=0.5,  # 文本阈值，降低
+            low_text=0.3,  # 低文本阈值，降低
+            link_threshold=0.3,  # 链接阈值，降低
+            canvas_size=2560,  # 画布大小
+            mag_ratio=1.0  # 放大比例
         )
+        print(f"[调试] OCR识别完成，共识别到 {len(results)} 个结果")
         
         # 提取所有识别到的文字，按位置排序
         text_items = []
         for (bbox, text, confidence) in results:
+            print(f"[调试] 识别结果: text='{text}', confidence={confidence:.3f}")
             if confidence >= min_confidence:
                 # 计算文本的Y坐标（用于排序）
                 y_coord = np.mean([point[1] for point in bbox])
                 text_items.append((y_coord, text, confidence))
+        
+        print(f"[调试] 筛选后剩余 {len(text_items)} 个结果（置信度 >= {min_confidence}）")
         
         # 按Y坐标排序（从上到下）
         text_items.sort(key=lambda x: x[0])
@@ -206,7 +247,7 @@ def recognize_text(image, languages=None, use_preprocessing=True, min_confidence
         text = '\n'.join(text_lines)
         text = text.strip()
         
-        # 后处理文本，修复常见错误
+        # 后处理文本（当前版本不执行具体逻辑）
         text = postprocess_text(text)
         
         return text
@@ -216,30 +257,30 @@ def recognize_text(image, languages=None, use_preprocessing=True, min_confidence
         return ""
 
 
-def recognize_and_print(image, languages=None, save_dir="output", timestamp=None):
+def recognize_and_print(image, languages=None, save_dir="output", 
+                       timestamp=None, use_gpu=None, roi=None):
     """
-    对图片进行OCR识别并打印结果，同时保存到文件
+    对图片进行OCR识别并保存结果到文件
     
     Args:
         image: PIL.Image对象或图片文件路径
         languages (list): OCR语言列表，默认为 ['ch_sim', 'en']
         save_dir (str): 保存目录，默认为 "output"
         timestamp (str): 时间戳，用于生成文件名。如果为None，则自动生成
+        use_gpu (bool): 是否使用GPU，默认为None（自动检测）
+        roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
     
     Returns:
         str: 识别出的文字内容
     """
-    text = recognize_text(image, languages)
+    text = recognize_text(image, languages, use_preprocessing=True, 
+                         min_confidence=0.3, use_gpu=use_gpu, roi=roi)
     
-    # 打印结果
+    # 记录识别时间（不输出识别结果内容）
     if text:
-        print(f"\n{'='*60}")
-        print("OCR识别结果:")
-        print('-'*60)
-        print(text)
-        print('='*60)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR识别完成，已识别到文字内容")
     else:
-        print("\nOCR识别结果: 未识别到文字内容")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR识别完成，未识别到文字内容")
     
     # 保存到文件
     if timestamp is None:
@@ -275,3 +316,11 @@ if __name__ == "__main__":
     """直接运行此脚本时，测试OCR功能"""
     print("OCR识别模块测试")
     print("请提供图片路径进行测试")
+
+
+
+
+
+
+
+
