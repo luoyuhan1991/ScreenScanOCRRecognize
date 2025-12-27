@@ -79,64 +79,13 @@ def main():
         else:
             print(f"已设置ROI区域: {roi}")
     
-    # 询问是否使用GPU
-    print("\n是否使用GPU加速？")
-    print("1. 自动检测（默认）")
-    print("2. 强制使用GPU")
-    print("3. 强制使用CPU")
+    # 使用默认设置：自动检测GPU、中文简体+英文
+    use_gpu = None  # 自动检测GPU
+    languages = None  # 默认中文简体 + 英文
     
-    if cmd_args and gpu_choice:
-        # 使用命令行参数
-        print(f"已选择选项: {gpu_choice}")
-    else:
-        gpu_choice = input("请输入选项 (1/2/3，直接回车默认1): ").strip()
-    
-    use_gpu = None  # 默认自动检测
-    if gpu_choice == '2':
-        use_gpu = True
-        print("已设置为强制使用GPU")
-    elif gpu_choice == '3':
-        use_gpu = False
-        print("已设置为强制使用CPU")
-    else:
-        print("将自动检测GPU可用性")
-    
-    # 询问语言设置
-    print("\nOCR语言设置：")
-    print("1. 中文简体 + 英文（默认）")
-    print("2. 仅中文简体")
-    print("3. 仅英文")
-    print("4. 自定义语言（用逗号分隔，如: ch_sim,en,ja）")
-    
-    if cmd_args and lang_choice:
-        # 使用命令行参数
-        print(f"已选择选项: {lang_choice}")
-    else:
-        lang_choice = input("请输入选项 (1/2/3/4，直接回车默认1): ").strip()
-    
-    languages = None
-    if lang_choice == '2':
-        languages = ['ch_sim']
-        print("已设置为仅识别中文简体")
-    elif lang_choice == '3':
-        languages = ['en']
-        print("已设置为仅识别英文")
-    elif lang_choice == '4':
-        if cmd_args:
-            # 命令行模式：从参数中读取自定义语言
-            if len(sys.argv) > 4:
-                custom_lang = sys.argv[4]
-                languages = [lang.strip() for lang in custom_lang.split(',')]
-                print(f"已设置为自定义语言: {languages}")
-            else:
-                print("未提供自定义语言，使用默认语言")
-        else:
-            # 交互式模式
-            custom_lang = input("请输入语言代码（用逗号分隔）: ").strip()
-            languages = [lang.strip() for lang in custom_lang.split(',')]
-            print(f"已设置为自定义语言: {languages}")
-    else:
-        print("将使用默认语言：中文简体 + 英文")
+    print("\n[默认设置]")
+    print("GPU加速: 自动检测")
+    print("OCR语言: 中文简体 + 英文")
     
     print("\n" + "=" * 60)
     print("配置完成，开始扫描...")

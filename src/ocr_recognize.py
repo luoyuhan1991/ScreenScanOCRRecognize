@@ -19,20 +19,6 @@ _languages = ['ch_sim', 'en']  # 中文简体和英文
 _use_gpu = False  # 是否使用GPU，自动检测
 
 
-def detect_gpu():
-    """
-    检测系统是否支持GPU加速
-    
-    Returns:
-        bool: 是否可以使用GPU
-    """
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except ImportError:
-        return False
-
-
 def init_reader(languages=None, use_gpu=None):
     """
     初始化 EasyOCR 阅读器
@@ -50,8 +36,9 @@ def init_reader(languages=None, use_gpu=None):
         languages = _languages
     
     if use_gpu is None:
-        # 自动检测GPU
-        _use_gpu = detect_gpu()
+        # 自动检测GPU - 直接使用 PyTorch 的检测结果
+        import torch
+        _use_gpu = torch.cuda.is_available()
     else:
         _use_gpu = use_gpu
     
@@ -61,6 +48,9 @@ def init_reader(languages=None, use_gpu=None):
         try:
             _reader = easyocr.Reader(languages, gpu=_use_gpu)
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EasyOCR 初始化完成")
+            if _use_gpu:
+                import torch
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 确认使用设备: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EasyOCR 初始化失败: {e}")
             raise
