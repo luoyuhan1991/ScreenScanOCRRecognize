@@ -21,6 +21,21 @@ _reader = None
 _languages = ['ch_sim', 'en']  # 中文简体和英文
 _use_gpu = False  # 是否使用GPU，自动检测
 
+# EasyOCR语言代码映射（将通用代码转换为EasyOCR支持的代码）
+EASYOCR_LANG_MAP = {
+    'ch': 'ch_sim',        # 中文 -> 简体中文
+    'chinese': 'ch_sim',   # 中文 -> 简体中文
+    'ch_sim': 'ch_sim',    # 简体中文
+    'ch_tra': 'ch_tra',    # 繁体中文
+    'en': 'en',            # 英文
+    'english': 'en',       # 英文
+    'french': 'fr',        # 法语
+    'german': 'de',        # 德语
+    'korean': 'ko',        # 韩语
+    'japan': 'ja',         # 日语
+    'japanese': 'ja',      # 日语
+}
+
 
 def init_reader(languages=None, use_gpu=None, force_reinit=False):
     """
@@ -38,6 +53,16 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     
     if languages is None:
         languages = _languages
+    else:
+        # 转换语言代码为EasyOCR支持的格式
+        if isinstance(languages, list):
+            # 如果是列表，转换每个语言代码
+            languages = [EASYOCR_LANG_MAP.get(lang, lang) for lang in languages]
+        elif isinstance(languages, str):
+            # 如果是字符串，转换为列表并映射
+            languages = [EASYOCR_LANG_MAP.get(languages, languages)]
+        else:
+            languages = _languages
     
     if use_gpu is None:
         # 自动检测GPU - 直接使用 PyTorch 的检测结果
