@@ -8,13 +8,14 @@ OCR识别模块
 import os
 import time
 from datetime import datetime
-from PIL import Image, ImageEnhance
+
+import cv2
 import easyocr
 import numpy as np
-import cv2
-from .logger import logger
-from .config import config
+from PIL import Image
 
+from .config import config
+from .logger import logger
 
 # 全局 EasyOCR 阅读器（延迟初始化）
 _reader = None
@@ -422,10 +423,20 @@ def recognize_and_print(image, languages=None, save_dir="output",
         os.makedirs(save_dir)
     
     # 保存OCR结果到文本文件
-    # 如果save_dir已经是时间戳文件夹，则直接使用ocr_result.txt
-    if os.path.basename(save_dir) == timestamp:
+    # 判断是否在按分钟模式下：save_dir的父目录是output，且save_dir是分钟文件夹（格式：YYYYMMDD_HHMM）
+    save_dir_basename = os.path.basename(save_dir)
+    # 分钟文件夹格式：YYYYMMDD_HHMM（13个字符，包含下划线）
+    # 例如：20251229_0145（下划线在第9位，索引8）
+    is_minute_mode = (len(save_dir_basename) == 13 and 
+                     save_dir_basename[8] == '_' and 
+                     save_dir_basename[:8].isdigit() and 
+                     save_dir_basename[9:].isdigit())
+    
+    if is_minute_mode:
+        # 按分钟模式：使用固定的ocr_result.txt文件名
         txt_filename = os.path.join(save_dir, "ocr_result.txt")
     else:
+        # 其他模式：使用带时间戳的文件名
         txt_filename = os.path.join(save_dir, f"ocr_result_{timestamp}.txt")
     try:
         with open(txt_filename, 'w', encoding='utf-8') as f:
@@ -459,8 +470,6 @@ if __name__ == "__main__":
     """直接运行此脚本时，测试OCR功能"""
     print("OCR识别模块测试")
     print("请提供图片路径进行测试")
-
-
 
 
 
