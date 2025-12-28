@@ -248,14 +248,14 @@ def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
         # 即使没有识别到文本也保存空结果文件
         result_file = os.path.join(save_dir, "ocr_result.txt")
         with open(result_file, 'w', encoding='utf-8') as f:
-            # 在文件开头显示耗时信息（更明显）
-            if ocr_duration is not None:
-                f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
+            # 在文件开头显示基本信息
             f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
             f.write("="*60 + "\n\n")
             f.write("未识别到任何文本\n")
+            if ocr_duration is not None:
+                f.write(f"\nOCR耗时: {ocr_duration:.3f}秒\n")
         logger.info(f"OCR结果已保存到: {result_file}")
         return
 
@@ -264,13 +264,11 @@ def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
 
     # 写入识别结果
     with open(result_file, 'w', encoding='utf-8') as f:
-        # 在文件开头显示耗时信息（更明显）
-        if ocr_duration is not None:
-            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
-            f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            if roi:
-                f.write(f"ROI区域: {roi}\n")
-            f.write("="*60 + "\n\n")
+        # 在文件开头显示基本信息
+        f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if roi:
+            f.write(f"ROI区域: {roi}\n")
+        f.write("="*60 + "\n\n")
         
         # 写入识别结果
         for item in results:
@@ -287,11 +285,6 @@ def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
         f.write(f"平均置信度: {avg_confidence:.2f}\n")
         if ocr_duration is not None:
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
-        f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        if roi:
-            f.write(f"ROI区域: {roi}\n")
-
-    logger.info(f"OCR结果已保存到: {result_file}")
 
 
 def print_ocr_results(results):

@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime
 
-from src.cleanup_old_files import start_cleanup_thread
+from src.cleanup_old_files import start_cleanup_thread, cleanup_old_folders_by_count
 from src.config import config
 from src.logger import logger
 from src.scan_screen import scan_screen, select_roi_interactive
@@ -51,6 +51,8 @@ def main():
     output_dir = config.get('files.output_dir', 'output')
     scan_interval = config.get('scan.interval_seconds', 5)
     roi_padding = config.get('scan.roi_padding', 10)
+    folder_mode = config.get('files.folder_mode', 'minute')  # 文件夹组织模式
+    max_folders = config.get('files.max_folders', 10)  # 最大保留文件夹数量
     
     # 创建输出目录
     if not os.path.exists(output_dir):
@@ -60,7 +62,10 @@ def main():
     logger.info("=" * 60)
     logger.info("ScreenScanOCRRecognize - 屏幕扫描OCR识别程序")
     logger.info(f"每{scan_interval}秒自动扫描一次屏幕并进行OCR识别")
+    logger.info(f"文件夹组织模式: {'按分钟' if folder_mode == 'minute' else '按次扫描'}")
     logger.info(f"截图和OCR结果将保存到: {os.path.abspath(output_dir)}")
+    if folder_mode == 'minute':
+        logger.info(f"最多保留 {max_folders} 个分钟文件夹")
     
     cleanup_enabled = config.get('cleanup.enabled', True)
     if cleanup_enabled:
@@ -188,33 +193,75 @@ def main():
     
     try:
         scan_count = 0
+        current_minute_folder = None
+        current_minute = None
+        
         while True:
             scan_count += 1
             scan_start_time = time.time()
             logger.info(f"\n开始第 {scan_count} 次扫描...")
             
-            # 生成时间戳（用于匹配截图和OCR结果文件名）
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # 获取当前时间
+            now = datetime.now()
             
-            # 为每次扫描创建独立的文件夹
-            scan_folder = os.path.join(output_dir, timestamp)
+            # 根据文件夹组织模式决定保存目录
+            if folder_mode == 'minute':
+                # 按分钟组织文件夹
+                minute_timestamp = now.strftime("%Y%m%d_%H%M")
+                
+                # 检查是否需要创建新的分钟文件夹
+                if current_minute != minute_timestamp:
+                    current_minute = minute_timestamp
+                    current_minute_folder = os.path.join(output_dir, current_minute)
+                    
+                    # 创建新的分钟文件夹
+                    if not os.path.exists(current_minute_folder):
+                        os.makedirs(current_minute_folder)
+                        logger.info(f"创建新的分钟文件夹: {current_minute}")
+                        
+                        # 清理旧的分钟文件夹，保留最多max_folders个
+                        cleanup_old_folders_by_count(output_dir, max_folders=max_folders)
+                
+                # 使用分钟文件夹作为保存目录
+                save_dir = current_minute_folder
+            else:
+                # 按次扫描组织文件夹（原有模式）
+                second_timestamp = now.strftime("%Y%m%d_%H%M%S")
+                save_dir = os.path.join(output_dir, second_timestamp)
+                os.makedirs(save_dir, exist_ok=True)
+            
+            # 生成秒级时间戳（用于匹配截图和OCR结果文件名）
+            second_timestamp = now.strftime("%Y%m%d_%H%M%S")
             
             try:
-                # 扫描屏幕（保存到独立的扫描文件夹，支持ROI）
+                # 扫描屏幕（保存到分钟文件夹，支持ROI）
                 screenshot, timestamp = scan_screen(
-                    save_dir=scan_folder, 
-                    timestamp=timestamp,
+                    save_dir=save_dir, 
+                    timestamp=second_timestamp,
                     roi=roi,
                     padding=roi_padding
                 )
                 
                 # 如果扫描成功，进行OCR识别并保存结果
                 if screenshot:
+                    # 在按分钟模式下，删除该文件夹中所有旧的截图
+                    if folder_mode == 'minute':
+                        # 查找并删除所有旧的截图文件
+                        import glob
+                        old_screenshots = glob.glob(os.path.join(save_dir, "screenshot_*.png"))
+                        for old_screenshot in old_screenshots:
+                            if old_screenshot != os.path.join(save_dir, f"screenshot_{second_timestamp}.png"):
+                                try:
+                                    os.remove(old_screenshot)
+                                    logger.debug(f"删除旧截图: {os.path.basename(old_screenshot)}")
+                                except Exception as e:
+                                    logger.warning(f"删除旧截图失败: {e}")
+                    
                     ocr_results = recognize_and_print(
                         screenshot, 
                         languages=languages,
-                        save_dir=scan_folder, 
-                        timestamp=timestamp,
+                        save_dir=save_dir, 
+                        timestamp=second_timestamp,
                         use_gpu=use_gpu,
                         roi=roi
                     )
@@ -249,3 +296,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
