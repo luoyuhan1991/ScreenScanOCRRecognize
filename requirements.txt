@@ -7,3 +7,13 @@ torch>=2.0.0  # 用于GPU检测和加速
 pyyaml>=6.0  # 用于配置文件解析
 paddleocr>=2.7.0  # PaddleOCR（最新稳定版本3.1.0+，使用device参数）
 
+# PaddlePaddle GPU版本（根据CUDA版本选择）
+# 注意：paddlepaddle-gpu需要单独安装，不能通过pip直接安装到requirements.txt
+# 安装方法：
+# 1. 对于CUDA 12.3+ (适用于CUDA 12.6，使用CUDA 11.8版本，向后兼容):
+#    py -m pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+# 2. 对于CUDA 11.8:
+#    py -m pip install paddlepaddle-gpu==2.6.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+# 3. 对于CUDA 11.2/11.6/11.7:
+#    参考官方文档: https://www.paddlepaddle.org.cn/install/quick
+

@@ -4,14 +4,16 @@ PaddleOCR 模块 - 屏幕扫描OCR识别程序的OCR引擎
 使用 PaddleOCR 替代 EasyOCR，提供更高的识别准确率
 """
 
-import cv2
-import numpy as np
-from paddleocr import PaddleOCR
 import os
 import time
 from datetime import datetime
-from .logger import logger
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
+
 from .config import config
+from .logger import logger
 
 # 全局OCR实例缓存
 _ocr_instance = None
@@ -81,25 +83,26 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
         elif force_gpu:
             use_gpu = True  # 强制使用GPU
             logger.info("PaddleOCR: 强制使用GPU")
-            # 验证GPU是否可用
+            # 验证GPU是否可用（使用paddle检测，因为PaddleOCR基于PaddlePaddle）
             try:
-                import torch
-                if torch.cuda.is_available():
-                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+                import paddle
+                if paddle.is_compiled_with_cuda():
+                    logger.info(f"PaddlePaddle GPU版本已安装（CUDA {paddle.version.cuda()}）")
                 else:
-                    logger.warning("强制使用GPU但未检测到可用GPU，将尝试使用GPU（可能失败）")
+                    logger.warning("PaddlePaddle是CPU版本，无法使用GPU加速")
             except ImportError:
-                logger.warning("无法导入torch，无法验证GPU状态")
+                logger.warning("无法导入paddle，无法验证GPU状态")
         elif auto_detect:
             try:
-                import torch
-                use_gpu = torch.cuda.is_available()
+                import paddle
+                use_gpu = paddle.is_compiled_with_cuda()
                 if use_gpu:
-                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+                    logger.info(f"PaddlePaddle GPU版本已安装（CUDA {paddle.version.cuda()}），将使用GPU")
                 else:
-                    logger.info("未检测到GPU，使用CPU")
+                    logger.info("PaddlePaddle是CPU版本，使用CPU")
             except ImportError:
                 use_gpu = False
+                logger.info("无法导入paddle，使用CPU")
         else:
             use_gpu = True  # 默认强制使用GPU
             logger.info("PaddleOCR: 强制使用GPU（默认）")

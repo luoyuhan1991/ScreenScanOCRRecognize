@@ -8,10 +8,11 @@ import os
 import sys
 import time
 from datetime import datetime
+
+from src.cleanup_old_files import start_cleanup_thread
 from src.config import config
 from src.logger import logger
 from src.scan_screen import scan_screen, select_roi_interactive
-from src.cleanup_old_files import start_cleanup_thread
 
 
 def parse_command_line_args():
@@ -120,15 +121,15 @@ def main():
     elif force_gpu:
         use_gpu = True  # 强制使用GPU
         logger.info("强制使用GPU加速")
-        # 验证GPU是否可用
+        # 验证GPU是否可用（使用paddle检测，因为PaddleOCR基于PaddlePaddle）
         try:
-            import torch
-            if torch.cuda.is_available():
-                logger.info(f"GPU设备: {torch.cuda.get_device_name(0)}")
+            import paddle
+            if paddle.is_compiled_with_cuda():
+                logger.info(f"PaddlePaddle GPU版本已安装（CUDA {paddle.version.cuda()}）")
             else:
-                logger.warning("强制使用GPU但未检测到可用GPU，将尝试使用GPU（可能失败）")
+                logger.warning("PaddlePaddle是CPU版本，无法使用GPU加速")
         except ImportError:
-            logger.warning("无法导入torch，无法验证GPU状态")
+            logger.warning("无法导入paddle，无法验证GPU状态")
     elif config.get('gpu.auto_detect', False):
         use_gpu = None  # 自动检测GPU
         logger.info("GPU加速: 自动检测")
