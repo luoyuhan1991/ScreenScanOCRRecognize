@@ -405,8 +405,11 @@ def recognize_and_print(image, languages=None, save_dir="output",
     Returns:
         str: 识别出的文字内容
     """
+    # 获取配置中的最小置信度阈值
+    min_confidence = config.get('ocr.min_confidence', 0.3)
+    
     text, ocr_duration = recognize_text(image, languages, use_preprocessing=True, 
-                         min_confidence=0.3, use_gpu=use_gpu, roi=roi)
+                         min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)
     
     # 记录识别时间（不输出识别结果内容）
     if text:
@@ -470,6 +473,7 @@ if __name__ == "__main__":
     """直接运行此脚本时，测试OCR功能"""
     print("OCR识别模块测试")
     print("请提供图片路径进行测试")
+
 
 
 

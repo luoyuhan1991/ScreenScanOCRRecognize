@@ -143,12 +143,44 @@ def main():
         logger.info("GPU加速: 强制启用（默认）")
     
     # 语言配置
-    languages_config = config.get('ocr.languages', ['ch', 'en'])
+    # 根据命令行语言选项设置语言
+    if lang_choice == '1':
+        languages_config = ['ch', 'en']  # 中英文
+        logger.info(f"语言选项: 中英文")
+    elif lang_choice == '2':
+        languages_config = ['ch']  # 仅中文
+        logger.info(f"语言选项: 中文")
+    elif lang_choice == '3':
+        languages_config = ['en']  # 仅英文
+        logger.info(f"语言选项: 英文")
+    else:
+        # 使用配置文件的语言设置
+        languages_config = config.get('ocr.languages', ['ch', 'en'])
+        logger.info(f"语言选项: 使用配置文件 {languages_config}")
     
     # 根据OCR引擎类型处理语言参数
     # PaddleOCR只支持单个语言字符串，EasyOCR支持语言列表
     if ocr_choice == '2':  # EasyOCR
-        languages = languages_config  # EasyOCR支持列表
+        # EasyOCR使用不同的语言代码，需要进行转换
+        # PaddleOCR: 'ch' -> EasyOCR: 'ch_sim'
+        # PaddleOCR: 'en' -> EasyOCR: 'en'
+        language_map = {
+            'ch': 'ch_sim',      # 简体中文
+            'en': 'en',           # 英文
+            'ch_sim': 'ch_sim',  # 简体中文（已经是EasyOCR格式）
+            'ch_tra': 'ch_tra',  # 繁体中文
+        }
+        
+        # 转换语言代码
+        languages = []
+        for lang in languages_config:
+            if lang in language_map:
+                languages.append(language_map[lang])
+            else:
+                # 如果不在映射表中，直接使用原值
+                languages.append(lang)
+        
+        logger.info(f"EasyOCR语言（已转换）: {languages}")
     else:  # PaddleOCR
         # PaddleOCR只支持单个语言，优先使用中文，否则使用第一个
         if isinstance(languages_config, list):
@@ -263,7 +295,7 @@ def main():
                         save_dir=save_dir, 
                         timestamp=second_timestamp,
                         use_gpu=use_gpu,
-                        roi=roi
+                        roi=None  # 截图已在scan_screen中裁剪过，不需要再次裁剪
                     )
                     
                     # 如果启用文字匹配，进行关键词匹配
@@ -296,6 +328,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 
