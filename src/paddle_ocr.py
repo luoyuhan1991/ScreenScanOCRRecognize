@@ -89,15 +89,40 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     else:
         use_gpu = bool(use_gpu)
     
-    logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'}")
+    # 确定设备类型（新版本PaddleOCR使用device参数替代use_gpu）
+    device = 'gpu' if use_gpu else 'cpu'
+    logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'} (device={device})")
 
     # 创建PaddleOCR实例
-    ocr = PaddleOCR(
-        lang=ocr_lang,         # 语言设置
-        use_gpu=use_gpu,       # GPU支持
-        use_angle_cls=True,    # 角度分类（提高准确率）
-        enable_mkldnn=False,  # Intel CPU优化（Windows上可能有问题，先关闭）
-    )
+    # 注意：新版本PaddleOCR（3.0+）使用device参数替代use_gpu
+    # use_angle_cls在新版本中可能已弃用，先尝试不使用该参数
+    try:
+        # 优先使用新版本参数（3.0+）
+        ocr = PaddleOCR(
+            lang=ocr_lang,         # 语言设置
+            device=device,         # 设备类型：'gpu' 或 'cpu'（新版本）
+            enable_mkldnn=False,  # Intel CPU优化（Windows上可能有问题，先关闭）
+        )
+        logger.debug("使用PaddleOCR新版本参数（device）")
+    except (TypeError, ValueError) as e:
+        # 如果device参数不支持，尝试添加use_angle_cls（兼容2.x版本）
+        try:
+            logger.warning("PaddleOCR版本可能较旧，尝试使用use_angle_cls参数")
+            ocr = PaddleOCR(
+                lang=ocr_lang,
+                device=device,
+                use_angle_cls=True,  # 角度分类（2.x版本）
+                enable_mkldnn=False,
+            )
+        except (TypeError, ValueError):
+            # 如果还是失败，尝试使用use_gpu（兼容更旧版本）
+            logger.warning("尝试使用use_gpu参数（兼容旧版本）")
+            ocr = PaddleOCR(
+                lang=ocr_lang,
+                use_gpu=use_gpu,    # 旧版本参数
+                use_angle_cls=True,
+                enable_mkldnn=False,
+            )
 
     # 缓存实例和配置
     _ocr_instance = ocr
@@ -201,12 +226,14 @@ def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
         # 即使没有识别到文本也保存空结果文件
         result_file = os.path.join(save_dir, "ocr_result.txt")
         with open(result_file, 'w', encoding='utf-8') as f:
-            f.write("未识别到任何文本\n")
-            f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            # 在文件开头显示耗时信息（更明显）
             if ocr_duration is not None:
                 f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
+            f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
+            f.write("="*60 + "\n\n")
+            f.write("未识别到任何文本\n")
         logger.info(f"OCR结果已保存到: {result_file}")
         return
 
@@ -215,6 +242,15 @@ def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
 
     # 写入识别结果
     with open(result_file, 'w', encoding='utf-8') as f:
+        # 在文件开头显示耗时信息（更明显）
+        if ocr_duration is not None:
+            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
+            f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            if roi:
+                f.write(f"ROI区域: {roi}\n")
+            f.write("="*60 + "\n\n")
+        
+        # 写入识别结果
         for item in results:
             text = item['text']
             confidence = item['confidence']
@@ -227,9 +263,9 @@ def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
         f.write(f"\n--- 识别统计 ---\n")
         f.write(f"总字符数: {total_chars}\n")
         f.write(f"平均置信度: {avg_confidence:.2f}\n")
-        f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         if ocr_duration is not None:
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
+        f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         if roi:
             f.write(f"ROI区域: {roi}\n")
 

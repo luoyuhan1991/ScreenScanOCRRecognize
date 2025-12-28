@@ -374,13 +374,21 @@ def recognize_and_print(image, languages=None, save_dir="output",
         txt_filename = os.path.join(save_dir, f"ocr_result_{timestamp}.txt")
     try:
         with open(txt_filename, 'w', encoding='utf-8') as f:
+            # 在文件开头显示耗时信息（更明显）
+            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
             f.write(f"OCR识别结果 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("="*60 + "\n")
+            if roi:
+                f.write(f"ROI区域: {roi}\n")
+            f.write("="*60 + "\n\n")
+            
+            # 写入识别内容
             if text:
                 f.write(text)
             else:
                 f.write("未识别到文字内容")
             f.write("\n")
+            
+            # 统计信息
             f.write(f"\n--- 识别统计 ---\n")
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
             if roi:
