@@ -110,16 +110,31 @@ def main():
     else:
         logger.info("\n禁用文字匹配功能")
     
-    # GPU配置
-    if config.get('gpu.force_cpu', False):
+    # GPU配置 - 强制使用GPU
+    force_gpu = config.get('gpu.force_gpu', True)  # 默认强制使用GPU
+    force_cpu = config.get('gpu.force_cpu', False)
+    
+    if force_cpu:
         use_gpu = False
-        logger.info("强制使用CPU")
-    elif config.get('gpu.auto_detect', True):
+        logger.info("强制使用CPU（配置覆盖）")
+    elif force_gpu:
+        use_gpu = True  # 强制使用GPU
+        logger.info("强制使用GPU加速")
+        # 验证GPU是否可用
+        try:
+            import torch
+            if torch.cuda.is_available():
+                logger.info(f"GPU设备: {torch.cuda.get_device_name(0)}")
+            else:
+                logger.warning("强制使用GPU但未检测到可用GPU，将尝试使用GPU（可能失败）")
+        except ImportError:
+            logger.warning("无法导入torch，无法验证GPU状态")
+    elif config.get('gpu.auto_detect', False):
         use_gpu = None  # 自动检测GPU
         logger.info("GPU加速: 自动检测")
     else:
-        use_gpu = False
-        logger.info("GPU加速: 禁用")
+        use_gpu = True  # 默认强制使用GPU
+        logger.info("GPU加速: 强制启用（默认）")
     
     # 语言配置
     languages_config = config.get('ocr.languages', ['ch', 'en'])

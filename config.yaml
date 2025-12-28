@@ -30,8 +30,9 @@ ocr:
 
 # GPU配置
 gpu:
-  auto_detect: true    # 自动检测GPU
+  auto_detect: false   # 自动检测GPU（已禁用，强制使用GPU）
   force_cpu: false     # 强制使用CPU
+  force_gpu: true      # 强制使用GPU（优先于其他设置）
 
 # 文件配置
 files:

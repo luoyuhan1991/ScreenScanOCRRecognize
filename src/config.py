@@ -55,8 +55,9 @@ class Config:
                 }
             },
             'gpu': {
-                'auto_detect': True,
-                'force_cpu': False
+                'auto_detect': False,
+                'force_cpu': False,
+                'force_gpu': True
             },
             'files': {
                 'output_dir': 'output',

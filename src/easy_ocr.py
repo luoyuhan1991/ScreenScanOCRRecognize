@@ -65,15 +65,45 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
             languages = _languages
     
     if use_gpu is None:
-        # 自动检测GPU - 直接使用 PyTorch 的检测结果
-        import torch
-        new_use_gpu = torch.cuda.is_available()
-        logger.debug(f"torch.cuda.is_available() = {new_use_gpu}")
-        if new_use_gpu:
-            logger.debug(f"GPU设备: {torch.cuda.get_device_name(0)}")
+        # 从配置读取GPU设置 - 强制使用GPU
+        force_gpu = config.get('gpu.force_gpu', True)  # 默认强制使用GPU
+        force_cpu = config.get('gpu.force_cpu', False)
+        auto_detect = config.get('gpu.auto_detect', False)
+        
+        if force_cpu:
+            new_use_gpu = False
+            logger.info("EasyOCR: 强制使用CPU（配置覆盖）")
+        elif force_gpu:
+            new_use_gpu = True  # 强制使用GPU
+            logger.info("EasyOCR: 强制使用GPU")
+            # 验证GPU是否可用
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+                else:
+                    logger.warning("强制使用GPU但未检测到可用GPU，将尝试使用GPU（可能失败）")
+            except ImportError:
+                logger.warning("无法导入torch，无法验证GPU状态")
+        elif auto_detect:
+            # 自动检测GPU
+            try:
+                import torch
+                new_use_gpu = torch.cuda.is_available()
+                logger.debug(f"torch.cuda.is_available() = {new_use_gpu}")
+                if new_use_gpu:
+                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+                else:
+                    logger.info("未检测到GPU，使用CPU")
+            except ImportError:
+                new_use_gpu = False
+        else:
+            new_use_gpu = True  # 默认强制使用GPU
+            logger.info("EasyOCR: 强制使用GPU（默认）")
     else:
-        new_use_gpu = use_gpu
-        logger.debug(f"使用指定的GPU设置: {new_use_gpu}")
+        new_use_gpu = bool(use_gpu)
+        if new_use_gpu:
+            logger.info("EasyOCR: 使用传入的GPU设置（启用）")
     
     # 检查是否需要重新初始化
     # 1. reader为None（首次初始化）

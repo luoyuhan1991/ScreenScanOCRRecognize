@@ -68,26 +68,45 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
 
     logger.debug(f"初始化PaddleOCR，语言: {ocr_lang}")
 
-    # 确定GPU设置
+    # 确定GPU设置 - 强制使用GPU
     if use_gpu is None:
         # 从配置读取GPU设置
-        auto_detect = config.get('gpu.auto_detect', True)
+        force_gpu = config.get('gpu.force_gpu', True)  # 默认强制使用GPU
         force_cpu = config.get('gpu.force_cpu', False)
+        auto_detect = config.get('gpu.auto_detect', False)
         
         if force_cpu:
             use_gpu = False
+            logger.info("PaddleOCR: 强制使用CPU（配置覆盖）")
+        elif force_gpu:
+            use_gpu = True  # 强制使用GPU
+            logger.info("PaddleOCR: 强制使用GPU")
+            # 验证GPU是否可用
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+                else:
+                    logger.warning("强制使用GPU但未检测到可用GPU，将尝试使用GPU（可能失败）")
+            except ImportError:
+                logger.warning("无法导入torch，无法验证GPU状态")
         elif auto_detect:
             try:
                 import torch
                 use_gpu = torch.cuda.is_available()
                 if use_gpu:
                     logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+                else:
+                    logger.info("未检测到GPU，使用CPU")
             except ImportError:
                 use_gpu = False
         else:
-            use_gpu = False
+            use_gpu = True  # 默认强制使用GPU
+            logger.info("PaddleOCR: 强制使用GPU（默认）")
     else:
         use_gpu = bool(use_gpu)
+        if use_gpu:
+            logger.info("PaddleOCR: 使用传入的GPU设置（启用）")
     
     # 确定设备类型（新版本PaddleOCR使用device参数替代use_gpu）
     device = 'gpu' if use_gpu else 'cpu'
