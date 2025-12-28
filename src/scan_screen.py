@@ -7,6 +7,7 @@
 import os
 from datetime import datetime
 from PIL import ImageGrab
+from .logger import logger
 
 
 def select_roi_interactive():
