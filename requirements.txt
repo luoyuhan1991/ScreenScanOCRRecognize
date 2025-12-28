@@ -1,19 +1,55 @@
-# 项目依赖
-pillow>=10.0.0
-easyocr>=1.7.0
-numpy>=1.24.0
-opencv-python>=4.8.0
-torch>=2.0.0  # 用于GPU检测和加速
-pyyaml>=6.0  # 用于配置文件解析
-paddleocr>=2.7.0  # PaddleOCR（最新稳定版本3.1.0+，使用device参数）
+# ScreenScanOCRRecognize 项目依赖
+# 安装命令: pip install -r requirements.txt
 
-# PaddlePaddle GPU版本（根据CUDA版本选择）
-# 注意：paddlepaddle-gpu需要单独安装，不能通过pip直接安装到requirements.txt
-# 安装方法：
-# 1. 对于CUDA 12.3+ (适用于CUDA 12.6，使用CUDA 11.8版本，向后兼容):
-#    py -m pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
-# 2. 对于CUDA 11.8:
-#    py -m pip install paddlepaddle-gpu==2.6.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
-# 3. 对于CUDA 11.2/11.6/11.7:
-#    参考官方文档: https://www.paddlepaddle.org.cn/install/quick
+# 核心依赖
+pillow>=12.0.0              # 图像处理库，用于屏幕截图和图像操作
+numpy>=2.2.0                # 数值计算库，用于图像数组处理
+opencv-python>=4.10.0       # OpenCV库，用于图像预处理和增强
+pyyaml>=6.0                 # YAML配置文件解析
 
+# OCR引擎（二选一或同时安装）
+easyocr>=1.7.0              # EasyOCR引擎（纯Python实现）
+paddleocr>=3.3.0            # PaddleOCR引擎（识别准确率更高）
+
+# GPU加速依赖
+torch>=2.0.0                # PyTorch，用于GPU检测和EasyOCR的GPU加速
+paddlepaddle-gpu>=3.2.0     # PaddlePaddle GPU版本，用于PaddleOCR的GPU加速
+
+# PaddlePaddle GPU版本安装说明
+# 注意：paddlepaddle-gpu需要根据CUDA版本选择对应的安装源
+#
+# 当前环境使用的版本：
+# - PaddlePaddle: 3.2.2 (GPU版本，CUDA 11.8, cuDNN 8.9.6)
+# - PaddleOCR: 3.3.2
+# - PyTorch: 2.9.1+cpu (注意：当前是CPU版本，如需GPU加速需重新安装)
+# - EasyOCR: 1.7.2
+#
+# 安装方法（根据CUDA版本选择）：
+#
+# 1. 对于CUDA 11.8（推荐，兼容性最好）:
+#    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+#
+# 2. 对于CUDA 12.3+（适用于CUDA 12.6，使用CUDA 11.8版本，向后兼容）:
+#    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+#
+# 3. 对于CUDA 11.2:
+#    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu112/
+#
+# 4. 对于CUDA 11.6:
+#    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu116/
+#
+# 5. 对于CUDA 11.7:
+#    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu117/
+#
+# 6. CPU版本（无GPU）:
+#    pip install paddlepaddle==3.2.2
+
+# 注意事项：
+# 1. 如果使用EasyOCR，需要安装torch（已包含在requirements.txt中）
+#    - 注意：当前环境的torch是CPU版本，如需GPU加速，请安装GPU版本：
+#      pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# 2. 如果使用PaddleOCR，需要安装paddlepaddle-gpu（推荐GPU）或paddlepaddle（CPU）
+# 3. 建议先安装CUDA和cuDNN，然后再安装paddlepaddle-gpu
+# 4. Windows系统建议使用conda创建虚拟环境，避免依赖冲突
+# 5. 检查CUDA版本命令：nvidia-smi
+# 6. 当前环境：Python 3.12.10, PaddlePaddle 3.2.2 (GPU), PaddleOCR 3.3.2
