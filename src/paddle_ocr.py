@@ -8,8 +8,10 @@ import cv2
 import numpy as np
 from paddleocr import PaddleOCR
 import os
+import time
 from datetime import datetime
 from .logger import logger
+from .config import config
 
 # 全局OCR实例缓存
 _ocr_instance = None
@@ -55,9 +57,35 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
 
     logger.debug(f"初始化PaddleOCR，语言: {ocr_lang}")
 
+    # 确定GPU设置
+    if use_gpu is None:
+        # 从配置读取GPU设置
+        auto_detect = config.get('gpu.auto_detect', True)
+        force_cpu = config.get('gpu.force_cpu', False)
+        
+        if force_cpu:
+            use_gpu = False
+        elif auto_detect:
+            try:
+                import torch
+                use_gpu = torch.cuda.is_available()
+                if use_gpu:
+                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
+            except ImportError:
+                use_gpu = False
+        else:
+            use_gpu = False
+    else:
+        use_gpu = bool(use_gpu)
+    
+    logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'}")
+
     # 创建PaddleOCR实例
     ocr = PaddleOCR(
         lang=ocr_lang,         # 语言设置
+        use_gpu=use_gpu,       # GPU支持
+        use_angle_cls=True,    # 角度分类（提高准确率）
+        enable_mkldnn=False,  # Intel CPU优化（Windows上可能有问题，先关闭）
     )
 
     # 缓存实例和配置
@@ -97,9 +125,13 @@ def recognize_and_print(image, languages=None, save_dir="output",
 
     try:
         logger.debug(f"开始OCR识别，图像尺寸: {img_array.shape}")
+        # 记录开始时间
+        start_time = time.time()
         # 执行OCR识别（使用ocr方法）
         result = ocr.ocr(img_array)
-        logger.debug(f"OCR识别完成，结果类型: {type(result)}, 结果长度: {len(result) if result else 0}")
+        # 计算耗时
+        ocr_duration = time.time() - start_time
+        logger.debug(f"OCR识别完成，结果类型: {type(result)}, 结果长度: {len(result) if result else 0}, 耗时: {ocr_duration:.3f}秒")
 
         # 提取识别结果
         extracted_text = []
@@ -139,8 +171,8 @@ def recognize_and_print(image, languages=None, save_dir="output",
         else:
             logger.info("未识别到任何文本")
 
-        # 保存识别结果
-        save_ocr_results(extracted_text, save_dir, timestamp, roi)
+        # 保存识别结果（传入耗时信息）
+        save_ocr_results(extracted_text, save_dir, timestamp, roi, ocr_duration)
 
         # 打印识别结果
         print_ocr_results(extracted_text)
@@ -152,7 +184,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
         return []
 
 
-def save_ocr_results(results, save_dir, timestamp, roi=None):
+def save_ocr_results(results, save_dir, timestamp, roi=None, ocr_duration=None):
     """保存OCR结果到文件"""
     if not results:
         # 即使没有识别到文本也保存空结果文件
@@ -160,6 +192,8 @@ def save_ocr_results(results, save_dir, timestamp, roi=None):
         with open(result_file, 'w', encoding='utf-8') as f:
             f.write("未识别到任何文本\n")
             f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            if ocr_duration is not None:
+                f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
         logger.info(f"OCR结果已保存到: {result_file}")
@@ -183,6 +217,8 @@ def save_ocr_results(results, save_dir, timestamp, roi=None):
         f.write(f"总字符数: {total_chars}\n")
         f.write(f"平均置信度: {avg_confidence:.2f}\n")
         f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if ocr_duration is not None:
+            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
         if roi:
             f.write(f"ROI区域: {roi}\n")
 

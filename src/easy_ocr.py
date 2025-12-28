@@ -6,6 +6,7 @@ OCR识别模块
 """
 
 import os
+import time
 from datetime import datetime
 from PIL import Image, ImageEnhance
 import easyocr
@@ -75,12 +76,15 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     return _reader
 
 
-def preprocess_image(image):
+def preprocess_image(image, enable_clahe=True, enable_sharpen=True, fast_mode=False):
     """
     图像预处理，提高OCR识别准确率
     
     Args:
         image: PIL.Image对象
+        enable_clahe: 是否启用CLAHE对比度增强
+        enable_sharpen: 是否启用锐化处理
+        fast_mode: 快速模式（跳过部分处理）
     
     Returns:
         numpy.ndarray: 预处理后的图像数组
@@ -93,6 +97,10 @@ def preprocess_image(image):
         # 转换为numpy数组
         img_array = np.array(image)
         
+        # 快速模式：直接返回RGB数组，跳过所有预处理
+        if fast_mode:
+            return img_array
+        
         # 转换为OpenCV格式 (BGR)
         img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
         
@@ -100,14 +108,22 @@ def preprocess_image(image):
         gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
         
         # 增强对比度（使用CLAHE - 自适应直方图均衡化）
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        if enable_clahe:
+            clahe_clip_limit = config.get('ocr.preprocessing.clahe_clip_limit', 3.0)
+            clahe_tile_size = config.get('ocr.preprocessing.clahe_tile_size', 8)
+            clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=(clahe_tile_size, clahe_tile_size))
+            enhanced = clahe.apply(gray)
+        else:
+            enhanced = gray
         
         # 添加锐化处理，提高文字边缘清晰度
-        kernel = np.array([[-1, -1, -1],
-                          [-1,  9, -1],
-                          [-1, -1, -1]])
-        sharpened = cv2.filter2D(enhanced, -1, kernel)
+        if enable_sharpen:
+            kernel = np.array([[-1, -1, -1],
+                              [-1,  9, -1],
+                              [-1, -1, -1]])
+            sharpened = cv2.filter2D(enhanced, -1, kernel)
+        else:
+            sharpened = enhanced
         
         # 转换回RGB格式（EasyOCR需要RGB）
         result = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2RGB)
@@ -119,7 +135,7 @@ def preprocess_image(image):
         return np.array(image.convert('RGB'))
 
 
-def optimize_image_resolution(image, min_width=640, max_width=2560):
+def optimize_image_resolution(image, min_width=640, max_width=2560, fast_mode=False):
     """
     优化图像分辨率，找到最佳识别尺寸
     
@@ -127,6 +143,7 @@ def optimize_image_resolution(image, min_width=640, max_width=2560):
         image: PIL.Image对象
         min_width (int): 最小宽度，默认640（降低以避免过度放大小图像）
         max_width (int): 最大宽度，默认2560
+        fast_mode (bool): 快速模式，使用更快的重采样算法
     
     Returns:
         PIL.Image: 优化后的图像
@@ -149,8 +166,15 @@ def optimize_image_resolution(image, min_width=640, max_width=2560):
         new_width = int(width * scale)
         new_height = int(height * scale)
         
-        # 使用高质量的重采样方法
-        optimized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        # 根据模式选择重采样算法
+        if fast_mode:
+            # 快速模式：使用BILINEAR（速度更快）
+            resample = Image.Resampling.BILINEAR
+        else:
+            # 质量模式：使用LANCZOS（质量更高但速度较慢）
+            resample = Image.Resampling.LANCZOS
+        
+        optimized = image.resize((new_width, new_height), resample)
         
         return optimized
     except Exception as e:
@@ -211,18 +235,57 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             x1, y1, x2, y2 = roi
             image = image.crop((x1, y1, x2, y2))
         
+        # 获取快速模式设置
+        fast_mode = config.get('ocr.preprocessing.fast_mode', False)
+        min_width = config.get('ocr.preprocessing.min_width', 640)
+        max_width = config.get('ocr.preprocessing.max_width', 2560)
+        
         # 优化图像分辨率
-        image = optimize_image_resolution(image)
+        image = optimize_image_resolution(image, min_width=min_width, 
+                                        max_width=max_width, fast_mode=fast_mode)
+        
+        # 获取预处理配置
+        enable_clahe = config.get('ocr.preprocessing.enable_clahe', True)
+        enable_sharpen = config.get('ocr.preprocessing.enable_sharpen', True)
+        fast_mode = config.get('ocr.preprocessing.fast_mode', False)
         
         # 图像预处理
         if use_preprocessing:
-            img_array = preprocess_image(image)
+            img_array = preprocess_image(image, enable_clahe=enable_clahe, 
+                                       enable_sharpen=enable_sharpen, 
+                                       fast_mode=fast_mode)
         else:
             # 将 PIL Image 转换为 numpy 数组
             img_array = np.array(image)
         
+        # 获取EasyOCR性能参数（支持动态调整）
+        default_canvas_size = config.get('ocr.easyocr.canvas_size', 1920)
+        default_mag_ratio = config.get('ocr.easyocr.mag_ratio', 1.5)
+        dynamic_params = config.get('ocr.easyocr.dynamic_params', True)
+        
+        # 根据图像尺寸动态调整参数
+        if dynamic_params:
+            width, height = image.size
+            # 对于大图像，降低canvas_size和mag_ratio以提升速度
+            if width > 1920 or height > 1080:
+                canvas_size = min(default_canvas_size, 1280)
+                mag_ratio = min(default_mag_ratio, 1.0)
+            elif width > 1280 or height > 720:
+                canvas_size = default_canvas_size
+                mag_ratio = default_mag_ratio
+            else:
+                # 小图像可以使用更小的参数
+                canvas_size = min(default_canvas_size, 1280)
+                mag_ratio = default_mag_ratio
+        else:
+            canvas_size = default_canvas_size
+            mag_ratio = default_mag_ratio
+        
+        logger.debug(f"EasyOCR参数: canvas_size={canvas_size}, mag_ratio={mag_ratio}")
+        
         # 进行OCR识别，使用优化后的参数
         logger.debug("开始OCR识别...")
+        start_time = time.time()
         results = _reader.readtext(
             img_array,
             detail=1,  # 返回详细信息（边界框、置信度）
@@ -234,10 +297,11 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             text_threshold=0.4,  # 文本阈值，降低
             low_text=0.2,  # 低文本阈值，降低
             link_threshold=0.2,  # 链接阈值，降低
-            canvas_size=2560,  # 画布大小
-            mag_ratio=2.0  # 放大比例
+            canvas_size=canvas_size,  # 动态调整的画布大小
+            mag_ratio=mag_ratio  # 动态调整的放大比例
         )
-        logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果")
+        ocr_duration = time.time() - start_time
+        logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果，耗时: {ocr_duration:.3f}秒")
         
         # 提取所有识别到的文字，按位置排序
         text_items = []
@@ -260,11 +324,13 @@ def recognize_text(image, languages=None, use_preprocessing=True,
         # 后处理文本（当前版本不执行具体逻辑）
         text = postprocess_text(text)
         
-        return text
+        # 将耗时信息附加到返回值（通过全局变量传递，因为返回值是字符串）
+        # 这里我们通过修改函数签名来传递耗时
+        return text, ocr_duration
         
     except Exception as e:
         logger.error(f"OCR识别时出错: {e}", exc_info=True)
-        return ""
+        return "", 0.0
 
 
 def recognize_and_print(image, languages=None, save_dir="output", 
@@ -283,14 +349,14 @@ def recognize_and_print(image, languages=None, save_dir="output",
     Returns:
         str: 识别出的文字内容
     """
-    text = recognize_text(image, languages, use_preprocessing=True, 
+    text, ocr_duration = recognize_text(image, languages, use_preprocessing=True, 
                          min_confidence=0.3, use_gpu=use_gpu, roi=roi)
     
     # 记录识别时间（不输出识别结果内容）
     if text:
-        logger.info("OCR识别完成，已识别到文字内容")
+        logger.info(f"OCR识别完成，已识别到文字内容，耗时: {ocr_duration:.3f}秒")
     else:
-        logger.info("OCR识别完成，未识别到文字内容")
+        logger.info(f"OCR识别完成，未识别到文字内容，耗时: {ocr_duration:.3f}秒")
     
     # 保存到文件
     if timestamp is None:
@@ -315,6 +381,10 @@ def recognize_and_print(image, languages=None, save_dir="output",
             else:
                 f.write("未识别到文字内容")
             f.write("\n")
+            f.write(f"\n--- 识别统计 ---\n")
+            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
+            if roi:
+                f.write(f"ROI区域: {roi}\n")
         logger.info(f"OCR结果已保存: {txt_filename}")
     except Exception as e:
         logger.error(f"保存OCR结果时出错: {e}", exc_info=True)

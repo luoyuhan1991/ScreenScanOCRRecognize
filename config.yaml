@@ -12,12 +12,21 @@ ocr:
   min_confidence: 0.15      # 最小置信度阈值
   use_preprocessing: true   # 是否使用图像预处理
   
+  # EasyOCR性能优化参数
+  easyocr:
+    canvas_size: 1920       # 画布大小（降低以提升速度，默认1920，原2560）
+    mag_ratio: 1.5          # 放大比例（降低以提升速度，默认1.5，原2.0）
+    dynamic_params: true    # 根据图像尺寸动态调整参数
+  
   # 图像预处理参数
   preprocessing:
     clahe_clip_limit: 3.0
     clahe_tile_size: 8
     min_width: 640
     max_width: 2560
+    enable_clahe: true      # 是否启用CLAHE（关闭可加速）
+    enable_sharpen: true    # 是否启用锐化（关闭可加速）
+    fast_mode: false        # 快速模式（跳过部分预处理）
 
 # GPU配置
 gpu:
