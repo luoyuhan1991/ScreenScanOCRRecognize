@@ -22,13 +22,13 @@ def select_roi_interactive():
         from tkinter import messagebox
         from PIL import ImageTk
         
-        print("\n[ROI选择模式]")
-        print("请按照以下步骤选择ROI区域：")
-        print("1. 将鼠标移动到要识别区域的左上角")
-        print("2. 按住鼠标左键并拖动到右下角")
-        print("3. 松开鼠标左键完成选择")
-        print("4. 按ESC键取消选择")
-        print("\n提示：选择完成后，该区域将用于后续的OCR识别")
+        logger.info("\n[ROI选择模式]")
+        logger.info("请按照以下步骤选择ROI区域：")
+        logger.info("1. 将鼠标移动到要识别区域的左上角")
+        logger.info("2. 按住鼠标左键并拖动到右下角")
+        logger.info("3. 松开鼠标左键完成选择")
+        logger.info("4. 按ESC键取消选择")
+        logger.info("\n提示：选择完成后，该区域将用于后续的OCR识别")
         
         # 捕获整个屏幕
         screenshot = ImageGrab.grab()
@@ -52,7 +52,7 @@ def select_roi_interactive():
         roi_data = {'start': None, 'end': None, 'rect': None, 'completed': False}
         
         def on_mouse_down(event):
-            print(f"[调试] 鼠标按下: ({event.x}, {event.y})")
+            logger.debug(f"鼠标按下: ({event.x}, {event.y})")
             roi_data['start'] = (event.x, event.y)
             roi_data['end'] = None
             roi_data['completed'] = False
@@ -72,15 +72,15 @@ def select_roi_interactive():
         
         def on_mouse_up(event):
             if roi_data['start']:
-                print(f"[调试] 鼠标释放: ({event.x}, {event.y})")
+                logger.debug(f"鼠标释放: ({event.x}, {event.y})")
                 roi_data['end'] = (event.x, event.y)
                 roi_data['completed'] = True
-                print(f"[调试] ROI选择完成，关闭窗口...")
+                logger.debug("ROI选择完成，关闭窗口...")
                 root.destroy()
         
         def on_key_press(event):
             if event.keysym == 'Escape':
-                print(f"[调试] 按下ESC，取消选择")
+                logger.debug("按下ESC，取消选择")
                 roi_data['completed'] = False
                 root.destroy()
         
@@ -93,7 +93,7 @@ def select_roi_interactive():
         # 确保canvas获得焦点
         canvas.focus_set()
         
-        print(f"[调试] ROI选择窗口已创建，等待用户操作...")
+        logger.debug("ROI选择窗口已创建，等待用户操作...")
         
         # 运行窗口
         root.mainloop()
@@ -105,19 +105,17 @@ def select_roi_interactive():
             # 确保坐标顺序正确
             x1, x2 = min(x1, x2), max(x1, x2)
             y1, y2 = min(y1, y2), max(y1, y2)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ROI区域已选择: ({x1}, {y1}, {x2}, {y2})")
+            logger.info(f"ROI区域已选择: ({x1}, {y1}, {x2}, {y2})")
             return (x1, y1, x2, y2)
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ROI选择已取消")
+            logger.info("ROI选择已取消")
             return None
             
     except ImportError:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 交互式ROI选择需要tkinter库，请安装或使用固定ROI")
+        logger.warning("交互式ROI选择需要tkinter库，请安装或使用固定ROI")
         return None
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ROI选择失败: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"ROI选择失败: {e}", exc_info=True)
         return None
 
 
@@ -151,7 +149,7 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, pad
             y2 = min(screen_height, y2 + padding)
             
             screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 使用ROI区域: ({x1}, {y1}, {x2}, {y2}), 边距: {padding}px")
+            logger.info(f"使用ROI区域: ({x1}, {y1}, {x2}, {y2}), 边距: {padding}px")
         else:
             screenshot = ImageGrab.grab()
         
@@ -176,19 +174,17 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, pad
             screenshot.save(filename)
             
             roi_info = f" ROI: {roi}" if roi else ""
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
-                  f"屏幕扫描完成 - 尺寸: {width}x{height}{roi_info}, 已保存: {filename}")
+            logger.info(f"屏幕扫描完成 - 尺寸: {width}x{height}{roi_info}, 已保存: {filename}")
         else:
             if timestamp is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             roi_info = f" ROI: {roi}" if roi else ""
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
-                  f"屏幕扫描完成 - 尺寸: {width}x{height}{roi_info}")
+            logger.info(f"屏幕扫描完成 - 尺寸: {width}x{height}{roi_info}")
         
         return screenshot, timestamp
         
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 扫描屏幕时出错: {e}")
+        logger.error(f"扫描屏幕时出错: {e}", exc_info=True)
         return None, None
 
 

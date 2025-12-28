@@ -8,6 +8,7 @@ import threading
 import time
 from datetime import datetime
 import tkinter as tk
+from .logger import logger
 
 
 class TextMatcher:
@@ -33,11 +34,11 @@ class TextMatcher:
                         line = line.strip()
                         if line:
                             keywords.append(line)
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 已加载 {len(keywords)} 个关键词")
+                logger.info(f"已加载 {len(keywords)} 个关键词")
             except Exception as e:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 加载关键词文件失败: {e}")
+                logger.error(f"加载关键词文件失败: {e}", exc_info=True)
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 关键词文件不存在: {self.txt_file}")
+            logger.warning(f"关键词文件不存在: {self.txt_file}")
             # 创建默认关键词文件
             self._create_default_keywords_file()
         
@@ -50,9 +51,9 @@ class TextMatcher:
                 f.write("示例关键词1\n")
                 f.write("示例关键词2\n")
                 f.write("示例关键词3\n")
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 已创建默认关键词文件: {self.txt_file}")
+            logger.info(f"已创建默认关键词文件: {self.txt_file}")
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 创建默认关键词文件失败: {e}")
+            logger.error(f"创建默认关键词文件失败: {e}", exc_info=True)
     
     def reload_keywords(self):
         """重新加载关键词"""
@@ -85,11 +86,11 @@ class TextMatcher:
                 # 检查关键词是否包含在OCR结果中
                 if keyword in ocr_text:
                     matched_keywords.append(keyword)
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 匹配成功: '{keyword}' (OCR: '{ocr_text}')")
+                    logger.info(f"匹配成功: '{keyword}' (OCR: '{ocr_text}')")
                     break
         
         if matched_keywords:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 总共匹配到 {len(matched_keywords)} 个关键词")
+            logger.info(f"总共匹配到 {len(matched_keywords)} 个关键词")
         
         return matched_keywords
 

@@ -11,6 +11,8 @@ from PIL import Image, ImageEnhance
 import easyocr
 import numpy as np
 import cv2
+from .logger import logger
+from .config import config
 
 
 # 全局 EasyOCR 阅读器（延迟初始化）
@@ -40,12 +42,12 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
         # 自动检测GPU - 直接使用 PyTorch 的检测结果
         import torch
         new_use_gpu = torch.cuda.is_available()
-        print(f"[调试] torch.cuda.is_available() = {new_use_gpu}")
+        logger.debug(f"torch.cuda.is_available() = {new_use_gpu}")
         if new_use_gpu:
-            print(f"[调试] GPU设备: {torch.cuda.get_device_name(0)}")
+            logger.debug(f"GPU设备: {torch.cuda.get_device_name(0)}")
     else:
         new_use_gpu = use_gpu
-        print(f"[调试] 使用指定的GPU设置: {new_use_gpu}")
+        logger.debug(f"使用指定的GPU设置: {new_use_gpu}")
     
     # 检查是否需要重新初始化
     # 1. reader为None（首次初始化）
@@ -58,16 +60,16 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     _use_gpu = new_use_gpu
     
     if need_reinit:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在初始化 EasyOCR（首次运行会下载模型，请稍候）...")
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] GPU加速: {'启用' if _use_gpu else '未启用（使用CPU）'}")
+        logger.info("正在初始化 EasyOCR（首次运行会下载模型，请稍候）...")
+        logger.info(f"GPU加速: {'启用' if _use_gpu else '未启用（使用CPU）'}")
         try:
             _reader = easyocr.Reader(languages, gpu=_use_gpu)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EasyOCR 初始化完成")
+            logger.info("EasyOCR 初始化完成")
             if _use_gpu:
                 import torch
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 确认使用设备: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+                logger.info(f"确认使用设备: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EasyOCR 初始化失败: {e}")
+            logger.error(f"EasyOCR 初始化失败: {e}", exc_info=True)
             raise
     
     return _reader
@@ -113,7 +115,7 @@ def preprocess_image(image):
         return result
     except Exception as e:
         # 如果预处理失败，返回原始图像
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 图像预处理失败，使用原始图像: {e}")
+        logger.warning(f"图像预处理失败，使用原始图像: {e}")
         return np.array(image.convert('RGB'))
 
 
@@ -152,7 +154,7 @@ def optimize_image_resolution(image, min_width=640, max_width=2560):
         
         return optimized
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 图像分辨率优化失败，使用原始图像: {e}")
+        logger.warning(f"图像分辨率优化失败，使用原始图像: {e}")
         return image
 
 
@@ -200,9 +202,9 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             image = Image.open(image)
         
         # 调试信息
-        print(f"[调试] 图像类型: {type(image)}, 尺寸: {image.size}")
-        print(f"[调试] languages: {languages}, use_preprocessing: {use_preprocessing}")
-        print(f"[调试] min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
+        logger.debug(f"图像类型: {type(image)}, 尺寸: {image.size}")
+        logger.debug(f"languages: {languages}, use_preprocessing: {use_preprocessing}")
+        logger.debug(f"min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
         
         # 应用ROI裁剪
         if roi is not None:
@@ -220,7 +222,7 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             img_array = np.array(image)
         
         # 进行OCR识别，使用优化后的参数
-        print(f"[调试] 开始OCR识别...")
+        logger.debug("开始OCR识别...")
         results = _reader.readtext(
             img_array,
             detail=1,  # 返回详细信息（边界框、置信度）
@@ -235,7 +237,7 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             canvas_size=2560,  # 画布大小
             mag_ratio=2.0  # 放大比例
         )
-        print(f"[调试] OCR识别完成，共识别到 {len(results)} 个结果")
+        logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果")
         
         # 提取所有识别到的文字，按位置排序
         text_items = []
@@ -261,7 +263,7 @@ def recognize_text(image, languages=None, use_preprocessing=True,
         return text
         
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR识别时出错: {e}")
+        logger.error(f"OCR识别时出错: {e}", exc_info=True)
         return ""
 
 
@@ -286,9 +288,9 @@ def recognize_and_print(image, languages=None, save_dir="output",
     
     # 记录识别时间（不输出识别结果内容）
     if text:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR识别完成，已识别到文字内容")
+        logger.info("OCR识别完成，已识别到文字内容")
     else:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR识别完成，未识别到文字内容")
+        logger.info("OCR识别完成，未识别到文字内容")
     
     # 保存到文件
     if timestamp is None:
@@ -313,9 +315,9 @@ def recognize_and_print(image, languages=None, save_dir="output",
             else:
                 f.write("未识别到文字内容")
             f.write("\n")
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] OCR结果已保存: {txt_filename}")
+        logger.info(f"OCR结果已保存: {txt_filename}")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 保存OCR结果时出错: {e}")
+        logger.error(f"保存OCR结果时出错: {e}", exc_info=True)
     
     return text
 

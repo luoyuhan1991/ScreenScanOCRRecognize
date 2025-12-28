@@ -1,0 +1,51 @@
+# ScreenScanOCRRecognize 配置文件
+
+# 扫描配置
+scan:
+  interval_seconds: 5  # 扫描间隔（秒）
+  roi_padding: 10      # ROI区域边距（像素）
+
+# OCR配置
+ocr:
+  default_engine: "paddle"  # 默认OCR引擎: "paddle" 或 "easy"
+  languages: ["ch", "en"]   # OCR语言列表
+  min_confidence: 0.15      # 最小置信度阈值
+  use_preprocessing: true   # 是否使用图像预处理
+  
+  # 图像预处理参数
+  preprocessing:
+    clahe_clip_limit: 3.0
+    clahe_tile_size: 8
+    min_width: 640
+    max_width: 2560
+
+# GPU配置
+gpu:
+  auto_detect: true    # 自动检测GPU
+  force_cpu: false     # 强制使用CPU
+
+# 文件配置
+files:
+  output_dir: "output"           # 输出目录
+  banlist_file: "docs/banlist.txt"  # 关键词匹配文件
+
+# 清理配置
+cleanup:
+  enabled: true        # 是否启用自动清理
+  max_age_hours: 1     # 最大保留时间（小时）
+  interval_minutes: 10 # 清理间隔（分钟）
+
+# 文字匹配配置
+matching:
+  enabled: true        # 是否启用文字匹配
+  display_duration: 3  # 显示时长（秒）
+  position: "center"   # 显示位置: "center", "top", "bottom"
+
+# 日志配置
+logging:
+  level: "INFO"        # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "logs/app.log" # 日志文件路径（None表示不保存到文件）
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  max_bytes: 10485760  # 日志文件最大大小（字节，10MB）
+  backup_count: 5      # 备份文件数量
+

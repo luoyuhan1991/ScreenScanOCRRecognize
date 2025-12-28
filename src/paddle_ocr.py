@@ -9,7 +9,7 @@ import numpy as np
 from paddleocr import PaddleOCR
 import os
 from datetime import datetime
-import logging
+from .logger import logger
 
 # 全局OCR实例缓存
 _ocr_instance = None
@@ -53,7 +53,7 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     else:
         ocr_lang = lang_map[languages]
 
-    print(f"[DEBUG] 初始化PaddleOCR，语言: {ocr_lang}")
+    logger.debug(f"初始化PaddleOCR，语言: {ocr_lang}")
 
     # 创建PaddleOCR实例
     ocr = PaddleOCR(
@@ -96,15 +96,10 @@ def recognize_and_print(image, languages=None, save_dir="output",
         img_array = image
 
     try:
-        print(f"[DEBUG] 开始OCR识别...")
-        print(f"[DEBUG] 图像尺寸: {img_array.shape}")
+        logger.debug(f"开始OCR识别，图像尺寸: {img_array.shape}")
         # 执行OCR识别（使用ocr方法）
         result = ocr.ocr(img_array)
-        print(f"[DEBUG] OCR识别完成，结果类型: {type(result)}")
-        print(f"[DEBUG] OCR结果长度: {len(result) if result else 0}")
-        if result and len(result) > 0:
-            print(f"[DEBUG] result[0] 类型: {type(result[0])}")
-            print(f"[DEBUG] result[0] 内容: {result[0]}")
+        logger.debug(f"OCR识别完成，结果类型: {type(result)}, 结果长度: {len(result) if result else 0}")
 
         # 提取识别结果
         extracted_text = []
@@ -140,9 +135,9 @@ def recognize_and_print(image, languages=None, save_dir="output",
                         extracted_text.append(text_item)
 
         if extracted_text:
-            print(f"[DEBUG] 提取识别结果，共 {len(extracted_text)} 行")
+            logger.info(f"提取识别结果，共 {len(extracted_text)} 行")
         else:
-            print(f"[DEBUG] 未识别到任何文本")
+            logger.info("未识别到任何文本")
 
         # 保存识别结果
         save_ocr_results(extracted_text, save_dir, timestamp, roi)
@@ -153,7 +148,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
         return extracted_text
 
     except Exception as e:
-        logging.error(f"PaddleOCR识别出错: {e}")
+        logger.error(f"PaddleOCR识别出错: {e}", exc_info=True)
         return []
 
 
@@ -167,7 +162,7 @@ def save_ocr_results(results, save_dir, timestamp, roi=None):
             f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
-        print(f"OCR结果已保存到: {result_file}")
+        logger.info(f"OCR结果已保存到: {result_file}")
         return
 
     # 生成结果文件名
@@ -191,31 +186,31 @@ def save_ocr_results(results, save_dir, timestamp, roi=None):
         if roi:
             f.write(f"ROI区域: {roi}\n")
 
-    print(f"OCR结果已保存到: {result_file}")
+    logger.info(f"OCR结果已保存到: {result_file}")
 
 
 def print_ocr_results(results):
     """打印OCR结果到控制台"""
     if not results:
-        print("未识别到任何文本")
+        logger.info("未识别到任何文本")
         return
 
-    print(f"\nOCR识别结果:")
-    print("-" * 50)
+    logger.info("OCR识别结果:")
+    logger.info("-" * 50)
 
     for i, item in enumerate(results, 1):
         text = item['text']
         confidence = item['confidence']
-        print(f"{i:2d}. [置信度: {confidence:.2f}] {text}")
+        logger.info(f"{i:2d}. [置信度: {confidence:.2f}] {text}")
 
-    print("-" * 50)
+    logger.info("-" * 50)
 
     # 显示统计信息
     total_chars = sum(len(item['text']) for item in results)
     avg_confidence = sum(item['confidence'] for item in results) / len(results) if results else 0
 
-    print(f"总计: {len(results)} 个文本块, {total_chars} 个字符")
-    print(f"平均置信度: {avg_confidence:.2f}")
+    logger.info(f"总计: {len(results)} 个文本块, {total_chars} 个字符")
+    logger.info(f"平均置信度: {avg_confidence:.2f}")
 
 
 def batch_recognize(images, languages=None, save_dir="output",

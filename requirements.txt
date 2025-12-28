@@ -4,4 +4,5 @@ easyocr>=1.7.0
 numpy>=1.24.0
 opencv-python>=4.8.0
 torch>=2.0.0  # 用于GPU检测和加速
-
+pyyaml>=6.0  # 用于配置文件解析
+
