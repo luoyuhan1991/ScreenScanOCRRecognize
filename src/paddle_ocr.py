@@ -49,25 +49,10 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
         'japan': 'japan'    # 日语
     }
 
-    # 处理语言参数（支持列表和字符串）
+    # 处理语言参数（只支持字符串）
+    # PaddleOCR只支持单个语言字符串，不支持多语言组合
     if languages is None:
         ocr_lang = 'ch'  # 默认中文
-    elif isinstance(languages, list):
-        # 如果是列表，转换为PaddleOCR支持的多语言格式（用+连接）
-        # 例如: ['ch', 'en'] -> 'ch+en'
-        valid_langs = []
-        for lang in languages:
-            # 标准化语言代码
-            if lang in lang_map:
-                valid_langs.append(lang_map[lang])
-            elif lang in lang_map.values():
-                valid_langs.append(lang)
-        
-        if valid_langs:
-            # PaddleOCR多语言格式：用+连接
-            ocr_lang = '+'.join(valid_langs)
-        else:
-            ocr_lang = 'ch'  # 默认中文
     elif isinstance(languages, str):
         # 如果是字符串，检查是否在映射中
         if languages in lang_map:
@@ -77,7 +62,9 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
         else:
             ocr_lang = 'ch'  # 默认中文
     else:
-        ocr_lang = 'ch'  # 默认中文
+        # 如果不是字符串，转换为字符串（兼容处理）
+        ocr_lang = str(languages) if languages else 'ch'
+        logger.warning(f"PaddleOCR期望字符串类型语言参数，收到: {type(languages)}，已转换")
 
     logger.debug(f"初始化PaddleOCR，语言: {ocr_lang}")
 

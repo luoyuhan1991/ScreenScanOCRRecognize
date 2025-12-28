@@ -122,7 +122,24 @@ def main():
         logger.info("GPU加速: 禁用")
     
     # 语言配置
-    languages = config.get('ocr.languages', ['ch', 'en'])
+    languages_config = config.get('ocr.languages', ['ch', 'en'])
+    
+    # 根据OCR引擎类型处理语言参数
+    # PaddleOCR只支持单个语言字符串，EasyOCR支持语言列表
+    if ocr_choice == '2':  # EasyOCR
+        languages = languages_config  # EasyOCR支持列表
+    else:  # PaddleOCR
+        # PaddleOCR只支持单个语言，优先使用中文，否则使用第一个
+        if isinstance(languages_config, list):
+            if 'ch' in languages_config:
+                languages = 'ch'
+            else:
+                languages = languages_config[0] if languages_config else 'ch'
+        else:
+            languages = languages_config if languages_config else 'ch'
+        if isinstance(languages_config, list) and len(languages_config) > 1:
+            logger.info(f"PaddleOCR只支持单个语言，已选择: {languages}（配置中的其他语言将被忽略）")
+    
     logger.info(f"OCR语言: {languages}")
     
     # 设置banlist文件
