@@ -70,42 +70,26 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
 
     logger.debug(f"初始化PaddleOCR，语言: {ocr_lang}")
 
-    # 确定GPU设置 - 强制使用GPU
+    # GPU配置处理（适配器模式已通过OCRConfig统一处理，这里保留简化逻辑以兼容直接调用）
     if use_gpu is None:
-        # 从配置读取GPU设置
-        force_gpu = config.get('gpu.force_gpu', True)  # 默认强制使用GPU
+        # 从配置读取GPU设置（简化版，完整逻辑在OCRConfig中）
         force_cpu = config.get('gpu.force_cpu', False)
+        force_gpu = config.get('gpu.force_gpu', True)
         auto_detect = config.get('gpu.auto_detect', False)
         
         if force_cpu:
             use_gpu = False
-            logger.info("PaddleOCR: 强制使用CPU（配置覆盖）")
         elif force_gpu:
-            use_gpu = True  # 强制使用GPU
-            logger.info("PaddleOCR: 强制使用GPU")
-            # 验证GPU是否可用（使用paddle检测，因为PaddleOCR基于PaddlePaddle）
-            try:
-                import paddle
-                if paddle.is_compiled_with_cuda():
-                    logger.info(f"PaddlePaddle GPU版本已安装（CUDA {paddle.version.cuda()}）")
-                else:
-                    logger.warning("PaddlePaddle是CPU版本，无法使用GPU加速")
-            except ImportError:
-                logger.warning("无法导入paddle，无法验证GPU状态")
+            use_gpu = True
         elif auto_detect:
             try:
                 import paddle
                 use_gpu = paddle.is_compiled_with_cuda()
-                if use_gpu:
-                    logger.info(f"PaddlePaddle GPU版本已安装（CUDA {paddle.version.cuda()}），将使用GPU")
-                else:
-                    logger.info("PaddlePaddle是CPU版本，使用CPU")
             except ImportError:
                 use_gpu = False
-                logger.info("无法导入paddle，使用CPU")
         else:
-            use_gpu = True  # 默认强制使用GPU
-            logger.info("PaddleOCR: 强制使用GPU（默认）")
+            use_gpu = True  # 默认使用GPU
+        logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'}")
     else:
         use_gpu = bool(use_gpu)
         if use_gpu:

@@ -13,6 +13,7 @@ from src.cleanup_old_files import start_cleanup_thread, cleanup_old_folders_by_c
 from src.config import config
 from src.logger import logger
 from src.scan_screen import scan_screen, select_roi_interactive
+from src.ocr_adapter import OCRConfig, OCRFactory
 
 
 def parse_command_line_args():
@@ -86,8 +87,12 @@ def main():
         lang_choice = None
         ocr_choice = '1' if config.get('ocr.default_engine', 'paddle') == 'paddle' else '2'
         match_choice = '1' if config.get('matching.enabled', True) else '0'
-        banlist_file = config.get('files.banlist_file', 'docs/banlist.txt')
+        banlist_file = None  # 稍后统一从配置读取
         logger.info("\n[使用默认配置]")
+    
+    # 统一设置banlist文件（命令行参数优先，否则使用配置）
+    if banlist_file is None:
+        banlist_file = config.get('files.banlist_file', 'docs/banlist.txt')
     
     roi = None
     if roi_choice == '2':
@@ -97,17 +102,6 @@ def main():
         else:
             logger.info(f"已设置ROI区域: {roi}")
     
-    # 选择OCR实现
-    ocr_choice = ocr_choice if ocr_choice else '1'
-    if ocr_choice == '2':
-        logger.info("\n使用 EasyOCR")
-        from src.easy_ocr import recognize_and_print, init_reader
-        ocr_name = "EasyOCR"
-    else:
-        logger.info("\n使用 PaddleOCR（默认）")
-        from src.paddle_ocr import recognize_and_print, init_reader
-        ocr_name = "PaddleOCR"
-    
     # 文字匹配功能选择
     match_choice = match_choice if match_choice else '1'
     enable_matching = match_choice == '1'
@@ -116,34 +110,7 @@ def main():
     else:
         logger.info("\n禁用文字匹配功能")
     
-    # GPU配置 - 强制使用GPU
-    force_gpu = config.get('gpu.force_gpu', True)  # 默认强制使用GPU
-    force_cpu = config.get('gpu.force_cpu', False)
-    
-    if force_cpu:
-        use_gpu = False
-        logger.info("强制使用CPU（配置覆盖）")
-    elif force_gpu:
-        use_gpu = True  # 强制使用GPU
-        logger.info("强制使用GPU加速")
-        # 验证GPU是否可用（使用paddle检测，因为PaddleOCR基于PaddlePaddle）
-        try:
-            import paddle
-            if paddle.is_compiled_with_cuda():
-                logger.info(f"PaddlePaddle GPU版本已安装（CUDA {paddle.version.cuda()}）")
-            else:
-                logger.warning("PaddlePaddle是CPU版本，无法使用GPU加速")
-        except ImportError:
-            logger.warning("无法导入paddle，无法验证GPU状态")
-    elif config.get('gpu.auto_detect', False):
-        use_gpu = None  # 自动检测GPU
-        logger.info("GPU加速: 自动检测")
-    else:
-        use_gpu = True  # 默认强制使用GPU
-        logger.info("GPU加速: 强制启用（默认）")
-    
-    # 语言配置
-    # 根据命令行语言选项设置语言
+    # 语言配置 - 根据命令行语言选项设置语言
     if lang_choice == '1':
         languages_config = ['ch', 'en']  # 中英文
         logger.info(f"语言选项: 中英文")
@@ -158,46 +125,42 @@ def main():
         languages_config = config.get('ocr.languages', ['ch', 'en'])
         logger.info(f"语言选项: 使用配置文件 {languages_config}")
     
-    # 根据OCR引擎类型处理语言参数
-    # PaddleOCR只支持单个语言字符串，EasyOCR支持语言列表
-    if ocr_choice == '2':  # EasyOCR
-        # EasyOCR使用不同的语言代码，需要进行转换
-        # PaddleOCR: 'ch' -> EasyOCR: 'ch_sim'
-        # PaddleOCR: 'en' -> EasyOCR: 'en'
-        language_map = {
-            'ch': 'ch_sim',      # 简体中文
-            'en': 'en',           # 英文
-            'ch_sim': 'ch_sim',  # 简体中文（已经是EasyOCR格式）
-            'ch_tra': 'ch_tra',  # 繁体中文
-        }
-        
-        # 转换语言代码
-        languages = []
-        for lang in languages_config:
-            if lang in language_map:
-                languages.append(language_map[lang])
-            else:
-                # 如果不在映射表中，直接使用原值
-                languages.append(lang)
-        
-        logger.info(f"EasyOCR语言（已转换）: {languages}")
-    else:  # PaddleOCR
-        # PaddleOCR只支持单个语言，优先使用中文，否则使用第一个
-        if isinstance(languages_config, list):
-            if 'ch' in languages_config:
-                languages = 'ch'
-            else:
-                languages = languages_config[0] if languages_config else 'ch'
-        else:
-            languages = languages_config if languages_config else 'ch'
-        if isinstance(languages_config, list) and len(languages_config) > 1:
-            logger.info(f"PaddleOCR只支持单个语言，已选择: {languages}（配置中的其他语言将被忽略）")
+    # GPU配置 - 处理命令行GPU选项（如果提供）
+    use_gpu_param = None
+    if gpu_choice == '0':
+        use_gpu_param = False
+        logger.info("GPU选项: 使用CPU")
+    elif gpu_choice == '1':
+        use_gpu_param = True
+        logger.info("GPU选项: 使用GPU")
+    elif gpu_choice == '2':
+        use_gpu_param = None  # 自动检测
+        logger.info("GPU选项: 自动检测")
+    # 如果gpu_choice为None，则使用OCRConfig内部的默认逻辑（从配置文件读取）
     
-    logger.info(f"OCR语言: {languages}")
+    # 创建统一的OCR配置对象
+    ocr_choice = ocr_choice if ocr_choice else '1'
+    engine_type = 'paddle' if ocr_choice == '1' else 'easy'
+    ocr_config = OCRConfig(
+        languages=languages_config,
+        use_gpu=use_gpu_param,
+        engine=engine_type
+    )
     
-    # 设置banlist文件
-    if banlist_file is None:
-        banlist_file = config.get('files.banlist_file', 'docs/banlist.txt')
+    # 创建OCR适配器（使用工厂模式）
+    try:
+        ocr_adapter = OCRFactory.create(ocr_choice)
+        ocr_name = ocr_adapter.engine_name
+        logger.info(f"\n使用 {ocr_name}")
+    except ValueError as e:
+        logger.error(f"创建OCR适配器失败: {e}")
+        logger.info("使用默认的 PaddleOCR")
+        ocr_adapter = OCRFactory.create('1')
+        ocr_name = ocr_adapter.engine_name
+    
+    # 显示OCR配置信息
+    logger.info(f"OCR语言配置: {ocr_config.languages}")
+    logger.info(f"GPU设置: {'启用' if ocr_config.use_gpu else '禁用'}")
     
     logger.info("\n[配置信息]")
     logger.info(f"OCR引擎: {ocr_name}")
@@ -209,9 +172,9 @@ def main():
     logger.info("配置完成，开始扫描...")
     logger.info("=" * 60)
     
-    # 预先初始化OCR（不使用force_reinit，使用缓存）
+    # 预先初始化OCR（使用适配器统一接口，不使用force_reinit，使用缓存）
     logger.info(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在初始化{ocr_name}模型...")
-    init_reader(languages=languages, use_gpu=use_gpu, force_reinit=False)
+    ocr_adapter.init_reader(ocr_config, force_reinit=False)
     logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {ocr_name}模型初始化完成\n")
     
     # 启动清理线程（如果启用）
@@ -289,12 +252,12 @@ def main():
                                 except Exception as e:
                                     logger.warning(f"删除旧截图失败: {e}")
                     
-                    ocr_results = recognize_and_print(
-                        screenshot, 
-                        languages=languages,
-                        save_dir=save_dir, 
+                    # 使用适配器的统一接口进行OCR识别
+                    ocr_results = ocr_adapter.recognize_and_print(
+                        screenshot,
+                        config=ocr_config,
+                        save_dir=save_dir,
                         timestamp=second_timestamp,
-                        use_gpu=use_gpu,
                         roi=None  # 截图已在scan_screen中裁剪过，不需要再次裁剪
                     )
                     
@@ -303,7 +266,22 @@ def main():
                         from src.text_matcher import match_and_display
                         display_duration = config.get('matching.display_duration', 3)
                         display_position = config.get('matching.position', 'center')
-                        match_and_display(ocr_results, txt_file=banlist_file, 
+                        
+                        # 统一OCR结果格式：text_matcher期望列表格式，每个元素包含'text'键
+                        # PaddleOCR返回 List[Dict]，EasyOCR返回 str
+                        if isinstance(ocr_results, str):
+                            # EasyOCR返回字符串，转换为列表格式
+                            # 按行分割，每行作为一个文本项
+                            text_lines = [line.strip() for line in ocr_results.split('\n') if line.strip()]
+                            ocr_results_for_match = [{'text': line} for line in text_lines]
+                        elif isinstance(ocr_results, list):
+                            # PaddleOCR返回列表格式，直接使用
+                            ocr_results_for_match = ocr_results
+                        else:
+                            # 其他格式，转换为列表
+                            ocr_results_for_match = [{'text': str(ocr_results)}]
+                        
+                        match_and_display(ocr_results_for_match, txt_file=banlist_file, 
                                         duration=display_duration, position=display_position)
                 
             except Exception as e:

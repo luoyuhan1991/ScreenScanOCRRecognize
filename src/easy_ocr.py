@@ -65,42 +65,26 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
         else:
             languages = _languages
     
+    # GPU配置处理（适配器模式已通过OCRConfig统一处理，这里保留简化逻辑以兼容直接调用）
     if use_gpu is None:
-        # 从配置读取GPU设置 - 强制使用GPU
-        force_gpu = config.get('gpu.force_gpu', True)  # 默认强制使用GPU
+        # 从配置读取GPU设置（简化版，完整逻辑在OCRConfig中）
         force_cpu = config.get('gpu.force_cpu', False)
+        force_gpu = config.get('gpu.force_gpu', True)
         auto_detect = config.get('gpu.auto_detect', False)
         
         if force_cpu:
             new_use_gpu = False
-            logger.info("EasyOCR: 强制使用CPU（配置覆盖）")
         elif force_gpu:
-            new_use_gpu = True  # 强制使用GPU
-            logger.info("EasyOCR: 强制使用GPU")
-            # 验证GPU是否可用
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
-                else:
-                    logger.warning("强制使用GPU但未检测到可用GPU，将尝试使用GPU（可能失败）")
-            except ImportError:
-                logger.warning("无法导入torch，无法验证GPU状态")
+            new_use_gpu = True
         elif auto_detect:
-            # 自动检测GPU
             try:
                 import torch
                 new_use_gpu = torch.cuda.is_available()
-                logger.debug(f"torch.cuda.is_available() = {new_use_gpu}")
-                if new_use_gpu:
-                    logger.info(f"检测到GPU: {torch.cuda.get_device_name(0)}")
-                else:
-                    logger.info("未检测到GPU，使用CPU")
             except ImportError:
                 new_use_gpu = False
         else:
-            new_use_gpu = True  # 默认强制使用GPU
-            logger.info("EasyOCR: 强制使用GPU（默认）")
+            new_use_gpu = True  # 默认使用GPU
+        logger.info(f"EasyOCR GPU设置: {'启用' if new_use_gpu else '禁用'}")
     else:
         new_use_gpu = bool(use_gpu)
         if new_use_gpu:
@@ -291,19 +275,16 @@ def recognize_text(image, languages=None, use_preprocessing=True,
             x1, y1, x2, y2 = roi
             image = image.crop((x1, y1, x2, y2))
         
-        # 获取快速模式设置
+        # 获取预处理配置（一次性读取所有配置）
         fast_mode = config.get('ocr.preprocessing.fast_mode', False)
         min_width = config.get('ocr.preprocessing.min_width', 640)
         max_width = config.get('ocr.preprocessing.max_width', 2560)
+        enable_clahe = config.get('ocr.preprocessing.enable_clahe', True)
+        enable_sharpen = config.get('ocr.preprocessing.enable_sharpen', True)
         
         # 优化图像分辨率
         image = optimize_image_resolution(image, min_width=min_width, 
                                         max_width=max_width, fast_mode=fast_mode)
-        
-        # 获取预处理配置
-        enable_clahe = config.get('ocr.preprocessing.enable_clahe', True)
-        enable_sharpen = config.get('ocr.preprocessing.enable_sharpen', True)
-        fast_mode = config.get('ocr.preprocessing.fast_mode', False)
         
         # 图像预处理
         if use_preprocessing:
