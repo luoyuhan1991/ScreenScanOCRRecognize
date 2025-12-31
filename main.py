@@ -9,11 +9,11 @@ import sys
 import time
 from datetime import datetime
 
-from src.cleanup_old_files import start_cleanup_thread, cleanup_old_folders_by_count
-from src.config import config
-from src.logger import logger
-from src.scan_screen import scan_screen, select_roi_interactive
-from src.ocr_adapter import OCRConfig, OCRFactory
+from src.utils.cleanup_old_files import start_cleanup_thread, cleanup_old_folders_by_count
+from src.config.config import config
+from src.utils.logger import logger
+from src.utils.scan_screen import scan_screen, select_roi_interactive
+from src.ocr.ocr_adapter import OCRConfig, OCRFactory
 
 
 def parse_command_line_args():
@@ -263,7 +263,7 @@ def main():
                     
                     # 如果启用文字匹配，进行关键词匹配
                     if enable_matching and ocr_results:
-                        from src.text_matcher import match_and_display
+                        from src.utils.text_matcher import match_and_display
                         display_duration = config.get('matching.display_duration', 3)
                         display_position = config.get('matching.position', 'center')
                         

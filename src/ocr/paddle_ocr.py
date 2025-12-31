@@ -12,8 +12,8 @@ import cv2
 import numpy as np
 from paddleocr import PaddleOCR
 
-from .config import config
-from .logger import logger
+from ..config.config import config
+from ..utils.logger import logger
 
 # 全局OCR实例缓存
 _ocr_instance = None

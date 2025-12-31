@@ -208,3 +208,4 @@ if __name__ == "__main__":
     screenshot, timestamp = scan_screen(roi=roi)
     if screenshot:
         print(f"扫描成功，时间戳: {timestamp}")
+

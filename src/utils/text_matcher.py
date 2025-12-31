@@ -231,3 +231,4 @@ if __name__ == "__main__":
     # 测试匹配和显示
     matched = match_and_display(test_ocr_results, test_file, duration=3)
     print(f"匹配到的关键词: {matched}")
+

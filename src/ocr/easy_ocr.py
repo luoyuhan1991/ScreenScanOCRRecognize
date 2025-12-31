@@ -14,8 +14,8 @@ import easyocr
 import numpy as np
 from PIL import Image
 
-from .config import config
-from .logger import logger
+from ..config.config import config
+from ..utils.logger import logger
 
 # 全局 EasyOCR 阅读器（延迟初始化）
 _reader = None

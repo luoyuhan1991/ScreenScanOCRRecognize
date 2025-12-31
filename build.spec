@@ -7,7 +7,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('config.yaml', '.'),           # 包含配置文件
+        ('src/config/config.yaml', 'src/config'),  # 包含配置文件
         ('docs/banlist.txt', 'docs'),   # 包含关键词文件
         ('requirements.txt', '.'),       # 包含依赖清单
     ],

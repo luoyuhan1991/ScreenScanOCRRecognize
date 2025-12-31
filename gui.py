@@ -15,15 +15,15 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 # 导入项目模块
-from src.config import config
-from src.logger import logger
-from src.scan_screen import scan_screen, select_roi_interactive
-from src.ocr_adapter import OCRConfig, OCRFactory
-from src.text_matcher import match_and_display
-from src.cleanup_old_files import start_cleanup_thread
-from src.gui_state import GUIStateManager
-from src.config_editor import ConfigEditor
-from src.gui_logger import GUILoggerHandler
+from src.config.config import config
+from src.utils.logger import logger
+from src.utils.scan_screen import scan_screen, select_roi_interactive
+from src.ocr.ocr_adapter import OCRConfig, OCRFactory
+from src.utils.text_matcher import match_and_display
+from src.utils.cleanup_old_files import start_cleanup_thread
+from src.config.gui_state import GUIStateManager
+from src.config.config_editor import ConfigEditor
+from src.gui.gui_logger import GUILoggerHandler
 
 
 class MainGUI:
@@ -503,7 +503,7 @@ class MainGUI:
             self.load_settings()
             self.append_log("配置文件已更新，已重新加载", "INFO")
         
-        editor = ConfigEditor(self.root, config_file='config.yaml', on_save_callback=on_config_saved)
+        editor = ConfigEditor(self.root, config_file='src/config/config.yaml', on_save_callback=on_config_saved)
         editor.show()
     
     def on_window_configure(self, event=None):
@@ -657,7 +657,7 @@ class MainGUI:
                             self.append_log(f"创建新的分钟文件夹: {current_minute}", "INFO")
                             
                             # 清理旧的分钟文件夹
-                            from src.cleanup_old_files import cleanup_old_folders_by_count
+                            from src.utils.cleanup_old_files import cleanup_old_folders_by_count
                             cleanup_old_folders_by_count(output_dir, max_folders=max_folders)
                     
                     save_dir = current_minute_folder

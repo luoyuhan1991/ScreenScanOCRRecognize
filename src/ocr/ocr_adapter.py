@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Union
 from PIL import Image
 
-from .config import config
-from .logger import logger
+from ..config.config import config
+from ..utils.logger import logger
 
 
 # ============================================================================

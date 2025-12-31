@@ -241,4 +241,3 @@ if __name__ == "__main__":
     deleted = cleanup_old_folders()
     logger.info(f"清理完成，共删除 {deleted} 个过期文件夹")
 
-

@@ -83,8 +83,11 @@ class Config:
             }
         }
         
-        # 尝试加载配置文件
-        config_file = Path('config.yaml')
+        # 尝试加载配置文件（优先从src/config/config.yaml，其次从根目录config.yaml）
+        config_file = Path('src/config/config.yaml')
+        if not config_file.exists():
+            config_file = Path('config.yaml')
+        
         if config_file.exists() and YAML_AVAILABLE:
             try:
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -153,7 +156,7 @@ class Config:
         保存配置到YAML文件
         
         Args:
-            config_file: 配置文件路径，如果为None则使用默认路径 'config.yaml'
+            config_file: 配置文件路径，如果为None则使用默认路径 'src/config/config.yaml'
         """
         if not YAML_AVAILABLE:
             import warnings
@@ -161,7 +164,7 @@ class Config:
             return False
         
         if config_file is None:
-            config_file = Path('config.yaml')
+            config_file = Path('src/config/config.yaml')
         else:
             config_file = Path(config_file)
         

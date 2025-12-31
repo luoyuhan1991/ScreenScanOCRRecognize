@@ -8,7 +8,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
-from .config import config
+from ..config.config import config
 
 
 def setup_logger(name: str = 'ScreenScanOCR', level: Optional[str] = None) -> logging.Logger:
