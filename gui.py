@@ -1,0 +1,759 @@
+"""
+ScreenScanOCRRecognize - GUI主程序
+提供图形用户界面，支持参数配置、状态监控和日志显示
+"""
+
+import os
+import sys
+import threading
+import queue
+import time
+import logging
+from datetime import datetime
+from pathlib import Path
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox, scrolledtext
+
+# 导入项目模块
+from src.config import config
+from src.logger import logger
+from src.scan_screen import scan_screen, select_roi_interactive
+from src.ocr_adapter import OCRConfig, OCRFactory
+from src.text_matcher import match_and_display
+from src.cleanup_old_files import start_cleanup_thread
+from src.gui_state import GUIStateManager
+from src.config_editor import ConfigEditor
+from src.gui_logger import GUILoggerHandler
+
+
+class MainGUI:
+    """主GUI界面"""
+    
+    def __init__(self, root):
+        """初始化界面"""
+        self.root = root
+        self.root.title("屏幕扫描OCR识别系统")
+        
+        # GUI状态管理器
+        self.state_manager = GUIStateManager()
+        
+        # 加载窗口状态
+        geometry = self.state_manager.get_window_geometry()
+        if geometry:
+            self.root.geometry(geometry)
+        else:
+            self.root.geometry("800x700")
+        
+        # 状态变量
+        self.is_running = False
+        self.scan_thread = None
+        self.stop_event = threading.Event()
+        self.log_queue = queue.Queue()
+        self.scan_count = 0
+        self.last_scan_time = None
+        
+        # OCR相关
+        self.ocr_adapter = None
+        self.ocr_config = None
+        self.roi = None
+        
+        # 创建界面
+        self.create_widgets()
+        
+        # 加载设置
+        self.load_settings()
+        
+        # 设置GUI日志处理器
+        self.setup_gui_logger()
+        
+        # 启动日志处理
+        self.process_log_queue()
+        
+        # 绑定窗口事件
+        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
+        self.root.bind('<Configure>', self.on_window_configure)
+    
+    def create_widgets(self):
+        """创建所有控件"""
+        # 主容器
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 状态栏
+        self.create_status_bar(main_frame)
+        
+        # 扫描配置
+        self.create_scan_config_widgets(main_frame)
+        
+        # OCR配置
+        self.create_ocr_config_widgets(main_frame)
+        
+        # 文字匹配配置
+        self.create_matching_config_widgets(main_frame)
+        
+        # 日志显示
+        self.create_log_widgets(main_frame)
+        
+        # 按钮区域
+        self.create_button_widgets(main_frame)
+    
+    def create_status_bar(self, parent):
+        """创建状态栏"""
+        status_frame = ttk.LabelFrame(parent, text="状态", padding="5")
+        status_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # 状态标签
+        self.status_label = ttk.Label(status_frame, text="状态: ● 已停止", font=("Microsoft YaHei", 10))
+        self.status_label.pack(side=tk.LEFT, padx=5)
+        
+        # 扫描次数
+        self.scan_count_label = ttk.Label(status_frame, text="扫描次数: 0", font=("Microsoft YaHei", 10))
+        self.scan_count_label.pack(side=tk.LEFT, padx=5)
+        
+        # 最后扫描时间
+        self.last_scan_label = ttk.Label(status_frame, text="最后扫描: 无", font=("Microsoft YaHei", 10))
+        self.last_scan_label.pack(side=tk.LEFT, padx=5)
+    
+    def create_scan_config_widgets(self, parent):
+        """创建扫描配置控件"""
+        frame = ttk.LabelFrame(parent, text="扫描配置", padding="5")
+        frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # 第一行：ROI和GPU选项
+        row1 = ttk.Frame(frame)
+        row1.pack(fill=tk.X, pady=2)
+        
+        self.enable_roi_var = tk.BooleanVar()
+        roi_check = ttk.Checkbutton(row1, text="启用ROI区域选择", variable=self.enable_roi_var)
+        roi_check.pack(side=tk.LEFT, padx=5)
+        
+        self.enable_gpu_var = tk.BooleanVar()
+        gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
+        gpu_check.pack(side=tk.LEFT, padx=5)
+        
+        # 第二行：扫描间隔
+        interval_frame = ttk.Frame(frame)
+        interval_frame.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(interval_frame, text="扫描间隔:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.scan_interval_var = tk.DoubleVar()
+        self.scan_interval_scale = ttk.Scale(
+            interval_frame,
+            from_=1,
+            to=60,
+            orient=tk.HORIZONTAL,
+            variable=self.scan_interval_var,
+            length=200
+        )
+        self.scan_interval_scale.pack(side=tk.LEFT, padx=5)
+        
+        self.scan_interval_entry = ttk.Entry(interval_frame, width=5, textvariable=self.scan_interval_var)
+        self.scan_interval_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(interval_frame, text="秒").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 绑定滑动条和输入框
+        self.scan_interval_var.trace('w', self.on_interval_change)
+        self.scan_interval_scale.configure(command=self.on_interval_scale_change)
+    
+    def create_ocr_config_widgets(self, parent):
+        """创建OCR配置控件"""
+        frame = ttk.LabelFrame(parent, text="OCR配置", padding="5")
+        frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # 第一行：OCR引擎和最小置信度
+        row1 = ttk.Frame(frame)
+        row1.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(row1, text="OCR引擎:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.ocr_engine_var = tk.StringVar()
+        paddle_radio = ttk.Radiobutton(row1, text="PaddleOCR", variable=self.ocr_engine_var, value="paddle")
+        paddle_radio.pack(side=tk.LEFT, padx=5)
+        
+        easy_radio = ttk.Radiobutton(row1, text="EasyOCR", variable=self.ocr_engine_var, value="easy")
+        easy_radio.pack(side=tk.LEFT, padx=5)
+        
+        # 添加分隔
+        ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+        
+        ttk.Label(row1, text="最小置信度:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.min_confidence_var = tk.DoubleVar()
+        self.min_confidence_scale = ttk.Scale(
+            row1,
+            from_=0.0,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.min_confidence_var,
+            length=150
+        )
+        self.min_confidence_scale.pack(side=tk.LEFT, padx=5)
+        
+        self.min_confidence_entry = ttk.Entry(row1, width=5, textvariable=self.min_confidence_var)
+        self.min_confidence_entry.pack(side=tk.LEFT, padx=5)
+        
+        # 绑定滑动条和输入框
+        self.min_confidence_var.trace('w', self.on_confidence_change)
+        self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
+        
+        # 第二行：预处理选项（放在一行）
+        row2 = ttk.Frame(frame)
+        row2.pack(fill=tk.X, pady=2)
+        
+        self.enable_preprocessing_var = tk.BooleanVar()
+        preprocessing_check = ttk.Checkbutton(row2, text="启用图像预处理", variable=self.enable_preprocessing_var)
+        preprocessing_check.pack(side=tk.LEFT, padx=5)
+        
+        self.enable_clahe_var = tk.BooleanVar()
+        clahe_check = ttk.Checkbutton(row2, text="启用CLAHE增强", variable=self.enable_clahe_var)
+        clahe_check.pack(side=tk.LEFT, padx=5)
+        
+        self.enable_sharpen_var = tk.BooleanVar()
+        sharpen_check = ttk.Checkbutton(row2, text="启用图像锐化", variable=self.enable_sharpen_var)
+        sharpen_check.pack(side=tk.LEFT, padx=5)
+        
+        self.fast_mode_var = tk.BooleanVar()
+        fast_mode_check = ttk.Checkbutton(row2, text="快速模式", variable=self.fast_mode_var)
+        fast_mode_check.pack(side=tk.LEFT, padx=5)
+    
+    def create_matching_config_widgets(self, parent):
+        """创建文字匹配控件"""
+        frame = ttk.LabelFrame(parent, text="文字匹配", padding="5")
+        frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # 第一行：启用文字匹配和关键词文件
+        row1 = ttk.Frame(frame)
+        row1.pack(fill=tk.X, pady=2)
+        
+        self.enable_matching_var = tk.BooleanVar()
+        matching_check = ttk.Checkbutton(row1, text="启用文字匹配", variable=self.enable_matching_var)
+        matching_check.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(row1, text="关键词文件:").pack(side=tk.LEFT, padx=(10, 5))
+        
+        self.banlist_path_var = tk.StringVar()
+        banlist_entry = ttk.Entry(row1, textvariable=self.banlist_path_var, width=30)
+        banlist_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        browse_btn = ttk.Button(row1, text="浏览...", command=self.on_browse_banlist)
+        browse_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 第二行：显示时长和显示位置
+        row2 = ttk.Frame(frame)
+        row2.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(row2, text="显示时长:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.display_duration_var = tk.DoubleVar()
+        self.display_duration_scale = ttk.Scale(
+            row2,
+            from_=1,
+            to=10,
+            orient=tk.HORIZONTAL,
+            variable=self.display_duration_var,
+            length=150
+        )
+        self.display_duration_scale.pack(side=tk.LEFT, padx=5)
+        
+        self.display_duration_entry = ttk.Entry(row2, width=5, textvariable=self.display_duration_var)
+        self.display_duration_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Label(row2, text="显示位置:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.display_position_var = tk.StringVar()
+        position_combo = ttk.Combobox(row2, textvariable=self.display_position_var, width=12, state="readonly")
+        position_combo['values'] = ('居中', '顶部', '底部')
+        position_combo.pack(side=tk.LEFT, padx=5)
+    
+    def create_log_widgets(self, parent):
+        """创建日志显示控件"""
+        frame = ttk.LabelFrame(parent, text="运行日志", padding="5")
+        frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        
+        # 日志文本框（使用ScrolledText，减少高度）
+        self.log_text = scrolledtext.ScrolledText(
+            frame,
+            height=6,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="#d4d4d4"
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        
+        # 配置日志文本颜色标签
+        self.log_text.tag_config("INFO", foreground="#4ec9b0")
+        self.log_text.tag_config("WARNING", foreground="#dcdcaa")
+        self.log_text.tag_config("ERROR", foreground="#f48771")
+        self.log_text.tag_config("DEBUG", foreground="#569cd6")
+    
+    def create_button_widgets(self, parent):
+        """创建按钮控件"""
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(fill=tk.X)
+        
+        self.start_btn = ttk.Button(button_frame, text="▶ 开始扫描", command=self.on_start)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.stop_btn = ttk.Button(button_frame, text="⏹ 停止扫描", command=self.on_stop, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.reset_btn = ttk.Button(button_frame, text="⚙ 重置配置", command=self.on_reset_config)
+        self.reset_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.edit_config_btn = ttk.Button(button_frame, text="📝 编辑配置", command=self.on_edit_config)
+        self.edit_config_btn.pack(side=tk.LEFT, padx=5)
+    
+    def on_interval_change(self, *args):
+        """扫描间隔改变事件"""
+        try:
+            value = self.scan_interval_var.get()
+            if 1 <= value <= 60:
+                self.scan_interval_scale.set(value)
+        except:
+            pass
+    
+    def on_interval_scale_change(self, value):
+        """扫描间隔滑动条改变事件"""
+        try:
+            self.scan_interval_var.set(float(value))
+        except:
+            pass
+    
+    def on_confidence_change(self, *args):
+        """置信度改变事件"""
+        try:
+            value = self.min_confidence_var.get()
+            if 0.0 <= value <= 1.0:
+                self.min_confidence_scale.set(value)
+        except:
+            pass
+    
+    def on_confidence_scale_change(self, value):
+        """置信度滑动条改变事件"""
+        try:
+            # 限制步长为0.05
+            val = float(value)
+            val = round(val / 0.05) * 0.05
+            self.min_confidence_var.set(val)
+        except:
+            pass
+    
+    def load_settings(self):
+        """加载设置"""
+        # 从config.yaml加载业务配置
+        # 注意：scan.enable_roi不在默认配置中，使用False作为默认值
+        self.enable_roi_var.set(config.get('scan.enable_roi', False))
+        self.enable_gpu_var.set(config.get('gpu.force_gpu', True))
+        self.scan_interval_var.set(config.get('scan.interval_seconds', 5))
+        
+        # OCR配置
+        default_engine = config.get('ocr.default_engine', 'paddle')
+        self.ocr_engine_var.set(default_engine)
+        self.min_confidence_var.set(config.get('ocr.min_confidence', 0.15))
+        self.enable_preprocessing_var.set(config.get('ocr.use_preprocessing', True))
+        self.enable_clahe_var.set(config.get('ocr.preprocessing.enable_clahe', True))
+        self.enable_sharpen_var.set(config.get('ocr.preprocessing.enable_sharpen', True))
+        self.fast_mode_var.set(config.get('ocr.preprocessing.fast_mode', False))
+        
+        # 文字匹配配置
+        self.enable_matching_var.set(config.get('matching.enabled', True))
+        # 优先使用GUI状态中的路径，否则使用配置文件
+        banlist_path = self.state_manager.get_last_banlist_path()
+        if not os.path.exists(banlist_path):
+            banlist_path = config.get('files.banlist_file', 'docs/banlist.txt')
+        self.banlist_path_var.set(banlist_path)
+        self.display_duration_var.set(config.get('matching.display_duration', 3))
+        position = config.get('matching.position', 'center')
+        position_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
+        self.display_position_var.set(position_map.get(position, '居中'))
+    
+    def save_settings(self):
+        """保存设置"""
+        # 保存业务配置到config.yaml
+        # 注意：scan.enable_roi是GUI新增的配置项
+        config.set('scan.enable_roi', self.enable_roi_var.get())
+        config.set('gpu.force_gpu', self.enable_gpu_var.get())
+        config.set('scan.interval_seconds', self.scan_interval_var.get())
+        
+        # OCR配置
+        config.set('ocr.default_engine', self.ocr_engine_var.get())
+        config.set('ocr.min_confidence', self.min_confidence_var.get())
+        config.set('ocr.use_preprocessing', self.enable_preprocessing_var.get())
+        config.set('ocr.preprocessing.enable_clahe', self.enable_clahe_var.get())
+        config.set('ocr.preprocessing.enable_sharpen', self.enable_sharpen_var.get())
+        config.set('ocr.preprocessing.fast_mode', self.fast_mode_var.get())
+        
+        # 文字匹配配置
+        config.set('matching.enabled', self.enable_matching_var.get())
+        banlist_path = self.banlist_path_var.get()
+        config.set('files.banlist_file', banlist_path)
+        self.state_manager.set_last_banlist_path(banlist_path)
+        config.set('matching.display_duration', self.display_duration_var.get())
+        position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
+        config.set('matching.position', position_map.get(self.display_position_var.get(), 'center'))
+        
+        # 保存到文件
+        if config.save():
+            self.append_log("配置已保存", "INFO")
+        else:
+            self.append_log("配置保存失败", "WARNING")
+    
+    def on_start(self):
+        """开始按钮事件"""
+        if self.is_running:
+            return
+        
+        try:
+            # 保存当前配置
+            self.save_settings()
+            
+            # 初始化OCR
+            self.append_log("正在初始化OCR引擎...", "INFO")
+            engine_choice = '1' if self.ocr_engine_var.get() == 'paddle' else '2'
+            self.ocr_adapter = OCRFactory.create(engine_choice)
+            
+            # 创建OCR配置
+            languages = config.get('ocr.languages', ['ch', 'en'])
+            use_gpu = self.enable_gpu_var.get()
+            self.ocr_config = OCRConfig(
+                languages=languages,
+                use_gpu=use_gpu,
+                engine=self.ocr_engine_var.get()
+            )
+            
+            # 初始化OCR阅读器
+            self.ocr_adapter.init_reader(self.ocr_config, force_reinit=False)
+            self.append_log(f"{self.ocr_adapter.engine_name}初始化完成", "INFO")
+            
+            # 如果启用ROI，选择ROI区域
+            if self.enable_roi_var.get():
+                self.append_log("请选择ROI区域...", "INFO")
+                self.roi = select_roi_interactive()
+                if self.roi is None:
+                    self.append_log("ROI选择取消，使用全屏扫描", "WARNING")
+                else:
+                    self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
+            else:
+                self.roi = None
+            
+            # 启动扫描线程
+            self.is_running = True
+            self.stop_event.clear()
+            self.scan_thread = threading.Thread(target=self._run_scan_loop, daemon=True)
+            self.scan_thread.start()
+            
+            # 更新UI
+            self.start_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.NORMAL)
+            self.update_status("运行中")
+            self.append_log("扫描已启动", "INFO")
+            
+        except Exception as e:
+            self.append_log(f"启动失败: {e}", "ERROR")
+            self.show_error(f"启动失败: {e}")
+            self.is_running = False
+    
+    def on_stop(self):
+        """停止按钮事件"""
+        if not self.is_running:
+            return
+        
+        self.is_running = False
+        self.stop_event.set()
+        
+        # 更新UI
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.update_status("已停止")
+        self.append_log("扫描已停止", "INFO")
+    
+    def on_browse_banlist(self):
+        """浏览banlist文件"""
+        initial_dir = os.path.dirname(self.banlist_path_var.get()) if self.banlist_path_var.get() else "."
+        file_path = filedialog.askopenfilename(
+            title="选择关键词文件",
+            initialdir=initial_dir,
+            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        
+        if file_path:
+            self.banlist_path_var.set(file_path)
+            self.save_settings()
+    
+    def on_reset_config(self):
+        """重置配置"""
+        if messagebox.askyesno("确认", "确定要重置所有配置为默认值吗？"):
+            # 重新加载配置（会使用默认值）
+            config.reload()
+            self.append_log("配置已重置为默认值", "INFO")
+            self.load_settings()
+            # 保存重置后的配置
+            config.save()
+    
+    def on_edit_config(self):
+        """编辑配置文件"""
+        def on_config_saved():
+            """配置保存后的回调"""
+            # 重新加载配置
+            config.reload()
+            self.load_settings()
+            self.append_log("配置文件已更新，已重新加载", "INFO")
+        
+        editor = ConfigEditor(self.root, config_file='config.yaml', on_save_callback=on_config_saved)
+        editor.show()
+    
+    def on_window_configure(self, event=None):
+        """窗口大小或位置改变事件"""
+        if event and event.widget == self.root:
+            # 保存窗口状态
+            try:
+                geometry = self.root.geometry()
+                # 解析geometry字符串: "widthxheight+x+y"
+                parts = geometry.split('+')
+                if len(parts) == 3:
+                    size_part = parts[0]
+                    x = int(parts[1])
+                    y = int(parts[2])
+                    width, height = map(int, size_part.split('x'))
+                    self.state_manager.set_window_geometry(x, y, width, height)
+            except:
+                pass
+    
+    def on_window_close(self):
+        """窗口关闭事件"""
+        if self.is_running:
+            if messagebox.askyesno("确认", "扫描正在运行，确定要退出吗？"):
+                self.on_stop()
+                time.sleep(0.5)  # 等待线程结束
+        
+        # 保存GUI状态
+        self.state_manager.save_state()
+        
+        self.root.destroy()
+    
+    def update_status(self, status):
+        """更新状态显示"""
+        status_text = f"状态: ● {status}"
+        self.status_label.config(text=status_text)
+    
+    def update_stats(self):
+        """更新统计信息"""
+        self.scan_count_label.config(text=f"扫描次数: {self.scan_count}")
+        if self.last_scan_time:
+            self.last_scan_label.config(text=f"最后扫描: {self.last_scan_time}")
+        else:
+            self.last_scan_label.config(text="最后扫描: 无")
+    
+    def setup_gui_logger(self):
+        """设置GUI日志处理器"""
+        # 创建GUI日志处理器
+        gui_handler = GUILoggerHandler(self.log_queue)
+        gui_handler.setLevel(logging.DEBUG)
+        
+        # 添加到根日志记录器
+        root_logger = logging.getLogger()
+        root_logger.addHandler(gui_handler)
+        
+        # 设置日志级别
+        log_level = config.get('logging.level', 'INFO')
+        root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+    
+    def append_log(self, message, level='INFO'):
+        """追加日志到日志区域"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_message = f"{timestamp} - {message}\n"
+        
+        # 将日志放入队列
+        try:
+            self.log_queue.put_nowait((log_message, level))
+        except queue.Full:
+            pass
+    
+    def process_log_queue(self):
+        """处理日志队列（在主线程中）"""
+        try:
+            while True:
+                try:
+                    log_message, level = self.log_queue.get_nowait()
+                    self.log_text.insert(tk.END, log_message, level)
+                    self.log_text.see(tk.END)
+                    
+                    # 限制日志行数
+                    max_lines = self.state_manager.get_log_max_lines()
+                    lines = int(self.log_text.index('end-1c').split('.')[0])
+                    if lines > max_lines:
+                        # 删除前100行
+                        self.log_text.delete('1.0', '100.0')
+                except queue.Empty:
+                    break
+        except:
+            pass
+        
+        # 每100ms检查一次
+        self.root.after(100, self.process_log_queue)
+    
+    def show_error(self, message):
+        """显示错误消息"""
+        messagebox.showerror("错误", message)
+    
+    def show_info(self, message):
+        """显示信息消息"""
+        messagebox.showinfo("信息", message)
+    
+    def _run_scan_loop(self):
+        """运行扫描循环（在独立线程中）"""
+        # 获取配置
+        output_dir = config.get('files.output_dir', 'output')
+        scan_interval = self.scan_interval_var.get()
+        roi_padding = config.get('scan.roi_padding', 10)
+        folder_mode = config.get('files.folder_mode', 'minute')
+        max_folders = config.get('files.max_folders', 10)
+        
+        # 创建输出目录
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            self.append_log(f"创建输出目录: {output_dir}", "INFO")
+        
+        # 启动清理线程
+        cleanup_enabled = config.get('cleanup.enabled', True)
+        cleanup_thread = None
+        if cleanup_enabled:
+            max_age_hours = config.get('cleanup.max_age_hours', 1)
+            cleanup_interval = config.get('cleanup.interval_minutes', 10)
+            cleanup_thread = start_cleanup_thread(output_dir, max_age_hours=max_age_hours, 
+                                                interval_minutes=cleanup_interval)
+            self.append_log("清理线程已启动", "INFO")
+        
+        current_minute_folder = None
+        current_minute = None
+        
+        try:
+            while not self.stop_event.is_set():
+                self.scan_count += 1
+                scan_start_time = time.time()
+                self.append_log(f"开始第 {self.scan_count} 次扫描...", "INFO")
+                
+                # 获取当前时间
+                now = datetime.now()
+                self.last_scan_time = now.strftime('%H:%M:%S')
+                
+                # 更新统计信息（在主线程中）
+                self.root.after(0, self.update_stats)
+                
+                # 根据文件夹组织模式决定保存目录
+                if folder_mode == 'minute':
+                    minute_timestamp = now.strftime("%Y%m%d_%H%M")
+                    
+                    if current_minute != minute_timestamp:
+                        current_minute = minute_timestamp
+                        current_minute_folder = os.path.join(output_dir, current_minute)
+                        
+                        if not os.path.exists(current_minute_folder):
+                            os.makedirs(current_minute_folder)
+                            self.append_log(f"创建新的分钟文件夹: {current_minute}", "INFO")
+                            
+                            # 清理旧的分钟文件夹
+                            from src.cleanup_old_files import cleanup_old_folders_by_count
+                            cleanup_old_folders_by_count(output_dir, max_folders=max_folders)
+                    
+                    save_dir = current_minute_folder
+                else:
+                    second_timestamp = now.strftime("%Y%m%d_%H%M%S")
+                    save_dir = os.path.join(output_dir, second_timestamp)
+                    os.makedirs(save_dir, exist_ok=True)
+                
+                # 生成秒级时间戳
+                second_timestamp = now.strftime("%Y%m%d_%H%M%S")
+                
+                try:
+                    # 扫描屏幕
+                    screenshot, timestamp = scan_screen(
+                        save_dir=save_dir,
+                        timestamp=second_timestamp,
+                        roi=self.roi,
+                        padding=roi_padding
+                    )
+                    
+                    if screenshot:
+                        # 在按分钟模式下，删除旧截图
+                        if folder_mode == 'minute':
+                            import glob
+                            old_screenshots = glob.glob(os.path.join(save_dir, "screenshot_*.png"))
+                            for old_screenshot in old_screenshots:
+                                if old_screenshot != os.path.join(save_dir, f"screenshot_{second_timestamp}.png"):
+                                    try:
+                                        os.remove(old_screenshot)
+                                    except:
+                                        pass
+                        
+                        # OCR识别
+                        ocr_results = self.ocr_adapter.recognize_and_print(
+                            screenshot,
+                            config=self.ocr_config,
+                            save_dir=save_dir,
+                            timestamp=second_timestamp,
+                            roi=None
+                        )
+                        
+                        # 文字匹配
+                        if self.enable_matching_var.get() and ocr_results:
+                            banlist_file = self.banlist_path_var.get()
+                            display_duration = self.display_duration_var.get()
+                            position = self.display_position_var.get()
+                            position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
+                            position = position_map.get(position, 'center')
+                            
+                            # 统一OCR结果格式
+                            if isinstance(ocr_results, str):
+                                text_lines = [line.strip() for line in ocr_results.split('\n') if line.strip()]
+                                ocr_results_for_match = [{'text': line} for line in text_lines]
+                            elif isinstance(ocr_results, list):
+                                ocr_results_for_match = ocr_results
+                            else:
+                                ocr_results_for_match = [{'text': str(ocr_results)}]
+                            
+                            match_and_display(ocr_results_for_match, txt_file=banlist_file,
+                                            duration=display_duration, position=position)
+                        
+                        scan_duration = time.time() - scan_start_time
+                        self.append_log(f"扫描完成，耗时 {scan_duration:.2f}秒", "INFO")
+                
+                except Exception as e:
+                    self.append_log(f"扫描或OCR处理出错: {e}", "ERROR")
+                
+                # 计算等待时间
+                scan_duration = time.time() - scan_start_time
+                wait_time = max(0, scan_interval - scan_duration)
+                
+                if wait_time > 0:
+                    # 等待指定时间，但每0.5秒检查一次停止信号
+                    elapsed = 0
+                    while elapsed < wait_time and not self.stop_event.is_set():
+                        time.sleep(0.5)
+                        elapsed += 0.5
+                else:
+                    self.append_log(f"扫描耗时 {scan_duration:.2f}秒，超过间隔时间，立即开始下一次扫描", "WARNING")
+        
+        except Exception as e:
+            self.append_log(f"扫描循环出错: {e}", "ERROR")
+        finally:
+            self.is_running = False
+            self.root.after(0, lambda: self.update_status("已停止"))
+            self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.stop_btn.config(state=tk.DISABLED))
+
+
+def main():
+    """主函数"""
+    root = tk.Tk()
+    app = MainGUI(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
+

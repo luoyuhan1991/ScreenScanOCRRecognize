@@ -32,7 +32,8 @@ class Config:
         default_config = {
             'scan': {
                 'interval_seconds': 5,
-                'roi_padding': 10
+                'roi_padding': 10,
+                'enable_roi': False
             },
             'ocr': {
                 'default_engine': 'paddle',
@@ -146,6 +147,41 @@ class Config:
                 config[key] = {}
             config = config[key]
         config[keys[-1]] = value
+    
+    def save(self, config_file: Optional[str] = None):
+        """
+        保存配置到YAML文件
+        
+        Args:
+            config_file: 配置文件路径，如果为None则使用默认路径 'config.yaml'
+        """
+        if not YAML_AVAILABLE:
+            import warnings
+            warnings.warn("PyYAML未安装，无法保存配置文件。请运行: pip install pyyaml")
+            return False
+        
+        if config_file is None:
+            config_file = Path('config.yaml')
+        else:
+            config_file = Path(config_file)
+        
+        try:
+            # 确保目录存在
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # 保存配置到文件
+            with open(config_file, 'w', encoding='utf-8') as f:
+                yaml.dump(self._config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            
+            return True
+        except Exception as e:
+            import warnings
+            warnings.warn(f"保存配置文件失败: {e}")
+            return False
+    
+    def reload(self):
+        """重新加载配置文件"""
+        self._load_config()
 
 
 # 全局配置实例
