@@ -9,15 +9,88 @@
 ## 环境要求
 
 - Python 3.8+
-- 无需安装额外的OCR引擎（使用纯Python的EasyOCR库）
+- tkinter（GUI界面，Python标准库，某些Linux系统可能需要单独安装）
+- 支持PaddleOCR和EasyOCR两种OCR引擎（通过pip安装依赖即可）
 
 ## 安装依赖
+
+### 步骤1：安装核心依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-**注意：** 首次运行时会自动下载OCR模型文件（约几百MB），请确保网络连接正常。
+这会安装以下核心依赖：
+- **图像处理**：Pillow (PIL)、OpenCV (cv2)、NumPy
+- **配置文件**：PyYAML
+- **OCR引擎**：PaddleOCR 或 EasyOCR（二选一或同时安装）
+- **打包工具**：PyInstaller（可选，用于打包成EXE）
+
+### 步骤2：安装GPU加速依赖（可选，但推荐）
+
+**重要提示**：`paddlepaddle-gpu` 和 `torch` 不能直接从PyPI安装，需要根据CUDA版本从指定源安装。
+
+#### 如果使用PaddleOCR（推荐）
+
+1. **检查CUDA版本**：
+   ```bash
+   nvidia-smi
+   ```
+
+2. **根据CUDA版本安装PaddlePaddle-GPU**：
+   
+   **CUDA 11.8（推荐，兼容性最好）**：
+   ```bash
+   pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+   ```
+   
+   **CUDA 12.3+（使用CUDA 11.8版本，向后兼容）**：
+   ```bash
+   pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+   ```
+   
+   **其他CUDA版本**：请参考 `requirements.txt` 中的详细说明
+   
+   **无GPU（CPU版本）**：
+   ```bash
+   pip install paddlepaddle==3.2.2
+   ```
+
+#### 如果使用EasyOCR
+
+1. **根据CUDA版本安装PyTorch-GPU**：
+   
+   **CUDA 11.8**：
+   ```bash
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+   ```
+   
+   **CUDA 12.1**：
+   ```bash
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+   ```
+   
+   **无GPU（CPU版本）**：
+   ```bash
+   pip install torch torchvision torchaudio
+   ```
+
+### 验证安装
+
+安装完成后，可以验证GPU是否可用：
+
+```bash
+# 验证PaddlePaddle GPU（如果使用PaddleOCR）
+python -c "import paddle; print('PaddlePaddle版本:', paddle.__version__); print('CUDA支持:', paddle.is_compiled_with_cuda())"
+
+# 验证PyTorch GPU（如果使用EasyOCR）
+python -c "import torch; print('PyTorch版本:', torch.__version__); print('CUDA可用:', torch.cuda.is_available())"
+```
+
+**注意：** 
+- 首次运行时会自动下载OCR模型文件（约几百MB），请确保网络连接正常
+- 如果使用GPU加速，需要先安装CUDA和cuDNN
+- 详细安装说明请参考 `requirements.txt` 中的注释
 
 ## 运行
 
@@ -127,8 +200,6 @@ py main.py 1 3 3
 - **📝 编辑配置**：打开配置文件编辑器（支持YAML语法高亮和格式验证）
 
 ## 打包为EXE
-
-### 打包为EXE
 
 **前置要求**：安装 PyInstaller
 ```bash

@@ -8,55 +8,67 @@ opencv-python>=4.10.0       # OpenCV库，用于图像预处理和增强
 pyyaml>=6.0                 # YAML配置文件解析
 
 # OCR引擎（二选一或同时安装）
-easyocr>=1.7.0              # EasyOCR引擎（纯Python实现）
-paddleocr>=3.3.0            # PaddleOCR引擎（识别准确率更高）
+easyocr>=1.7.0              # EasyOCR引擎（基于PyTorch）
+paddleocr>=3.3.0            # PaddleOCR引擎（基于PaddlePaddle，识别准确率更高）
 
 # GPU加速依赖
-torch>=2.7.0                # PyTorch，用于GPU检测和EasyOCR的GPU加速
-paddlepaddle-gpu>=3.2.0     # PaddlePaddle GPU版本，用于PaddleOCR的GPU加速
+# 注意：paddlepaddle-gpu 和 torch 不能直接从PyPI安装，需要根据CUDA版本从指定源安装
+# 请先安装核心依赖，然后根据您的CUDA版本选择对应的GPU依赖安装命令（见下方说明）
 
-# PaddlePaddle GPU版本安装说明
-# 注意：paddlepaddle-gpu需要根据CUDA版本选择对应的安装源
+# ============================================================================
+# GPU加速依赖安装说明（重要！）
+# ============================================================================
 #
-# 当前环境使用的版本：
-# - PaddlePaddle: 3.2.2 (GPU版本，CUDA 11.8, cuDNN 8.9.6)
-# - PaddleOCR: 3.3.2
-# - PyTorch: 2.7.1+cu118 (GPU版本，CUDA 11.8) ✅
-# - EasyOCR: 1.7.2
-# - GPU: NVIDIA GeForce RTX 4060 Ti
+# 【安装步骤】
+# 1. 先安装核心依赖（可以正常从PyPI安装）:
+#    pip install -r requirements.txt
 #
-# 安装方法（根据CUDA版本选择）：
+# 2. 根据您的CUDA版本安装PaddlePaddle-GPU（如果使用PaddleOCR）:
+#    检查CUDA版本: nvidia-smi
 #
-# 1. 对于CUDA 11.8（推荐，兼容性最好）:
+#    对于CUDA 11.8（推荐，兼容性最好）:
 #    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 #
-# 2. 对于CUDA 12.3+（适用于CUDA 12.6，使用CUDA 11.8版本，向后兼容）:
+#    对于CUDA 12.3+（适用于CUDA 12.6，使用CUDA 11.8版本，向后兼容）:
 #    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 #
-# 3. 对于CUDA 11.2:
+#    对于CUDA 11.2:
 #    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu112/
 #
-# 4. 对于CUDA 11.6:
+#    对于CUDA 11.6:
 #    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu116/
 #
-# 5. 对于CUDA 11.7:
+#    对于CUDA 11.7:
 #    pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu117/
 #
-# 6. CPU版本（无GPU）:
+#    CPU版本（无GPU，如果使用PaddleOCR）:
 #    pip install paddlepaddle==3.2.2
 #
-# PyTorch GPU版本安装（CUDA 11.8）:
+# 3. 根据您的CUDA版本安装PyTorch-GPU（如果使用EasyOCR）:
+#    对于CUDA 11.8:
 #    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+#
+#    对于CUDA 12.1:
+#    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
+#    CPU版本（无GPU，如果使用EasyOCR）:
+#    pip install torch torchvision torchaudio
+#
+# 【当前环境使用的版本（仅供参考）】
+# - PaddlePaddle: 3.2.2 (GPU版本，CUDA 11.8, cuDNN 8.9.6)
+# - PaddleOCR: 3.3.2
+# - PyTorch: 2.7.1+cu118 (GPU版本，CUDA 11.8)
+# - EasyOCR: 1.7.2
+# - GPU: NVIDIA GeForce RTX 4060 Ti
 
 # 打包工具（可选，用于打包成EXE）
 pyinstaller>=6.0.0              # PyInstaller，用于将项目打包成EXE文件
 
 # 注意事项：
-# 1. 如果使用EasyOCR，需要安装torch（已包含在requirements.txt中）
+# 1. 如果使用EasyOCR，需要安装torch（见上方安装说明）
 #    - 推荐安装GPU版本以获得更好的性能
 # 2. 如果使用PaddleOCR，需要安装paddlepaddle-gpu（推荐GPU）或paddlepaddle（CPU）
 # 3. 建议先安装CUDA和cuDNN，然后再安装GPU版本的依赖
 # 4. Windows系统建议使用conda创建虚拟环境，避免依赖冲突
 # 5. 检查CUDA版本命令：nvidia-smi
-# 6. 当前环境：Python 3.12.10, PaddlePaddle 3.2.2 (GPU), PyTorch 2.7.1+cu118 (GPU), PaddleOCR 3.3.2
-# 7. 打包EXE：安装所有依赖后，运行 python build_exe.py 即可打包
+# 6. 打包EXE：安装所有依赖后，运行 python src/buildexe/build_exe.py 即可打包

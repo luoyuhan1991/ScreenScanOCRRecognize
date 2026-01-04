@@ -6,6 +6,7 @@ OCR统一模块
 
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Union
+
 from PIL import Image
 
 from ..config.config import config
@@ -249,9 +250,14 @@ class PaddleOCRAdapter(OCRAdapter):
         return "PaddleOCR"
     
     def _get_config_key(self, config: OCRConfig) -> tuple:
-        """生成配置键用于比较"""
-        params = config.get_paddle_params()
-        return (params['lang'], config.use_gpu)
+        """生成配置键用于比较（不调用get_paddle_params避免触发日志副作用）"""
+        # 直接计算语言代码，避免调用有副作用的get_paddle_params()
+        if 'ch' in config.languages:
+            lang_code = 'ch'
+        else:
+            lang_code = config.languages[0] if config.languages else 'ch'
+        lang_code = config.PADDLE_LANG_MAP.get(lang_code, lang_code)
+        return (lang_code, config.use_gpu)
     
     def init_reader(self, config: OCRConfig, force_reinit: bool = False):
         """初始化PaddleOCR阅读器"""
