@@ -48,6 +48,9 @@ paddlepaddle-gpu>=3.2.0     # PaddlePaddle GPU版本，用于PaddleOCR的GPU加�
 # PyTorch GPU版本安装（CUDA 11.8）:
 #    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
+# 打包工具（可选，用于打包成EXE）
+pyinstaller>=6.0.0              # PyInstaller，用于将项目打包成EXE文件
+
 # 注意事项：
 # 1. 如果使用EasyOCR，需要安装torch（已包含在requirements.txt中）
 #    - 推荐安装GPU版本以获得更好的性能
@@ -56,3 +59,4 @@ paddlepaddle-gpu>=3.2.0     # PaddlePaddle GPU版本，用于PaddleOCR的GPU加�
 # 4. Windows系统建议使用conda创建虚拟环境，避免依赖冲突
 # 5. 检查CUDA版本命令：nvidia-smi
 # 6. 当前环境：Python 3.12.10, PaddlePaddle 3.2.2 (GPU), PyTorch 2.7.1+cu118 (GPU), PaddleOCR 3.3.2
+# 7. 打包EXE：安装所有依赖后，运行 python build_exe.py 即可打包

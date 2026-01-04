@@ -195,21 +195,101 @@ output/
   - `Esc`：关闭编辑器
 - **重置功能**：可以重置为原始内容
 
-### 打包为EXE
+## 打包为EXE
 
-1. **安装PyInstaller**
+### 前置要求
+
+1. **安装 PyInstaller**
    ```bash
    pip install pyinstaller
    ```
-
-2. **打包程序**
+   或者安装所有依赖（包括打包工具）：
    ```bash
-   pyinstaller build/build.spec
+   pip install -r requirements.txt
    ```
 
-3. **运行打包后的程序**
-   - 进入 `dist/ScreenScanOCR` 目录
-   - 双击 `ScreenScanOCR.exe`
+2. **确保所有依赖已安装**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### 打包方法
+
+#### 方法一：使用打包脚本（推荐）
+
+直接运行打包脚本：
+```bash
+python src/buildexe/build_exe.py
+```
+
+#### 方法二：使用 spec 文件
+
+1. 使用 spec 文件打包（需要在项目根目录执行）：
+   ```bash
+   pyinstaller src/buildexe/build_exe.spec
+   ```
+
+2. 或者使用命令行参数（在项目根目录执行）：
+   ```bash
+   pyinstaller --name=ScreenScanOCR --onefile --windowed --add-data="src/config/config.yaml;src/config" --add-data="docs/banlist.txt;docs" gui.py
+   ```
+
+### 打包选项说明
+
+- `--onefile`: 打包成单个EXE文件（推荐，方便分发）
+- `--windowed` 或 `-w`: 不显示控制台窗口（GUI应用）
+- `--onedir`: 打包成文件夹（包含多个文件，启动更快）
+- `--icon=icon.ico`: 指定图标文件（可选）
+
+### 打包后的文件位置
+
+打包完成后，EXE文件位于：
+- `dist/ScreenScanOCR.exe`（使用 --onefile）
+- 或 `dist/ScreenScanOCR/` 文件夹（使用 --onedir）
+
+### 注意事项
+
+1. **文件大小**：由于包含 PaddleOCR/EasyOCR 和深度学习模型，打包后的EXE文件会比较大（可能几百MB到几GB）
+
+2. **首次运行**：首次运行EXE时，可能需要解压临时文件，启动会稍慢
+
+3. **GPU支持**：打包后的EXE仍然可以使用GPU，但需要目标机器安装相应的CUDA驱动
+
+4. **配置文件**：配置文件 `config.yaml` 会被打包进EXE，但运行时会在EXE同目录生成新的配置文件
+
+5. **数据文件**：`docs/banlist.txt` 等数据文件会被打包，但运行时会在EXE同目录查找
+
+### 测试打包结果
+
+打包完成后，建议在干净的Windows系统上测试：
+1. 将EXE文件复制到新目录
+2. 双击运行，检查是否能正常启动
+3. 测试基本功能（扫描、OCR识别等）
+
+### 常见问题
+
+#### 1. 打包失败：找不到模块
+- 检查是否安装了所有依赖
+- 在 `src/buildexe/build_exe.spec` 中添加缺失的隐藏导入
+
+#### 2. 运行时错误：找不到配置文件
+- 确保 `--add-data` 参数正确
+- 检查代码中文件路径是否为相对路径
+
+#### 3. EXE文件太大
+- 使用 `--onedir` 而不是 `--onefile`（启动更快）
+- 排除不需要的模块（已在spec文件中配置）
+
+#### 4. 启动慢
+- 使用 `--onedir` 模式
+- 首次启动需要解压，后续会快一些
+
+### 优化建议
+
+1. **使用图标**：创建 `icon.ico` 文件，在spec文件中指定
+2. **版本信息**：添加版本信息文件（.rc文件）
+3. **UPX压缩**：已启用UPX压缩以减小文件大小
+4. **排除模块**：已排除不需要的大型模块（matplotlib、scipy等）
 
 ## 项目结构
 
@@ -220,11 +300,11 @@ ScreenScanOCRRecognize/
 ├── requirements.txt     # 项目依赖
 ├── .gitignore          # Git忽略文件
 ├── README.md           # 项目说明
-├── build/               # 打包相关文件
-│   └── build.spec       # PyInstaller打包配置
-│
 ├── src/                # 源代码目录
 │   ├── __init__.py
+│   ├── buildexe/        # 打包相关文件
+│   │   ├── build_exe.py     # 打包脚本
+│   │   └── build_exe.spec   # PyInstaller打包配置
 │   ├── config/         # 配置模块
 │   │   ├── __init__.py
 │   │   ├── config.py          # 配置管理
