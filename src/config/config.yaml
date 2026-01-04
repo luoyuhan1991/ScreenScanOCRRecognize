@@ -3,7 +3,7 @@ scan:
   roi_padding: 10
   enable_roi: false
 ocr:
-  default_engine: easy
+  default_engine: paddle
   languages:
   - ch
   - en

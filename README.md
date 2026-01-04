@@ -204,7 +204,7 @@ output/
 
 2. **打包程序**
    ```bash
-   pyinstaller build.spec
+   pyinstaller build/build.spec
    ```
 
 3. **运行打包后的程序**
@@ -220,7 +220,8 @@ ScreenScanOCRRecognize/
 ├── requirements.txt     # 项目依赖
 ├── .gitignore          # Git忽略文件
 ├── README.md           # 项目说明
-├── build.spec          # PyInstaller打包配置
+├── build/               # 打包相关文件
+│   └── build.spec       # PyInstaller打包配置
 │
 ├── src/                # 源代码目录
 │   ├── __init__.py
