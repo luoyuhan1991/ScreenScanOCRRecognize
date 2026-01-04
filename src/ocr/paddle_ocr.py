@@ -148,18 +148,53 @@ def recognize_and_print(image, languages=None, save_dir="output",
     # 初始化OCR（使用缓存的实例）
     ocr = init_reader(languages, use_gpu)
 
-    # 将PIL图像转换为numpy数组（直接使用原始图像，不进行预处理）
+    # 将PIL图像转换为numpy数组
     if hasattr(image, 'convert'):  # PIL Image
+        # 先转换为RGB（确保颜色通道正确）
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
         img_array = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     else:
         img_array = image
 
+    # 应用ROI裁剪（如果提供）
+    # 注意：如果image已经是裁剪后的图像，roi可能为None或不需要再次应用
+    if roi is not None:
+        x1, y1, x2, y2 = roi
+        # 确保ROI坐标在图像范围内
+        h, w = img_array.shape[:2]
+        x1 = max(0, min(x1, w))
+        y1 = max(0, min(y1, h))
+        x2 = max(x1, min(x2, w))
+        y2 = max(y1, min(y2, h))
+        if x2 > x1 and y2 > y1:
+            img_array = img_array[y1:y2, x1:x2]
+            logger.debug(f"应用ROI裁剪: ({x1}, {y1}, {x2}, {y2})")
+        else:
+            logger.warning(f"ROI坐标无效，跳过裁剪: ({x1}, {y1}, {x2}, {y2})")
+
+    # 图像取反处理：将黑底白字转换为白底黑字
+    img_array_inverted = cv2.bitwise_not(img_array)
+    logger.debug(f"图像取反处理完成，图像尺寸: {img_array_inverted.shape}")
+
+    # 保存处理后的图像
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # 生成处理后图像的文件名
+    processed_filename = os.path.join(save_dir, f"processed_{timestamp}.png")
     try:
-        logger.debug(f"开始OCR识别，图像尺寸: {img_array.shape}")
+        cv2.imwrite(processed_filename, img_array_inverted)
+        logger.info(f"处理后的图像已保存: {processed_filename}")
+    except Exception as e:
+        logger.warning(f"保存处理后图像失败: {e}")
+
+    try:
+        logger.debug(f"开始OCR识别，图像尺寸: {img_array_inverted.shape}")
         # 记录开始时间
         start_time = time.time()
-        # 执行OCR识别（使用ocr方法）
-        result = ocr.ocr(img_array)
+        # 执行OCR识别（使用处理后的图像）
+        result = ocr.ocr(img_array_inverted)
         # 计算耗时
         ocr_duration = time.time() - start_time
         logger.debug(f"OCR识别完成，结果类型: {type(result)}, 结果长度: {len(result) if result else 0}, 耗时: {ocr_duration:.3f}秒")
