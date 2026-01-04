@@ -38,20 +38,10 @@ class Config:
                 'default_engine': 'paddle',
                 'languages': ['ch', 'en'],
                 'min_confidence': 0.15,
-                'use_preprocessing': True,
                 'easyocr': {
                     'canvas_size': 1920,
                     'mag_ratio': 1.5,
                     'dynamic_params': True
-                },
-                'preprocessing': {
-                    'clahe_clip_limit': 3.0,
-                    'clahe_tile_size': 8,
-                    'min_width': 640,
-                    'max_width': 2560,
-                    'enable_clahe': True,
-                    'enable_sharpen': True,
-                    'fast_mode': False
                 }
             },
             'gpu': {

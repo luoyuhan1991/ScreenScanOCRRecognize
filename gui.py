@@ -193,26 +193,6 @@ class MainGUI:
         # 绑定滑动条和输入框
         self.min_confidence_var.trace('w', self.on_confidence_change)
         self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
-        
-        # 第二行：预处理选项（放在一行）
-        row2 = ttk.Frame(frame)
-        row2.pack(fill=tk.X, pady=2)
-        
-        self.enable_preprocessing_var = tk.BooleanVar()
-        preprocessing_check = ttk.Checkbutton(row2, text="启用图像预处理", variable=self.enable_preprocessing_var)
-        preprocessing_check.pack(side=tk.LEFT, padx=5)
-        
-        self.enable_clahe_var = tk.BooleanVar()
-        clahe_check = ttk.Checkbutton(row2, text="启用CLAHE增强", variable=self.enable_clahe_var)
-        clahe_check.pack(side=tk.LEFT, padx=5)
-        
-        self.enable_sharpen_var = tk.BooleanVar()
-        sharpen_check = ttk.Checkbutton(row2, text="启用图像锐化", variable=self.enable_sharpen_var)
-        sharpen_check.pack(side=tk.LEFT, padx=5)
-        
-        self.fast_mode_var = tk.BooleanVar()
-        fast_mode_check = ttk.Checkbutton(row2, text="快速模式", variable=self.fast_mode_var)
-        fast_mode_check.pack(side=tk.LEFT, padx=5)
     
     def create_matching_config_widgets(self, parent):
         """创建文字匹配控件"""
@@ -411,10 +391,6 @@ class MainGUI:
         default_engine = config.get('ocr.default_engine', 'paddle')
         self.ocr_engine_var.set(default_engine)
         self.min_confidence_var.set(config.get('ocr.min_confidence', 0.15))
-        self.enable_preprocessing_var.set(config.get('ocr.use_preprocessing', True))
-        self.enable_clahe_var.set(config.get('ocr.preprocessing.enable_clahe', True))
-        self.enable_sharpen_var.set(config.get('ocr.preprocessing.enable_sharpen', True))
-        self.fast_mode_var.set(config.get('ocr.preprocessing.fast_mode', False))
         
         # 文字匹配配置
         self.enable_matching_var.set(config.get('matching.enabled', True))
@@ -439,10 +415,6 @@ class MainGUI:
         # OCR配置
         config.set('ocr.default_engine', self.ocr_engine_var.get())
         config.set('ocr.min_confidence', self.min_confidence_var.get())
-        config.set('ocr.use_preprocessing', self.enable_preprocessing_var.get())
-        config.set('ocr.preprocessing.enable_clahe', self.enable_clahe_var.get())
-        config.set('ocr.preprocessing.enable_sharpen', self.enable_sharpen_var.get())
-        config.set('ocr.preprocessing.fast_mode', self.fast_mode_var.get())
         
         # 文字匹配配置
         config.set('matching.enabled', self.enable_matching_var.get())

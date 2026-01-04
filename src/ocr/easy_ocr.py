@@ -9,7 +9,6 @@ import os
 import time
 from datetime import datetime
 
-import cv2
 import easyocr
 import numpy as np
 from PIL import Image
@@ -116,112 +115,6 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     return _reader
 
 
-def preprocess_image(image, enable_clahe=True, enable_sharpen=True, fast_mode=False):
-    """
-    图像预处理，提高OCR识别准确率
-    
-    Args:
-        image: PIL.Image对象
-        enable_clahe: 是否启用CLAHE对比度增强
-        enable_sharpen: 是否启用锐化处理
-        fast_mode: 快速模式（跳过部分处理）
-    
-    Returns:
-        numpy.ndarray: 预处理后的图像数组
-    """
-    try:
-        # 转换为RGB（如果不是）
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        # 转换为numpy数组
-        img_array = np.array(image)
-        
-        # 快速模式：直接返回RGB数组，跳过所有预处理
-        if fast_mode:
-            return img_array
-        
-        # 转换为OpenCV格式 (BGR)
-        img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-        
-        # 转换为灰度图
-        gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
-        
-        # 增强对比度（使用CLAHE - 自适应直方图均衡化）
-        if enable_clahe:
-            clahe_clip_limit = config.get('ocr.preprocessing.clahe_clip_limit', 3.0)
-            clahe_tile_size = config.get('ocr.preprocessing.clahe_tile_size', 8)
-            clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=(clahe_tile_size, clahe_tile_size))
-            enhanced = clahe.apply(gray)
-        else:
-            enhanced = gray
-        
-        # 添加锐化处理，提高文字边缘清晰度
-        if enable_sharpen:
-            kernel = np.array([[-1, -1, -1],
-                              [-1,  9, -1],
-                              [-1, -1, -1]])
-            sharpened = cv2.filter2D(enhanced, -1, kernel)
-        else:
-            sharpened = enhanced
-        
-        # 转换回RGB格式（EasyOCR需要RGB）
-        result = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2RGB)
-        
-        return result
-    except Exception as e:
-        # 如果预处理失败，返回原始图像
-        logger.warning(f"图像预处理失败，使用原始图像: {e}")
-        return np.array(image.convert('RGB'))
-
-
-def optimize_image_resolution(image, min_width=640, max_width=2560, fast_mode=False):
-    """
-    优化图像分辨率，找到最佳识别尺寸
-    
-    Args:
-        image: PIL.Image对象
-        min_width (int): 最小宽度，默认640（降低以避免过度放大小图像）
-        max_width (int): 最大宽度，默认2560
-        fast_mode (bool): 快速模式，使用更快的重采样算法
-    
-    Returns:
-        PIL.Image: 优化后的图像
-    """
-    try:
-        width, height = image.size
-        
-        # 如果宽度在合理范围内，不处理
-        if min_width <= width <= max_width:
-            return image
-        
-        # 计算缩放比例
-        if width < min_width:
-            # 放大图像
-            scale = min_width / width
-        else:
-            # 缩小图像
-            scale = max_width / width
-        
-        new_width = int(width * scale)
-        new_height = int(height * scale)
-        
-        # 根据模式选择重采样算法
-        if fast_mode:
-            # 快速模式：使用BILINEAR（速度更快）
-            resample = Image.Resampling.BILINEAR
-        else:
-            # 质量模式：使用LANCZOS（质量更高但速度较慢）
-            resample = Image.Resampling.LANCZOS
-        
-        optimized = image.resize((new_width, new_height), resample)
-        
-        return optimized
-    except Exception as e:
-        logger.warning(f"图像分辨率优化失败，使用原始图像: {e}")
-        return image
-
-
 def postprocess_text(text):
     """
     后处理文本，修复常见的OCR错误
@@ -238,7 +131,7 @@ def postprocess_text(text):
     return text
 
 
-def recognize_text(image, languages=None, use_preprocessing=True, 
+def recognize_text(image, languages=None, 
                    min_confidence=0.15, use_gpu=None, roi=None):
     """
     对图片进行OCR文字识别
@@ -246,7 +139,6 @@ def recognize_text(image, languages=None, use_preprocessing=True,
     Args:
         image: PIL.Image对象或图片文件路径
         languages (list): OCR语言列表，默认为 ['ch_sim', 'en']
-        use_preprocessing (bool): 是否使用图像预处理，默认为True
         min_confidence (float): 最小置信度阈值，默认为0.15（降低以提高识别率）
         use_gpu (bool): 是否使用GPU，默认为None（自动检测）
         roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
@@ -267,33 +159,15 @@ def recognize_text(image, languages=None, use_preprocessing=True,
         
         # 调试信息
         logger.debug(f"图像类型: {type(image)}, 尺寸: {image.size}")
-        logger.debug(f"languages: {languages}, use_preprocessing: {use_preprocessing}")
-        logger.debug(f"min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
+        logger.debug(f"languages: {languages}, min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
         
         # 应用ROI裁剪
         if roi is not None:
             x1, y1, x2, y2 = roi
             image = image.crop((x1, y1, x2, y2))
         
-        # 获取预处理配置（一次性读取所有配置）
-        fast_mode = config.get('ocr.preprocessing.fast_mode', False)
-        min_width = config.get('ocr.preprocessing.min_width', 640)
-        max_width = config.get('ocr.preprocessing.max_width', 2560)
-        enable_clahe = config.get('ocr.preprocessing.enable_clahe', True)
-        enable_sharpen = config.get('ocr.preprocessing.enable_sharpen', True)
-        
-        # 优化图像分辨率
-        image = optimize_image_resolution(image, min_width=min_width, 
-                                        max_width=max_width, fast_mode=fast_mode)
-        
-        # 图像预处理
-        if use_preprocessing:
-            img_array = preprocess_image(image, enable_clahe=enable_clahe, 
-                                       enable_sharpen=enable_sharpen, 
-                                       fast_mode=fast_mode)
-        else:
-            # 将 PIL Image 转换为 numpy 数组
-            img_array = np.array(image)
+        # 直接使用原始图像，不进行预处理
+        img_array = np.array(image)
         
         # 获取EasyOCR性能参数（支持动态调整）
         default_canvas_size = config.get('ocr.easyocr.canvas_size', 1920)
@@ -389,7 +263,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
     # 获取配置中的最小置信度阈值
     min_confidence = config.get('ocr.min_confidence', 0.3)
     
-    text, ocr_duration = recognize_text(image, languages, use_preprocessing=True, 
+    text, ocr_duration = recognize_text(image, languages, 
                          min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)
     
     # 记录识别时间（不输出识别结果内容）

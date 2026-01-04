@@ -148,7 +148,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
     # 初始化OCR（使用缓存的实例）
     ocr = init_reader(languages, use_gpu)
 
-    # 将PIL图像转换为numpy数组（如果需要）
+    # 将PIL图像转换为numpy数组（直接使用原始图像，不进行预处理）
     if hasattr(image, 'convert'):  # PIL Image
         img_array = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     else:
