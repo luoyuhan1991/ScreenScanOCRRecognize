@@ -4,6 +4,7 @@ PaddleOCR 模块 - 屏幕扫描OCR识别程序的OCR引擎
 使用 PaddleOCR 替代 EasyOCR，提供更高的识别准确率
 """
 
+import glob
 import os
 import time
 from datetime import datetime
@@ -177,17 +178,30 @@ def recognize_and_print(image, languages=None, save_dir="output",
     img_array_inverted = cv2.bitwise_not(img_array)
     logger.debug(f"图像取反处理完成，图像尺寸: {img_array_inverted.shape}")
 
-    # 保存处理后的图像
-    if timestamp is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # 生成处理后图像的文件名
-    processed_filename = os.path.join(save_dir, f"processed_{timestamp}.png")
-    try:
-        cv2.imwrite(processed_filename, img_array_inverted)
-        logger.info(f"处理后的图像已保存: {processed_filename}")
-    except Exception as e:
-        logger.warning(f"保存处理后图像失败: {e}")
+    # 保存处理后的图像（根据配置决定是否保存）
+    save_processed_image = config.get('ocr.save_processed_image', True)
+    if save_processed_image:
+        if timestamp is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # 删除旧的processed_*.png文件（只保留最新一张）
+        processed_pattern = os.path.join(save_dir, "processed_*.png")
+        old_processed_files = glob.glob(processed_pattern)
+        if old_processed_files:
+            try:
+                for old_file in old_processed_files:
+                    os.remove(old_file)
+                logger.debug(f"已删除 {len(old_processed_files)} 张旧的处理后图像")
+            except Exception as e:
+                logger.warning(f"删除旧的处理后图像失败: {e}")
+        
+        # 生成处理后图像的文件名
+        processed_filename = os.path.join(save_dir, f"processed_{timestamp}.png")
+        try:
+            cv2.imwrite(processed_filename, img_array_inverted)
+            logger.info(f"处理后的图像已保存: {processed_filename}")
+        except Exception as e:
+            logger.warning(f"保存处理后图像失败: {e}")
 
     try:
         logger.debug(f"开始OCR识别，图像尺寸: {img_array_inverted.shape}")

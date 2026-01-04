@@ -193,6 +193,14 @@ class MainGUI:
         # 绑定滑动条和输入框
         self.min_confidence_var.trace('w', self.on_confidence_change)
         self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
+        
+        # 第二行：保存处理后的图片
+        row2 = ttk.Frame(frame)
+        row2.pack(fill=tk.X, pady=2)
+        
+        self.save_processed_image_var = tk.BooleanVar()
+        save_processed_check = ttk.Checkbutton(row2, text="保存处理后的图片", variable=self.save_processed_image_var)
+        save_processed_check.pack(side=tk.LEFT, padx=5)
     
     def create_matching_config_widgets(self, parent):
         """创建文字匹配控件"""
@@ -391,6 +399,7 @@ class MainGUI:
         default_engine = config.get('ocr.default_engine', 'paddle')
         self.ocr_engine_var.set(default_engine)
         self.min_confidence_var.set(config.get('ocr.min_confidence', 0.15))
+        self.save_processed_image_var.set(config.get('ocr.save_processed_image', True))
         
         # 文字匹配配置
         self.enable_matching_var.set(config.get('matching.enabled', True))
@@ -415,6 +424,7 @@ class MainGUI:
         # OCR配置
         config.set('ocr.default_engine', self.ocr_engine_var.get())
         config.set('ocr.min_confidence', self.min_confidence_var.get())
+        config.set('ocr.save_processed_image', self.save_processed_image_var.get())
         
         # 文字匹配配置
         config.set('matching.enabled', self.enable_matching_var.get())

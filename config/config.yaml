@@ -8,6 +8,7 @@ ocr:
   - ch
   - en
   min_confidence: 0.15000000000000002
+  save_processed_image: true
   easyocr:
     canvas_size: 1920
     mag_ratio: 1.5

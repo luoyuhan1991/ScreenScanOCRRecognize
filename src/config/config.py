@@ -38,6 +38,7 @@ class Config:
                 'default_engine': 'paddle',
                 'languages': ['ch', 'en'],
                 'min_confidence': 0.15,
+                'save_processed_image': True,
                 'easyocr': {
                     'canvas_size': 1920,
                     'mag_ratio': 1.5,
