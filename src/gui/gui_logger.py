@@ -5,7 +5,18 @@ GUI日志处理器模块
 
 import logging
 import queue
-from typing import Optional
+
+
+class NewlineFormatter(logging.Formatter):
+    """自动在日志消息末尾添加换行符的格式化器"""
+    
+    def format(self, record):
+        """格式化日志记录，并在末尾添加换行符"""
+        message = super().format(record)
+        # 如果消息本身不包含换行符，则添加一个
+        if not message.endswith('\n'):
+            message += '\n'
+        return message
 
 
 class GUILoggerHandler(logging.Handler):
@@ -20,7 +31,8 @@ class GUILoggerHandler(logging.Handler):
         """
         super().__init__()
         self.log_queue = log_queue
-        self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', 
+        # 使用自定义的格式化器，自动添加换行符
+        self.setFormatter(NewlineFormatter('%(asctime)s - %(levelname)s - %(message)s', 
                                            datefmt='%Y-%m-%d %H:%M:%S'))
     
     def emit(self, record):
@@ -31,7 +43,7 @@ class GUILoggerHandler(logging.Handler):
             record: 日志记录
         """
         try:
-            # 格式化日志消息
+            # 格式化日志消息（已包含换行符）
             message = self.format(record)
             level = record.levelname
             

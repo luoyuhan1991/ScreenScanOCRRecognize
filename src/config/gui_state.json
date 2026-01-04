@@ -2,12 +2,12 @@
   "window": {
     "width": 800,
     "height": 700,
-    "x": 430,
-    "y": 222,
-    "geometry": "800x700+430+222"
+    "x": 127,
+    "y": 131,
+    "geometry": "800x700+127+131"
   },
   "ui": {
-    "last_banlist_path": "docs/banlist.txt",
+    "last_banlist_path": "D:/code/CursorProjects/ScreenScanOCRRecognize/docs/banlist.txt",
     "log_level_filter": "INFO",
     "log_max_lines": 1000
   }

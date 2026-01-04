@@ -286,6 +286,66 @@ class MainGUI:
         self.log_text.tag_config("WARNING", foreground="#dcdcaa")
         self.log_text.tag_config("ERROR", foreground="#f48771")
         self.log_text.tag_config("DEBUG", foreground="#569cd6")
+        
+        # 创建悬浮的清空日志按钮（放在日志文本框内部右上角）
+        # 使用普通Button以便更好地控制样式
+        self.clear_log_btn = tk.Button(
+            frame,
+            text="🗑",
+            command=self.on_clear_log,
+            bg="#1e1e1e",  # 与日志背景色相同，实现"透明"效果
+            fg="#d4d4d4",
+            activebackground="#3c3c3c",  # 鼠标悬停时的背景色
+            activeforeground="#d4d4d4",
+            relief=tk.FLAT,  # 无边框
+            borderwidth=0,
+            cursor="hand2",
+            font=("Microsoft YaHei", 10),
+            padx=5,
+            pady=2
+        )
+        
+        # 使用place定位在右上角
+        def update_clear_btn_position(event=None):
+            """更新清空按钮位置"""
+            try:
+                # 获取日志文本框的位置和大小
+                log_x = self.log_text.winfo_x()
+                log_y = self.log_text.winfo_y()
+                log_width = self.log_text.winfo_width()
+                log_height = self.log_text.winfo_height()
+                
+                # 按钮大小
+                btn_width = 30
+                btn_height = 25
+                
+                # 计算按钮位置（右上角，留出一些边距）
+                btn_x = log_x + log_width - btn_width - 5
+                btn_y = log_y + 5
+                
+                # 使用place定位
+                self.clear_log_btn.place(x=btn_x, y=btn_y, width=btn_width, height=btn_height)
+            except:
+                pass
+        
+        # 绑定鼠标进入和离开事件，实现透明度效果
+        def on_enter(event):
+            """鼠标进入时，按钮变为不透明"""
+            self.clear_log_btn.config(bg="#3c3c3c", relief=tk.RAISED)
+        
+        def on_leave(event):
+            """鼠标离开时，按钮恢复透明"""
+            self.clear_log_btn.config(bg="#1e1e1e", relief=tk.FLAT)
+        
+        self.clear_log_btn.bind("<Enter>", on_enter)
+        self.clear_log_btn.bind("<Leave>", on_leave)
+        
+        # 绑定日志文本框和frame的大小变化事件，更新按钮位置
+        self.log_text.bind("<Configure>", update_clear_btn_position)
+        frame.bind("<Configure>", update_clear_btn_position)
+        
+        # 初始定位
+        frame.after(100, update_clear_btn_position)
     
     def create_button_widgets(self, parent):
         """创建按钮控件"""
@@ -408,26 +468,61 @@ class MainGUI:
             # 保存当前配置
             self.save_settings()
             
-            # 初始化OCR
+            # 禁用开始按钮，显示初始化状态
+            self.start_btn.config(state=tk.DISABLED)
+            self.update_status("初始化中...")
             self.append_log("正在初始化OCR引擎...", "INFO")
-            engine_choice = '1' if self.ocr_engine_var.get() == 'paddle' else '2'
-            self.ocr_adapter = OCRFactory.create(engine_choice)
             
             # 创建OCR配置
             languages = config.get('ocr.languages', ['ch', 'en'])
             use_gpu = self.enable_gpu_var.get()
+            engine_choice = '1' if self.ocr_engine_var.get() == 'paddle' else '2'
+            
             self.ocr_config = OCRConfig(
                 languages=languages,
                 use_gpu=use_gpu,
                 engine=self.ocr_engine_var.get()
             )
             
-            # 初始化OCR阅读器
+            # 在后台线程中初始化OCR（避免阻塞GUI）
+            init_thread = threading.Thread(
+                target=self._init_ocr_in_thread,
+                args=(engine_choice,),
+                daemon=True
+            )
+            init_thread.start()
+            
+        except Exception as e:
+            self.append_log(f"启动失败: {e}", "ERROR")
+            self.show_error(f"启动失败: {e}")
+            self.is_running = False
+            self.start_btn.config(state=tk.NORMAL)
+    
+    def _init_ocr_in_thread(self, engine_choice):
+        """在后台线程中初始化OCR"""
+        try:
+            # 创建OCR适配器
+            self.ocr_adapter = OCRFactory.create(engine_choice)
+            
+            # 初始化OCR阅读器（这可能会耗时较长）
             self.ocr_adapter.init_reader(self.ocr_config, force_reinit=False)
+            
+            # 在主线程中更新UI
+            self.root.after(0, self._on_ocr_init_complete)
+            
+        except Exception as e:
+            # 在主线程中显示错误
+            self.root.after(0, lambda: self._on_ocr_init_failed(str(e)))
+    
+    def _on_ocr_init_complete(self):
+        """OCR初始化完成后的回调（在主线程中执行）"""
+        try:
             self.append_log(f"{self.ocr_adapter.engine_name}初始化完成", "INFO")
             
-            # 如果启用ROI，选择ROI区域
+            # 如果启用ROI，先最小化窗口，然后选择ROI区域
             if self.enable_roi_var.get():
+                # 先最小化窗口
+                self.root.iconify()
                 self.append_log("请选择ROI区域...", "INFO")
                 self.roi = select_roi_interactive(parent=self.root)
                 if self.roi is None:
@@ -436,6 +531,8 @@ class MainGUI:
                     self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
             else:
                 self.roi = None
+                # 如果没有ROI选择，直接最小化窗口
+                self.root.iconify()
             
             # 启动扫描线程
             self.is_running = True
@@ -444,7 +541,6 @@ class MainGUI:
             self.scan_thread.start()
             
             # 更新UI
-            self.start_btn.config(state=tk.DISABLED)
             self.stop_btn.config(state=tk.NORMAL)
             self.update_status("运行中")
             self.append_log("扫描已启动", "INFO")
@@ -453,6 +549,16 @@ class MainGUI:
             self.append_log(f"启动失败: {e}", "ERROR")
             self.show_error(f"启动失败: {e}")
             self.is_running = False
+            self.start_btn.config(state=tk.NORMAL)
+            self.update_status("已停止")
+    
+    def _on_ocr_init_failed(self, error_msg):
+        """OCR初始化失败后的回调（在主线程中执行）"""
+        self.append_log(f"OCR初始化失败: {error_msg}", "ERROR")
+        self.show_error(f"OCR初始化失败: {error_msg}")
+        self.is_running = False
+        self.start_btn.config(state=tk.NORMAL)
+        self.update_status("已停止")
     
     def on_stop(self):
         """停止按钮事件"""
@@ -562,6 +668,7 @@ class MainGUI:
     def append_log(self, message, level='INFO'):
         """追加日志到日志区域"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # 确保每条日志消息都以换行符结尾
         log_message = f"{timestamp} - {message}\n"
         
         # 将日志放入队列
@@ -569,6 +676,11 @@ class MainGUI:
             self.log_queue.put_nowait((log_message, level))
         except queue.Full:
             pass
+    
+    def on_clear_log(self):
+        """清空日志"""
+        self.log_text.delete('1.0', tk.END)
+        self.append_log("日志已清空", "INFO")
     
     def process_log_queue(self):
         """处理日志队列（在主线程中）"""
