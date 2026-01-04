@@ -3,27 +3,24 @@ ScreenScanOCRRecognize - GUI主程序
 提供图形用户界面，支持参数配置、状态监控和日志显示
 """
 
-import os
-import sys
-import threading
-import queue
-import time
 import logging
-from datetime import datetime
-from pathlib import Path
+import os
+import queue
+import threading
+import time
 import tkinter as tk
+from datetime import datetime
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 # 导入项目模块
 from src.config.config import config
-from src.utils.logger import logger
-from src.utils.scan_screen import scan_screen, select_roi_interactive
-from src.ocr.ocr_adapter import OCRConfig, OCRFactory
-from src.utils.text_matcher import match_and_display
-from src.utils.cleanup_old_files import start_cleanup_thread
-from src.config.gui_state import GUIStateManager
 from src.config.config_editor import ConfigEditor
+from src.config.gui_state import GUIStateManager
 from src.gui.gui_logger import GUILoggerHandler
+from src.ocr.ocr_adapter import OCRConfig, OCRFactory
+from src.utils.cleanup_old_files import start_cleanup_thread
+from src.utils.scan_screen import scan_screen, select_roi_interactive
+from src.utils.text_matcher import match_and_display
 
 
 class MainGUI:
@@ -432,7 +429,7 @@ class MainGUI:
             # 如果启用ROI，选择ROI区域
             if self.enable_roi_var.get():
                 self.append_log("请选择ROI区域...", "INFO")
-                self.roi = select_roi_interactive()
+                self.roi = select_roi_interactive(parent=self.root)
                 if self.roi is None:
                     self.append_log("ROI选择取消，使用全屏扫描", "WARNING")
                 else:

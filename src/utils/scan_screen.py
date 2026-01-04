@@ -6,14 +6,19 @@
 
 import os
 from datetime import datetime
+
 from PIL import ImageGrab
+
 from .logger import logger
 
 
-def select_roi_interactive():
+def select_roi_interactive(parent=None):
     """
     交互式选择ROI区域
     用户可以通过鼠标拖动选择屏幕上的感兴趣区域
+    
+    Args:
+        parent: 可选的父窗口（Tkinter窗口对象）。如果提供，将使用Toplevel创建子窗口
     
     Returns:
         tuple: ROI区域 (x1, y1, x2, y2)，如果取消选择返回None
@@ -35,8 +40,14 @@ def select_roi_interactive():
         screenshot = ImageGrab.grab()
         width, height = screenshot.size
         
-        # 创建窗口
-        root = tk.Tk()
+        # 创建窗口：如果有父窗口，使用Toplevel；否则创建新的Tk根窗口
+        if parent is not None:
+            root = tk.Toplevel(parent)
+            use_wait_window = True
+        else:
+            root = tk.Tk()
+            use_wait_window = False
+        
         root.title("选择ROI区域")
         root.geometry(f"{width}x{height}")
         root.attributes('-fullscreen', True)
@@ -47,6 +58,8 @@ def select_roi_interactive():
         photo = ImageTk.PhotoImage(screenshot)
         canvas = tk.Canvas(root, width=width, height=height, cursor='crosshair')
         canvas.pack(fill='both', expand=True)
+        # 保存photo引用到canvas，防止被垃圾回收
+        canvas.photo = photo
         canvas.create_image(0, 0, image=photo, anchor='nw')
         
         # ROI选择变量
@@ -96,8 +109,11 @@ def select_roi_interactive():
         
         logger.debug("ROI选择窗口已创建，等待用户操作...")
         
-        # 运行窗口
-        root.mainloop()
+        # 运行窗口：如果有父窗口，使用wait_window；否则使用mainloop
+        if use_wait_window:
+            root.wait_window()
+        else:
+            root.mainloop()
         
         # 返回ROI
         if roi_data['completed'] and roi_data['start'] and roi_data['end']:

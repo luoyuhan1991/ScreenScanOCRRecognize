@@ -1,7 +1,7 @@
 scan:
   interval_seconds: 5.0
   roi_padding: 10
-  enable_roi: false
+  enable_roi: true
 ocr:
   default_engine: paddle
   languages:
@@ -24,10 +24,10 @@ ocr:
 gpu:
   auto_detect: false
   force_cpu: false
-  force_gpu: false
+  force_gpu: true
 files:
   output_dir: output
-  banlist_file: docs/banlist.txt
+  banlist_file: D:/code/CursorProjects/ScreenScanOCRRecognize/docs/banlist.txt
   folder_mode: minute
   max_folders: 10
 cleanup:
@@ -35,7 +35,7 @@ cleanup:
   max_age_hours: 1
   interval_minutes: 10
 matching:
-  enabled: false
+  enabled: true
   display_duration: 3.0
   position: center
 logging:
