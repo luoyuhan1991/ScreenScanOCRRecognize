@@ -31,6 +31,7 @@ class ConfigEditor:
         self.on_save_callback = on_save_callback
         self.window = None
         self.text_widget = None
+        self.line_number_widget = None
         self.original_content = None
         self.is_modified = False
         
@@ -61,9 +62,13 @@ class ConfigEditor:
         # 绑定文本改变事件
         self.text_widget.bind('<KeyRelease>', self.on_text_change)
         self.text_widget.bind('<Button-1>', self.on_text_change)
+        self.text_widget.bind('<Key>', lambda e: self.after_idle(self.update_line_numbers))
         
         # 焦点设置
         self.text_widget.focus_set()
+        
+        # 初始化行号
+        self.update_line_numbers()
     
     def create_widgets(self):
         """创建编辑器控件"""
@@ -93,9 +98,21 @@ class ConfigEditor:
         text_frame = ttk.Frame(main_frame)
         text_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 行号（简化版，使用标签显示）
-        line_label = ttk.Label(text_frame, text="行号", width=5, anchor='n')
-        line_label.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
+        # 行号编辑器
+        self.line_number_widget = tk.Text(
+            text_frame,
+            width=5,
+            wrap=tk.NONE,
+            font=("Consolas", 10),
+            bg="#252526",
+            fg="#858585",
+            state=tk.DISABLED,
+            padx=5,
+            pady=0,
+            relief=tk.FLAT,
+            borderwidth=0
+        )
+        self.line_number_widget.pack(side=tk.LEFT, fill=tk.Y)
         
         # 文本编辑器
         self.text_widget = scrolledtext.ScrolledText(
@@ -109,6 +126,10 @@ class ConfigEditor:
             undo=True
         )
         self.text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # 同步滚动
+        self.text_widget.config(yscrollcommand=self._on_text_scroll)
+        self.line_number_widget.config(yscrollcommand=self._on_line_scroll)
         
         # 配置文本标签颜色
         self.text_widget.tag_config("comment", foreground="#6a9955")  # 注释
@@ -125,26 +146,33 @@ class ConfigEditor:
     def load_config(self):
         """加载配置文件内容"""
         try:
+            # 如果文件不存在，创建一个空文件
             if not self.config_file.exists():
-                self.show_error(f"配置文件不存在: {self.config_file}")
-                return False
-            
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                self.original_content = f.read()
+                # 创建空文件
+                self.config_file.parent.mkdir(parents=True, exist_ok=True)
+                self.original_content = ""
+            else:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    self.original_content = f.read()
             
             # 显示内容
             self.text_widget.delete('1.0', tk.END)
             self.text_widget.insert('1.0', self.original_content)
             
-            # 应用语法高亮
-            self.highlight_syntax()
+            # 更新行号
+            self.update_line_numbers()
+            
+            # 应用语法高亮（仅对YAML文件）
+            file_ext = self.config_file.suffix.lower()
+            if file_ext in ['.yaml', '.yml']:
+                self.highlight_syntax()
             
             self.is_modified = False
             self.update_status("已加载")
             return True
             
         except Exception as e:
-            self.show_error(f"加载配置文件失败: {e}")
+            self.show_error(f"加载文件失败: {e}")
             return False
     
     def save_config(self):
@@ -152,9 +180,14 @@ class ConfigEditor:
         try:
             content = self.text_widget.get('1.0', tk.END)
             
-            # 验证YAML格式
-            if not self.validate_yaml(content):
-                return False
+            # 根据文件扩展名决定是否验证YAML格式（.yaml和.yml文件需要验证，其他文件跳过）
+            file_ext = self.config_file.suffix.lower()
+            is_yaml_file = file_ext in ['.yaml', '.yml']
+            
+            if is_yaml_file:
+                # 验证YAML格式
+                if not self.validate_yaml(content):
+                    return False
             
             # 保存文件
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -169,11 +202,11 @@ class ConfigEditor:
             if self.on_save_callback:
                 self.on_save_callback()
             
-            self.show_info("配置文件已保存")
+            # 不显示弹窗，直接返回True
             return True
             
         except Exception as e:
-            self.show_error(f"保存配置文件失败: {e}")
+            self.show_error(f"保存文件失败: {e}")
             return False
     
     def validate_yaml(self, content):
@@ -193,8 +226,8 @@ class ConfigEditor:
     def on_save(self):
         """保存按钮事件"""
         if self.save_config():
-            # 不关闭窗口，允许继续编辑
-            pass
+            # 保存成功后关闭窗口
+            self.on_cancel()
     
     def on_cancel(self):
         """取消按钮事件"""
@@ -225,10 +258,56 @@ class ConfigEditor:
             current_content = self.text_widget.get('1.0', tk.END)
             self.is_modified = (current_content != self.original_content)
             
+            # 更新行号
+            self.after_idle(self.update_line_numbers)
+            
             if self.is_modified:
                 self.update_status("已修改")
             else:
                 self.update_status("就绪")
+    
+    def update_line_numbers(self):
+        """更新行号显示"""
+        if not self.text_widget or not self.line_number_widget:
+            return
+        
+        # 获取文本内容
+        content = self.text_widget.get('1.0', tk.END)
+        lines = content.split('\n')
+        line_count = len(lines) - 1  # 减去最后一个空行
+        
+        # 计算行号宽度（至少3位）
+        max_line = max(line_count, 1)
+        width = max(3, len(str(max_line)))
+        
+        # 更新行号widget的宽度
+        self.line_number_widget.config(width=width + 1)
+        
+        # 生成行号文本
+        line_numbers = '\n'.join([str(i) for i in range(1, line_count + 1)])
+        if not line_numbers:
+            line_numbers = '1'
+        
+        # 更新行号显示
+        self.line_number_widget.config(state=tk.NORMAL)
+        self.line_number_widget.delete('1.0', tk.END)
+        self.line_number_widget.insert('1.0', line_numbers)
+        self.line_number_widget.config(state=tk.DISABLED)
+    
+    def _on_text_scroll(self, *args):
+        """文本滚动事件"""
+        if self.line_number_widget:
+            self.line_number_widget.yview_moveto(args[0])
+    
+    def _on_line_scroll(self, *args):
+        """行号滚动事件"""
+        if self.text_widget:
+            self.text_widget.yview_moveto(args[0])
+    
+    def after_idle(self, func):
+        """在空闲时执行函数"""
+        if self.window:
+            self.window.after_idle(func)
     
     def update_status(self, status):
         """更新状态标签"""

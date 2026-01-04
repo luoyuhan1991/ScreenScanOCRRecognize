@@ -224,6 +224,9 @@ class MainGUI:
         browse_btn = ttk.Button(row1, text="浏览...", command=self.on_browse_banlist)
         browse_btn.pack(side=tk.LEFT, padx=5)
         
+        edit_btn = ttk.Button(row1, text="编辑", command=self.on_edit_banlist)
+        edit_btn.pack(side=tk.LEFT, padx=5)
+        
         # 第二行：显示时长和显示位置
         row2 = ttk.Frame(frame)
         row2.pack(fill=tk.X, pady=2)
@@ -570,6 +573,30 @@ class MainGUI:
         if file_path:
             self.banlist_path_var.set(file_path)
             self.save_settings()
+    
+    def on_edit_banlist(self):
+        """编辑关键词文件"""
+        banlist_path = self.banlist_path_var.get()
+        
+        # 如果文件路径为空，提示用户先选择文件
+        if not banlist_path:
+            messagebox.showwarning("警告", "请先选择关键词文件")
+            return
+        
+        # 如果文件不存在，询问是否创建
+        if not os.path.exists(banlist_path):
+            if not messagebox.askyesno("确认", f"文件不存在：{banlist_path}\n是否创建新文件？"):
+                return
+            # 创建文件目录
+            os.makedirs(os.path.dirname(banlist_path) if os.path.dirname(banlist_path) else ".", exist_ok=True)
+        
+        # 使用ConfigEditor编辑文本文件（它会自动处理非YAML文件）
+        def on_file_saved():
+            """文件保存后的回调"""
+            self.append_log(f"关键词文件已更新: {banlist_path}", "INFO")
+        
+        editor = ConfigEditor(self.root, config_file=banlist_path, on_save_callback=on_file_saved)
+        editor.show()
     
     def on_reset_config(self):
         """重置配置"""
