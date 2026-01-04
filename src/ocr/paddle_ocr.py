@@ -39,30 +39,19 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     if not force_reinit and _ocr_instance is not None and _ocr_config == current_config:
         return _ocr_instance
 
-    # 语言映射
-    lang_map = {
-        'ch': 'ch',        # 中文
-        'en': 'en',        # 英文
-        'chinese': 'ch',   # 中文
-        'english': 'en',   # 英文
-        'french': 'french', # 法语
-        'german': 'german', # 德语
-        'korean': 'korean', # 韩语
-        'japan': 'japan'    # 日语
-    }
-
     # 处理语言参数（只支持字符串）
     # PaddleOCR只支持单个语言字符串，不支持多语言组合
+    # 使用OCRConfig中的语言映射（统一管理）
+    from ..ocr.ocr_adapter import OCRConfig
+    
     if languages is None:
         ocr_lang = 'ch'  # 默认中文
     elif isinstance(languages, str):
-        # 如果是字符串，检查是否在映射中
-        if languages in lang_map:
-            ocr_lang = lang_map[languages]
-        elif languages in lang_map.values():
-            ocr_lang = languages
-        else:
-            ocr_lang = 'ch'  # 默认中文
+        # 使用统一的语言映射
+        ocr_lang = OCRConfig.PADDLE_LANG_MAP.get(languages, languages)
+        # 如果映射后不在有效值中，使用默认值
+        if ocr_lang not in OCRConfig.PADDLE_LANG_MAP.values():
+            ocr_lang = 'ch'
     else:
         # 如果不是字符串，转换为字符串（兼容处理）
         ocr_lang = str(languages) if languages else 'ch'
@@ -293,83 +282,3 @@ def print_ocr_results(results):
 
     logger.info(f"总计: {len(results)} 个文本块, {total_chars} 个字符")
     logger.info(f"平均置信度: {avg_confidence:.2f}")
-
-
-def batch_recognize(images, languages=None, save_dir="output",
-                    use_gpu=None):
-    """
-    批量识别多张图像
-
-    Args:
-        images: 图像列表
-        languages: 语言选项
-        save_dir: 保存目录
-        use_gpu: 是否使用GPU
-
-    Returns:
-        list: 识别结果列表
-    """
-    ocr = init_reader(languages, use_gpu)
-    results = []
-
-    for i, image in enumerate(images):
-        result = recognize_single_image(ocr, image)
-        results.append(result)
-
-    return results
-
-
-def recognize_single_image(ocr, image):
-    """
-    使用已初始化的OCR识别单张图像
-
-    Args:
-        ocr: 已初始化的PaddleOCR实例
-        image: 图像
-
-    Returns:
-        list: 识别结果
-    """
-    # 将PIL图像转换为numpy数组（如果需要）
-    if hasattr(image, 'convert'):  # PIL Image
-        img_array = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    else:
-        img_array = image
-
-    # 执行OCR识别（使用ocr方法）
-    result = ocr.ocr(img_array)
-
-    # 提取识别结果
-    extracted_text = []
-    if result and len(result) > 0:
-        # PaddleOCR 3.x 返回格式: [OCRResult对象]
-        # OCRResult 是一个字典，包含 rec_texts, rec_scores, rec_polys 等键
-        ocr_result = result[0]
-        
-        if isinstance(ocr_result, dict):
-            # 新版本格式
-            texts = ocr_result.get('rec_texts', [])
-            scores = ocr_result.get('rec_scores', [])
-            polys = ocr_result.get('rec_polys', [])
-            
-            for i, text in enumerate(texts):
-                text_item = {
-                    'text': text,
-                    'confidence': float(scores[i]) if i < len(scores) else 1.0,
-                    'bbox': polys[i].tolist() if i < len(polys) else None
-                }
-                extracted_text.append(text_item)
-        elif isinstance(ocr_result, list) and len(ocr_result) > 0:
-            # 旧版本格式兼容
-            for line in ocr_result:
-                if line and len(line) >= 2:
-                    text = line[1][0]
-                    confidence = line[1][1]
-                    text_item = {
-                        'text': text,
-                        'confidence': confidence,
-                        'bbox': line[0]
-                    }
-                    extracted_text.append(text_item)
-
-    return extracted_text

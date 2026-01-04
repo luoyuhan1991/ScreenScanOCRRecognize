@@ -9,11 +9,11 @@ import sys
 import time
 from datetime import datetime
 
-from src.utils.cleanup_old_files import start_cleanup_thread, cleanup_old_folders_by_count
 from src.config.config import config
+from src.ocr.ocr_adapter import OCRConfig, OCRFactory
+from src.utils.cleanup_old_files import start_cleanup_thread, cleanup_old_folders_by_count
 from src.utils.logger import logger
 from src.utils.scan_screen import scan_screen, select_roi_interactive
-from src.ocr.ocr_adapter import OCRConfig, OCRFactory
 
 
 def parse_command_line_args():
@@ -306,11 +306,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
 

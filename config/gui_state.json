@@ -2,9 +2,9 @@
   "window": {
     "width": 800,
     "height": 700,
-    "x": 127,
-    "y": 131,
-    "geometry": "800x700+127+131"
+    "x": 347,
+    "y": 200,
+    "geometry": "800x700+347+200"
   },
   "ui": {
     "last_banlist_path": "D:/code/CursorProjects/ScreenScanOCRRecognize/docs/banlist.txt",
