@@ -15,11 +15,17 @@ build_dir = os.path.dirname(spec_file)
 src_dir = os.path.dirname(build_dir)
 project_root = os.path.dirname(src_dir)
 
-# 收集数据文件
-datas = [
-    ('src/config/config.yaml', 'src/config'),
-    ('docs/banlist.txt', 'docs'),
-]
+# 收集数据文件（使用绝对路径）
+config_yaml_src = os.path.join(project_root, 'config', 'config.yaml')
+config_yaml_dst = 'config'
+banlist_txt_src = os.path.join(project_root, 'docs', 'banlist.txt')
+banlist_txt_dst = 'docs'
+
+datas = []
+if os.path.exists(config_yaml_src):
+    datas.append((config_yaml_src, config_yaml_dst))
+if os.path.exists(banlist_txt_src):
+    datas.append((banlist_txt_src, banlist_txt_dst))
 
 # 收集隐藏导入
 hiddenimports = [
@@ -36,9 +42,14 @@ hiddenimports = [
     'numpy',
     'yaml',
     'paddleocr',
+    'paddleocr.paddleocr',  # PaddleOCR主模块
+    'paddlepaddle',  # PaddlePaddle核心
+    'paddle',  # Paddle别名
+    'paddle.fluid',  # PaddlePaddle流体API
+    'paddle.inference',  # PaddlePaddle推理API
     'easyocr',
     'torch',
-    'paddle',
+    'torchvision',
     'src',
     'src.config',
     'src.config.config',
@@ -57,23 +68,38 @@ hiddenimports = [
     'src.utils.cleanup_old_files',
 ]
 
-# 收集PaddleOCR和EasyOCR的数据文件
+# 收集PaddleOCR和EasyOCR的数据文件和子模块
 try:
+    # 收集所有 paddleocr 子模块
+    paddleocr_submodules = collect_submodules('paddleocr')
+    hiddenimports.extend(paddleocr_submodules)
+    
+    # 收集 paddleocr 数据文件
     paddleocr_datas = collect_data_files('paddleocr')
     datas.extend(paddleocr_datas)
-except:
-    pass
+except Exception as e:
+    print(f"警告: 收集 PaddleOCR 数据时出错: {e}")
 
 try:
+    # 收集所有 easyocr 子模块
+    easyocr_submodules = collect_submodules('easyocr')
+    hiddenimports.extend(easyocr_submodules)
+    
+    # 收集 easyocr 数据文件
     easyocr_datas = collect_data_files('easyocr')
     datas.extend(easyocr_datas)
-except:
-    pass
+except Exception as e:
+    print(f"警告: 收集 EasyOCR 数据时出错: {e}")
 
 block_cipher = None
 
+# 确保使用绝对路径
+gui_py_path = os.path.join(project_root, 'gui.py')
+if not os.path.exists(gui_py_path):
+    raise FileNotFoundError(f"找不到 gui.py 文件: {gui_py_path}")
+
 a = Analysis(
-    ['gui.py'],
+    [gui_py_path],  # 使用绝对路径
     pathex=[project_root],
     binaries=[],
     datas=datas,

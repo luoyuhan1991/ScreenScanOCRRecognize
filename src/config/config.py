@@ -3,9 +3,8 @@
 支持从YAML配置文件读取配置，并提供默认配置
 """
 
-import os
-from typing import Dict, Any, Optional
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 try:
     import yaml
@@ -83,10 +82,8 @@ class Config:
             }
         }
         
-        # 尝试加载配置文件（优先从src/config/config.yaml，其次从根目录config.yaml）
-        config_file = Path('src/config/config.yaml')
-        if not config_file.exists():
-            config_file = Path('config.yaml')
+        # 加载配置文件（从config/config.yaml）
+        config_file = Path('config/config.yaml')
         
         if config_file.exists() and YAML_AVAILABLE:
             try:
@@ -156,7 +153,7 @@ class Config:
         保存配置到YAML文件
         
         Args:
-            config_file: 配置文件路径，如果为None则使用默认路径 'src/config/config.yaml'
+            config_file: 配置文件路径，如果为None则使用默认路径 'config/config.yaml'
         """
         if not YAML_AVAILABLE:
             import warnings
@@ -164,7 +161,7 @@ class Config:
             return False
         
         if config_file is None:
-            config_file = Path('src/config/config.yaml')
+            config_file = Path('config/config.yaml')
         else:
             config_file = Path(config_file)
         

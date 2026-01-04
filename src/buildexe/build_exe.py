@@ -28,7 +28,7 @@ def build_exe():
         # '--icon=icon.ico',  # 如果有图标文件，取消注释并指定路径
         
         # 添加数据文件
-        '--add-data=src/config/config.yaml;src/config',  # 配置文件
+        '--add-data=config/config.yaml;config',  # 配置文件
         '--add-data=docs/banlist.txt;docs',  # 关键词文件
         
         # 隐藏导入（PyInstaller可能无法自动检测的模块）

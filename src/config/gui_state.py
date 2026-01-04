@@ -4,15 +4,14 @@ GUI状态管理模块
 """
 
 import json
-import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
 
 class GUIStateManager:
     """管理GUI界面状态（窗口大小、位置等，不涉及业务配置）"""
     
-    def __init__(self, state_file='src/config/gui_state.json'):
+    def __init__(self, state_file='config/gui_state.json'):
         """
         初始化状态管理器
         

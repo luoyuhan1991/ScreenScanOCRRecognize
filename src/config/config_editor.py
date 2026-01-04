@@ -3,10 +3,9 @@
 提供YAML配置文件编辑功能，支持语法高亮和格式验证
 """
 
-import os
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
 from pathlib import Path
+from tkinter import ttk, messagebox, scrolledtext
 
 try:
     import yaml
@@ -18,7 +17,7 @@ except ImportError:
 class ConfigEditor:
     """配置文件编辑器"""
     
-    def __init__(self, parent, config_file='src/config/config.yaml', on_save_callback=None):
+    def __init__(self, parent, config_file='config/config.yaml', on_save_callback=None):
         """
         初始化编辑器
         
@@ -28,11 +27,7 @@ class ConfigEditor:
             on_save_callback: 保存后的回调函数
         """
         self.parent = parent
-        # 优先使用src/config/config.yaml，如果不存在则使用config.yaml
-        config_path = Path(config_file)
-        if not config_path.exists() and config_file == 'src/config/config.yaml':
-            config_path = Path('config.yaml')
-        self.config_file = config_path
+        self.config_file = Path(config_file)
         self.on_save_callback = on_save_callback
         self.window = None
         self.text_widget = None

@@ -512,7 +512,9 @@ class MainGUI:
             
         except Exception as e:
             # 在主线程中显示错误
-            self.root.after(0, lambda: self._on_ocr_init_failed(str(e)))
+            # 注意：需要将e的值捕获到lambda的默认参数中，避免闭包问题
+            error_msg = str(e)
+            self.root.after(0, lambda msg=error_msg: self._on_ocr_init_failed(msg))
     
     def _on_ocr_init_complete(self):
         """OCR初始化完成后的回调（在主线程中执行）"""
@@ -606,7 +608,7 @@ class MainGUI:
             self.load_settings()
             self.append_log("配置文件已更新，已重新加载", "INFO")
         
-        editor = ConfigEditor(self.root, config_file='src/config/config.yaml', on_save_callback=on_config_saved)
+        editor = ConfigEditor(self.root, config_file='config/config.yaml', on_save_callback=on_config_saved)
         editor.show()
     
     def on_window_configure(self, event=None):
