@@ -19,7 +19,7 @@ gpu:
   force_gpu: true
 files:
   output_dir: output
-  banlist_file: D:/code/CursorProjects/ScreenScanOCRRecognize/docs/banlist.txt
+  banlist_file: docs/banlist.txt
   folder_mode: minute
   max_folders: 10
 cleanup:

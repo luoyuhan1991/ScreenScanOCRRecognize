@@ -135,14 +135,7 @@ class MainGUI:
         ttk.Label(interval_frame, text="扫描间隔:").pack(side=tk.LEFT, padx=(0, 5))
         
         self.scan_interval_var = tk.DoubleVar()
-        self.scan_interval_scale = ttk.Scale(
-            interval_frame,
-            from_=1,
-            to=60,
-            orient=tk.HORIZONTAL,
-            variable=self.scan_interval_var,
-            length=200
-        )
+        self.scan_interval_scale = ttk.Scale(interval_frame, from_=1, to=15, orient=tk.HORIZONTAL, variable=self.scan_interval_var, length=200, command=self.on_interval_scale_change)
         self.scan_interval_scale.pack(side=tk.LEFT, padx=5)
         
         self.scan_interval_entry = ttk.Entry(interval_frame, width=5, textvariable=self.scan_interval_var)
@@ -240,7 +233,8 @@ class MainGUI:
             to=10,
             orient=tk.HORIZONTAL,
             variable=self.display_duration_var,
-            length=150
+            length=150,
+            command=self.on_duration_scale_change
         )
         self.display_duration_scale.pack(side=tk.LEFT, padx=5)
         
@@ -367,7 +361,18 @@ class MainGUI:
     def on_interval_scale_change(self, value):
         """扫描间隔滑动条改变事件"""
         try:
-            self.scan_interval_var.set(float(value))
+            # 设置步长为1
+            value = round(float(value))
+            self.scan_interval_var.set(value)
+        except:
+            pass
+
+    def on_duration_scale_change(self, value):
+        """显示时长滑动条改变事件"""
+        try:
+            # 设置步长为1
+            value = round(float(value))
+            self.display_duration_var.set(value)
         except:
             pass
     
@@ -383,10 +388,11 @@ class MainGUI:
     def on_confidence_scale_change(self, value):
         """置信度滑动条改变事件"""
         try:
-            # 限制步长为0.05
             val = float(value)
             val = round(val / 0.05) * 0.05
             self.min_confidence_var.set(val)
+            # 显示时保留两位小数
+            confidence_text = f"置信度: {val:.2f}"
         except:
             pass
     
@@ -533,8 +539,8 @@ class MainGUI:
             self.append_log("扫描已启动", "INFO")
             
         except Exception as e:
-            self.append_log(f"启动失败: {e}", "ERROR")
-            self.show_error(f"启动失败: {e}")
+            self.append_log(f"扫描失败: {e}", "ERROR")
+            self.show_error(f"扫描失败: {e}")
             self.is_running = False
             self.start_btn.config(state=tk.NORMAL)
             self.update_status("已停止")
@@ -876,4 +882,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
