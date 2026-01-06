@@ -6,8 +6,8 @@
 import os
 import threading
 import time
-from datetime import datetime
 import tkinter as tk
+
 from .logger import logger
 
 
@@ -96,12 +96,12 @@ class TextMatcher:
 
 
 class FloatingTextDisplay:
-    """浮动文字显示器"""
-    
+    """遮罩式文字显示器（水印效果）"""
+
     def __init__(self, text, duration=3, position="center"):
         """
-        初始化浮动文字显示器
-        
+        初始化遮罩式文字显示器
+
         Args:
             text (str): 要显示的文字
             duration (int): 显示时长（秒），默认为3
@@ -111,73 +111,160 @@ class FloatingTextDisplay:
         self.duration = duration
         self.position = position
         self.root = None
-        self.label = None
-    
+
     def show(self):
-        """显示浮动文字"""
+        """显示遮罩文字（水印效果）"""
         def _show():
-            # 创建主窗口
-            self.root = tk.Tk()
-            self.root.overrideredirect(True)  # 无边框
-            self.root.attributes('-topmost', True)  # 置顶
-            self.root.attributes('-alpha', 0.9)  # 半透明
-            self.root.attributes('-disabled', True)  # 禁用窗口，不捕获鼠标事件
-            
-            # 创建标签
-            self.label = tk.Label(
-                self.root,
-                text=self.text,
-                font=('Microsoft YaHei', 24, 'bold'),
-                bg='yellow',
-                fg='red',
-                padx=20,
-                pady=10,
-                relief='raised',
-                borderwidth=3
-            )
-            self.label.pack()
-            
-            # 设置窗口位置
-            self._set_position()
-            
-            # 更新窗口
-            self.root.update()
-            
-            # 等待指定时间后关闭
-            time.sleep(self.duration)
-            
-            # 关闭窗口
-            self.root.destroy()
-        
+            try:
+                # 创建透明窗口用于显示水印文字
+                self.root = tk.Tk()
+                self.root.overrideredirect(True)  # 无边框
+                self.root.attributes('-topmost', True)  # 置顶
+
+                # 设置为工具窗口，减少系统干扰
+                try:
+                    self.root.attributes('-toolwindow', True)
+                except:
+                    pass  # 某些tkinter版本不支持
+
+                # 关键：设置半透明窗口（而不是完全透明），确保文字可见但不干扰操作
+                self.root.attributes('-alpha', 0.5)  # 50%透明度，水印效果
+
+                # 重要：确保窗口不会获得焦点，真正实现水印效果
+                self.root.attributes('-disabled', True)  # 禁用窗口输入
+                try:
+                    self.root.attributes('-focusable', False)  # 窗口不可获得焦点
+                except:
+                    pass  # 某些tkinter版本不支持此属性
+
+                # 防止窗口出现在任务栏
+                try:
+                    self.root.attributes('-type', 'splash')  # 设置为启动画面类型
+                except:
+                    pass  # 某些系统不支持
+
+                # 获取屏幕尺寸
+                screen_width = self.root.winfo_screenwidth()
+                screen_height = self.root.winfo_screenheight()
+
+                # 计算文字区域的尺寸和位置
+                text_width, text_height, window_x, window_y = self._calculate_window_geometry(screen_width, screen_height)
+
+                # 设置窗口大小为文字区域大小，而不是全屏
+                window_width = int(text_width * 1.2)  # 稍微大一点的边距
+                window_height = int(text_height * 1.5)  # 稍微大一点的边距
+                self.root.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
+
+                # 创建Canvas，大小匹配窗口
+                canvas = tk.Canvas(
+                    self.root,
+                    width=window_width,
+                    height=window_height,
+                    highlightthickness=0,  # 无边框
+                    takefocus=False  # 不接受焦点
+                )
+                canvas.pack()
+
+                # 计算文字在Canvas中的位置（居中）
+                text_x = window_width // 2
+                text_y = window_height // 2
+
+                # 在Canvas上绘制文字，使用半透明颜色
+                canvas.create_text(
+                    text_x, text_y,
+                    text=self.text,
+                    font=('Microsoft YaHei', 48, 'bold'),  # 增大字体
+                    fill='#FF4444',  # 半透明红色
+                    anchor='center',
+                    tags='watermark_text'
+                )
+
+                # 添加文字阴影效果，让水印更明显
+                canvas.create_text(
+                    text_x+2, text_y+2,
+                    text=self.text,
+                    font=('Microsoft YaHei', 48, 'bold'),
+                    fill='#000000',  # 黑色阴影
+                    anchor='center',
+                    tags='watermark_shadow'
+                )
+
+                # 重新排列图层，确保文字在阴影之上
+                canvas.tag_raise('watermark_text', 'watermark_shadow')
+
+                # 更新窗口
+                self.root.update_idletasks()
+                self.root.update()
+
+                # 直接显示（无渐显渐隐效果）
+
+                # 等待指定时间（保持显示）
+                start_time = time.time()
+                while time.time() - start_time < self.duration:
+                    # 短暂休眠，让其他事件处理
+                    time.sleep(0.1)
+                    # 保持窗口更新
+                    try:
+                        self.root.update_idletasks()
+                    except:
+                        break  # 窗口可能已被销毁
+
+                # 直接关闭窗口（无渐隐效果）
+
+            except Exception as e:
+                logger.error(f"显示水印文字时出错: {e}")
+            finally:
+                # 关闭窗口
+                if self.root:
+                    try:
+                        self.root.destroy()
+                    except:
+                        pass
+
         # 在新线程中显示，避免阻塞主线程
         thread = threading.Thread(target=_show, daemon=True)
         thread.start()
-    
-    def _set_position(self):
-        """设置窗口位置"""
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        
-        # 更新窗口以获取实际尺寸
-        self.root.update()
-        window_width = self.root.winfo_width()
-        window_height = self.root.winfo_height()
-        
-        if self.position == "center":
-            x = (screen_width - window_width) // 2
-            y = (screen_height - window_height) // 2
-        elif self.position == "top":
-            x = (screen_width - window_width) // 2
-            y = 50
-        elif self.position == "bottom":
-            x = (screen_width - window_width) // 2
-            y = screen_height - window_height - 50
-        else:
-            x = (screen_width - window_width) // 2
-            y = (screen_height - window_height) // 2
-        
-        self.root.geometry(f"+{x}+{y}")
 
+    def _calculate_window_geometry(self, screen_width, screen_height):
+        """计算窗口几何信息（位置和大小）"""
+        # 使用更准确的文字尺寸计算
+        font = ('Microsoft YaHei', 48, 'bold')
+
+        # 创建临时标签来测量文字尺寸
+        temp_label = tk.Label(self.root, text=self.text, font=font)
+        self.root.update_idletasks()  # 确保标签被正确初始化
+
+        try:
+            # 获取文字的实际尺寸
+            text_width = temp_label.winfo_reqwidth()
+            text_height = temp_label.winfo_reqheight()
+        except:
+            # 如果测量失败，使用估算值
+            text_width = len(self.text) * 30
+            text_height = 60
+
+        # 销毁临时标签
+        temp_label.destroy()
+
+        # 根据位置计算窗口在屏幕上的位置
+        if self.position == "center":
+            # 窗口居中显示
+            window_x = (screen_width - int(text_width * 1.2)) // 2
+            window_y = (screen_height - int(text_height * 1.5)) // 2
+        elif self.position == "top":
+            # 窗口显示在顶部
+            window_x = (screen_width - int(text_width * 1.2)) // 2
+            window_y = 100
+        elif self.position == "bottom":
+            # 窗口显示在底部
+            window_x = (screen_width - int(text_width * 1.2)) // 2
+            window_y = screen_height - int(text_height * 1.5) - 100
+        else:
+            # 默认居中
+            window_x = (screen_width - int(text_width * 1.2)) // 2
+            window_y = (screen_height - int(text_height * 1.5)) // 2
+
+        return text_width, text_height, window_x, window_y
 
 def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center"):
     """
