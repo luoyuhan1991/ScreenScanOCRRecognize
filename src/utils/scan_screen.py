@@ -80,8 +80,8 @@ def select_roi_interactive(parent=None):
                 x1, y1 = roi_data['start']
                 x2, y2 = event.x, event.y
                 roi_data['rect'] = canvas.create_rectangle(
-                    x1, y1, x2, y2, 
-                    outline='red', width=3, fill='yellow', stipple='gray25'
+                    x1, y1, x2, y2,
+                    outline='red', width=1, fill='yellow', stipple='gray25'
                 )
         
         def on_mouse_up(event):
