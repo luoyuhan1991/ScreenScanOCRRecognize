@@ -98,7 +98,7 @@ class TextMatcher:
 class FloatingTextDisplay:
     """遮罩式文字显示器（水印效果）"""
 
-    def __init__(self, text, duration=3, position="center"):
+    def __init__(self, text, duration=3, position="center", font_size=30):
         """
         初始化遮罩式文字显示器
 
@@ -106,10 +106,12 @@ class FloatingTextDisplay:
             text (str): 要显示的文字
             duration (int): 显示时长（秒），默认为3
             position (str): 显示位置，"center"（屏幕中央）、"top"（顶部）、"bottom"（底部）
+            font_size (int): 字体大小，默认为30
         """
         self.text = text
         self.duration = duration
         self.position = position
+        self.font_size = font_size
         self.root = None
 
     def show(self):
@@ -150,9 +152,10 @@ class FloatingTextDisplay:
                 # 计算文字区域的尺寸和位置
                 text_width, text_height, window_x, window_y = self._calculate_window_geometry(screen_width, screen_height)
 
-                # 设置窗口大小为文字区域大小，而不是全屏
-                window_width = int(text_width * 1.2)  # 稍微大一点的边距
-                window_height = int(text_height * 1.5)  # 稍微大一点的边距
+                # 设置窗口大小为紧贴文字的大小（最小包裹，只添加2像素边距避免裁剪）
+                padding = 2  # 最小边距，避免文字被裁剪
+                window_width = text_width + padding * 2
+                window_height = text_height + padding * 2
                 self.root.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
 
                 # 创建Canvas，大小匹配窗口
@@ -169,21 +172,25 @@ class FloatingTextDisplay:
                 text_x = window_width // 2
                 text_y = window_height // 2
 
+                # 构建字体元组
+                font_tuple = ('Microsoft YaHei', self.font_size, 'bold')
+
                 # 在Canvas上绘制文字，使用半透明颜色
                 canvas.create_text(
                     text_x, text_y,
                     text=self.text,
-                    font=('Microsoft YaHei', 48, 'bold'),  # 增大字体
+                    font=font_tuple,
                     fill='#FF4444',  # 半透明红色
                     anchor='center',
                     tags='watermark_text'
                 )
 
                 # 添加文字阴影效果，让水印更明显
+                shadow_offset = max(1, self.font_size // 30)  # 根据字体大小调整阴影偏移
                 canvas.create_text(
-                    text_x+2, text_y+2,
+                    text_x + shadow_offset, text_y + shadow_offset,
                     text=self.text,
-                    font=('Microsoft YaHei', 48, 'bold'),
+                    font=font_tuple,
                     fill='#000000',  # 黑色阴影
                     anchor='center',
                     tags='watermark_shadow'
@@ -228,7 +235,7 @@ class FloatingTextDisplay:
     def _calculate_window_geometry(self, screen_width, screen_height):
         """计算窗口几何信息（位置和大小）"""
         # 使用更准确的文字尺寸计算
-        font = ('Microsoft YaHei', 48, 'bold')
+        font = ('Microsoft YaHei', self.font_size, 'bold')
 
         # 创建临时标签来测量文字尺寸
         temp_label = tk.Label(self.root, text=self.text, font=font)
@@ -239,34 +246,38 @@ class FloatingTextDisplay:
             text_width = temp_label.winfo_reqwidth()
             text_height = temp_label.winfo_reqheight()
         except:
-            # 如果测量失败，使用估算值
-            text_width = len(self.text) * 30
-            text_height = 60
+            # 如果测量失败，使用估算值（根据字体大小动态调整）
+            text_width = len(self.text) * int(self.font_size * 0.6)
+            text_height = int(self.font_size * 1.2)
 
         # 销毁临时标签
         temp_label.destroy()
 
-        # 根据位置计算窗口在屏幕上的位置
+        # 最小边距（用于计算窗口位置时保持一致）
+        padding = 2
+        window_width = text_width + padding * 2
+
+        # 根据位置计算窗口在屏幕上的位置（紧贴文字，无额外边距）
         if self.position == "center":
             # 窗口居中显示
-            window_x = (screen_width - int(text_width * 1.2)) // 2
-            window_y = (screen_height - int(text_height * 1.5)) // 2
+            window_x = (screen_width - window_width) // 2
+            window_y = (screen_height - (text_height + padding * 2)) // 2
         elif self.position == "top":
             # 窗口显示在顶部
-            window_x = (screen_width - int(text_width * 1.2)) // 2
-            window_y = 100
+            window_x = (screen_width - window_width) // 2
+            window_y = 50
         elif self.position == "bottom":
             # 窗口显示在底部
-            window_x = (screen_width - int(text_width * 1.2)) // 2
-            window_y = screen_height - int(text_height * 1.5) - 100
+            window_x = (screen_width - window_width) // 2
+            window_y = screen_height - (text_height + padding * 2) - 50
         else:
             # 默认居中
-            window_x = (screen_width - int(text_width * 1.2)) // 2
-            window_y = (screen_height - int(text_height * 1.5)) // 2
+            window_x = (screen_width - window_width) // 2
+            window_y = (screen_height - (text_height + padding * 2)) // 2
 
         return text_width, text_height, window_x, window_y
 
-def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center"):
+def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center", font_size=30):
     """
     匹配关键词并显示
     
@@ -275,6 +286,7 @@ def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, posi
         txt_file (str): 关键词TXT文件路径，默认为 docs/banlist.txt
         duration (int): 显示时长（秒）
         position (str): 显示位置
+        font_size (int): 字体大小，默认为30
     
     Returns:
         list: 匹配到的关键词列表
@@ -291,7 +303,7 @@ def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, posi
         display_text = " | ".join(matched_keywords)
         
         # 创建并显示浮动文字
-        display = FloatingTextDisplay(display_text, duration, position)
+        display = FloatingTextDisplay(display_text, duration, position, font_size)
         display.show()
     
     return matched_keywords

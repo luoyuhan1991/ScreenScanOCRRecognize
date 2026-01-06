@@ -220,7 +220,7 @@ class MainGUI:
         edit_btn = ttk.Button(row1, text="编辑", command=self.on_edit_banlist)
         edit_btn.pack(side=tk.LEFT, padx=5)
         
-        # 第二行：显示时长和显示位置
+        # 第二行：显示时长、字体大小和显示位置
         row2 = ttk.Frame(frame)
         row2.pack(fill=tk.X, pady=2)
         
@@ -241,6 +241,24 @@ class MainGUI:
         self.display_duration_entry = ttk.Entry(row2, width=5, textvariable=self.display_duration_var)
         self.display_duration_entry.pack(side=tk.LEFT, padx=5)
         ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Label(row2, text="字体大小:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.display_font_size_var = tk.IntVar(value=30)
+        self.display_font_size_scale = ttk.Scale(
+            row2,
+            from_=12,
+            to=60,
+            orient=tk.HORIZONTAL,
+            variable=self.display_font_size_var,
+            length=150,
+            command=self.on_font_size_scale_change
+        )
+        self.display_font_size_scale.pack(side=tk.LEFT, padx=5)
+        
+        self.display_font_size_entry = ttk.Entry(row2, width=5, textvariable=self.display_font_size_var)
+        self.display_font_size_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row2, text="像素").pack(side=tk.LEFT, padx=(0, 10))
         
         ttk.Label(row2, text="显示位置:").pack(side=tk.LEFT, padx=(0, 5))
         
@@ -373,6 +391,17 @@ class MainGUI:
             # 设置步长为1
             value = round(float(value))
             self.display_duration_var.set(value)
+        except (ValueError, TypeError):
+            pass
+    
+    def on_font_size_scale_change(self, value):
+        """字体大小滑动条改变事件"""
+        try:
+            # 设置步长为1
+            value = round(float(value))
+            self.display_font_size_var.set(value)
+        except (ValueError, TypeError):
+            pass
         except:
             pass
     
@@ -421,6 +450,7 @@ class MainGUI:
         position = config.get('matching.position', 'center')
         position_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
         self.display_position_var.set(position_map.get(position, '居中'))
+        self.display_font_size_var.set(config.get('matching.font_size', 30))
     
     def save_settings(self):
         """保存设置"""
@@ -443,6 +473,7 @@ class MainGUI:
         config.set('matching.display_duration', self.display_duration_var.get())
         position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
         config.set('matching.position', position_map.get(self.display_position_var.get(), 'center'))
+        config.set('matching.font_size', self.display_font_size_var.get())
         
         # 保存到文件
         if config.save():
@@ -842,8 +873,9 @@ class MainGUI:
                             else:
                                 ocr_results_for_match = [{'text': str(ocr_results)}]
                             
+                            display_font_size = self.display_font_size_var.get()
                             match_and_display(ocr_results_for_match, txt_file=banlist_file,
-                                            duration=display_duration, position=position)
+                                            duration=display_duration, position=position, font_size=display_font_size)
                         
                         scan_duration = time.time() - scan_start_time
                         self.append_log(f"扫描完成，耗时 {scan_duration:.2f}秒", "INFO")
