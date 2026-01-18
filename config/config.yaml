@@ -19,7 +19,7 @@ gpu:
   force_gpu: true
 files:
   output_dir: output
-  banlist_file: docs/banlist.txt
+  banlist_file: C:/Users/Administrator/Desktop/banlist.txt
   folder_mode: minute
   max_folders: 10
 cleanup:

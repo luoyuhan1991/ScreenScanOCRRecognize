@@ -30,7 +30,9 @@ class GUIStateManager:
             'ui': {
                 'last_banlist_path': 'docs/banlist.txt',
                 'log_level_filter': 'INFO',
-                'log_max_lines': 1000
+                'log_max_lines': 1000,
+                'remember_roi': True,  # 是否记住ROI区域，默认选中
+                'saved_roi': None  # 保存的ROI区域 (x1, y1, x2, y2)
             }
         }
         self.load_state()
@@ -129,4 +131,30 @@ class GUIStateManager:
         if 'ui' not in self.state:
             self.state['ui'] = {}
         self.state['ui']['log_max_lines'] = max_lines
+    
+    def get_remember_roi(self) -> bool:
+        """获取是否记住ROI区域"""
+        return self.state.get('ui', {}).get('remember_roi', True)
+    
+    def set_remember_roi(self, remember: bool):
+        """设置是否记住ROI区域"""
+        if 'ui' not in self.state:
+            self.state['ui'] = {}
+        self.state['ui']['remember_roi'] = remember
+    
+    def get_saved_roi(self) -> Optional[tuple]:
+        """获取保存的ROI区域"""
+        roi = self.state.get('ui', {}).get('saved_roi')
+        if roi and isinstance(roi, list) and len(roi) == 4:
+            return tuple(roi)
+        return None
+    
+    def set_saved_roi(self, roi: Optional[tuple]):
+        """设置保存的ROI区域"""
+        if 'ui' not in self.state:
+            self.state['ui'] = {}
+        if roi:
+            self.state['ui']['saved_roi'] = list(roi)
+        else:
+            self.state['ui']['saved_roi'] = None
 

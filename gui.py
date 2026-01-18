@@ -124,6 +124,10 @@ class MainGUI:
         roi_check = ttk.Checkbutton(row1, text="启用ROI区域选择", variable=self.enable_roi_var)
         roi_check.pack(side=tk.LEFT, padx=5)
         
+        self.remember_roi_var = tk.BooleanVar()
+        remember_roi_check = ttk.Checkbutton(row1, text="记住上次的ROI区域", variable=self.remember_roi_var)
+        remember_roi_check.pack(side=tk.LEFT, padx=5)
+        
         self.enable_gpu_var = tk.BooleanVar()
         gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
         gpu_check.pack(side=tk.LEFT, padx=5)
@@ -430,6 +434,8 @@ class MainGUI:
         # 从config.yaml加载业务配置
         # 注意：scan.enable_roi不在默认配置中，使用False作为默认值
         self.enable_roi_var.set(config.get('scan.enable_roi', False))
+        # 从GUI状态管理器读取是否记住ROI
+        self.remember_roi_var.set(self.state_manager.get_remember_roi())
         self.enable_gpu_var.set(config.get('gpu.force_gpu', True))
         self.scan_interval_var.set(config.get('scan.interval_seconds', 5))
         
@@ -457,6 +463,8 @@ class MainGUI:
         # 保存业务配置到config.yaml
         # 注意：scan.enable_roi是GUI新增的配置项
         config.set('scan.enable_roi', self.enable_roi_var.get())
+        # 保存是否记住ROI到GUI状态管理器
+        self.state_manager.set_remember_roi(self.remember_roi_var.get())
         config.set('gpu.force_gpu', self.enable_gpu_var.get())
         config.set('scan.interval_seconds', self.scan_interval_var.get())
         
@@ -547,12 +555,29 @@ class MainGUI:
             if self.enable_roi_var.get():
                 # 先最小化窗口
                 self.root.iconify()
-                self.append_log("请选择ROI区域...", "INFO")
-                self.roi = select_roi_interactive(parent=self.root)
-                if self.roi is None:
-                    self.append_log("ROI选择取消，使用全屏扫描", "WARNING")
+                
+                # 检查是否记住ROI且有保存的ROI
+                remember_roi = self.remember_roi_var.get()
+                saved_roi = self.state_manager.get_saved_roi() if remember_roi else None
+                
+                if saved_roi:
+                    # 使用保存的ROI，跳过选择步骤
+                    self.roi = saved_roi
+                    self.append_log(f"使用上次保存的ROI区域: {self.roi}", "INFO")
                 else:
-                    self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
+                    # 没有保存的ROI，需要交互式选择
+                    self.append_log("请选择ROI区域...", "INFO")
+                    self.roi = select_roi_interactive(parent=self.root)
+                    if self.roi is None:
+                        self.append_log("ROI选择取消，使用全屏扫描", "WARNING")
+                    else:
+                        self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
+                        
+                        # 如果启用了记住ROI，保存当前选择的ROI
+                        if remember_roi:
+                            self.state_manager.set_saved_roi(self.roi)
+                            self.state_manager.save_state()
+                            self.append_log("ROI区域已保存，下次启动将自动使用", "INFO")
             else:
                 self.roi = None
                 # 如果没有ROI选择，直接最小化窗口
