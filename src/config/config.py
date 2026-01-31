@@ -52,7 +52,9 @@ class Config:
             },
             'files': {
                 'output_dir': 'output',
-                'banlist_file': 'docs/banlist.txt'
+                'banlist_file': 'docs/banlist.txt',
+                'save_screenshot': True,
+                'save_ocr_result': True
             },
             'cleanup': {
                 'enabled': True,

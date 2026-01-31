@@ -151,13 +151,21 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, pad
         tuple: (PIL.Image截图对象, str时间戳)，如果出错返回 (None, None)
     """
     try:
-        # 获取屏幕尺寸（只抓取一次，避免重复截图带来的内存抖动）
-        screen = ImageGrab.grab()
-        screen_width, screen_height = screen.size
-        
-        # 捕获屏幕（支持ROI）
+        # 捕获屏幕（支持ROI，直接抓取指定区域以优化性能）
         if roi is not None:
             x1, y1, x2, y2 = roi
+            
+            # 获取屏幕尺寸（仅用于边界检查）
+            try:
+                # 尝试获取屏幕尺寸，如果失败则不进行边界检查
+                from ctypes import windll
+                screen_width = windll.user32.GetSystemMetrics(0)
+                screen_height = windll.user32.GetSystemMetrics(1)
+            except:
+                # 如果无法获取屏幕尺寸，先全屏抓取一次获取尺寸（仅一次）
+                temp = ImageGrab.grab()
+                screen_width, screen_height = temp.size
+                temp.close()
             
             # 添加边距，避免文字太靠近边框
             x1 = max(0, x1 - padding)
@@ -165,15 +173,11 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, pad
             x2 = min(screen_width, x2 + padding)
             y2 = min(screen_height, y2 + padding)
             
-            screenshot = screen.crop((x1, y1, x2, y2))
-            # 释放全屏截图内存
-            try:
-                screen.close()
-            except Exception:
-                pass
+            # 直接抓取指定区域
+            screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
             logger.info(f"使用ROI区域: ({x1}, {y1}, {x2}, {y2}), 边距: {padding}px")
         else:
-            screenshot = screen
+            screenshot = ImageGrab.grab()
         
         # 获取截图尺寸
         width, height = screenshot.size

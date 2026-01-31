@@ -7,7 +7,7 @@ ocr:
   languages:
   - ch
   - en
-  min_confidence: 0.15000000000000002
+  min_confidence: 0.3
   save_processed_image: true
   easyocr:
     canvas_size: 1920
@@ -20,6 +20,8 @@ gpu:
 files:
   output_dir: output
   banlist_file: C:/Users/Administrator/Desktop/banlist.txt
+  save_screenshot: true
+  save_ocr_result: true
   folder_mode: minute
   max_folders: 10
 cleanup:

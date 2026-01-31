@@ -54,10 +54,10 @@ from src.config.config import config
 from src.config.config_editor import ConfigEditor
 from src.config.gui_state import GUIStateManager
 from src.gui.gui_logger import GUILoggerHandler
-from src.ocr.ocr_adapter import OCRConfig, OCRFactory
+from src.services.scan_service import ScanService
 from src.utils.cleanup_old_files import start_cleanup_thread
-from src.utils.scan_screen import scan_screen, select_roi_interactive
-from src.utils.text_matcher import match_and_display
+from src.utils.scan_screen import select_roi_interactive
+from src.utils.text_matcher import display_matches
 
 
 class MainGUI:
@@ -67,6 +67,9 @@ class MainGUI:
         """初始化界面"""
         self.root = root
         self.root.title("屏幕扫描OCR识别系统")
+        
+        # 扫描服务
+        self.scan_service = ScanService()
         
         # GUI状态管理器
         self.state_manager = GUIStateManager()
@@ -92,8 +95,6 @@ class MainGUI:
         self._memory_pid = os.getpid()
         
         # OCR相关
-        self.ocr_adapter = None
-        self.ocr_config = None
         self.roi = None
         
         # 创建界面
@@ -245,13 +246,13 @@ class MainGUI:
         self.min_confidence_var.trace('w', self.on_confidence_change)
         self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
         
-        # 第二行：保存处理后的图片
+        # 第二行：保存文件选项
         row2 = ttk.Frame(frame)
         row2.pack(fill=tk.X, pady=2)
         
-        self.save_processed_image_var = tk.BooleanVar()
-        save_processed_check = ttk.Checkbutton(row2, text="保存处理后的图片", variable=self.save_processed_image_var)
-        save_processed_check.pack(side=tk.LEFT, padx=5)
+        self.save_files_var = tk.BooleanVar()
+        save_files_check = ttk.Checkbutton(row2, text="保存截图和识别结果", variable=self.save_files_var)
+        save_files_check.pack(side=tk.LEFT, padx=5)
     
     def create_matching_config_widgets(self, parent):
         """创建文字匹配控件"""
@@ -477,9 +478,12 @@ class MainGUI:
         try:
             val = float(value)
             val = round(val / 0.05) * 0.05
-            self.min_confidence_var.set(val)
-            # 显示时保留两位小数
-            confidence_text = f"置信度: {val:.2f}"
+            # 消除浮点数运算误差，保留两位小数
+            val = round(val, 2)
+            
+            # 只有当值真正改变时才更新，避免循环触发
+            if abs(self.min_confidence_var.get() - val) > 1e-6:
+                self.min_confidence_var.set(val)
         except:
             pass
     
@@ -504,8 +508,11 @@ class MainGUI:
         # OCR配置
         default_engine = config.get('ocr.default_engine', 'paddle')
         self.ocr_engine_var.set(default_engine)
-        self.min_confidence_var.set(config.get('ocr.min_confidence', 0.15))
-        self.save_processed_image_var.set(config.get('ocr.save_processed_image', True))
+        self.min_confidence_var.set(round(config.get('ocr.min_confidence', 0.15), 2))
+        
+        # 读取保存文件配置（默认True）
+        save_screenshot = config.get('files.save_screenshot', True)
+        self.save_files_var.set(save_screenshot)
         
         # 文字匹配配置
         self.enable_matching_var.set(config.get('matching.enabled', True))
@@ -537,7 +544,13 @@ class MainGUI:
         # OCR配置
         config.set('ocr.default_engine', self.ocr_engine_var.get())
         config.set('ocr.min_confidence', self.min_confidence_var.get())
-        config.set('ocr.save_processed_image', self.save_processed_image_var.get())
+        
+        # 保存文件配置（控制所有文件保存）
+        save_files = self.save_files_var.get()
+        config.set('files.save_screenshot', save_files)
+        config.set('files.save_ocr_result', save_files)
+        # 同时也控制中间处理图片的保存
+        config.set('ocr.save_processed_image', save_files)
         
         # 文字匹配配置
         config.set('matching.enabled', self.enable_matching_var.get())
@@ -569,21 +582,15 @@ class MainGUI:
             self.update_status("初始化中...")
             self.append_log("正在初始化OCR引擎...", "INFO")
             
-            # 创建OCR配置
+            # 获取参数
             languages = config.get('ocr.languages', ['ch', 'en'])
             use_gpu = self.enable_gpu_var.get()
-            engine_choice = '1' if self.ocr_engine_var.get() == 'paddle' else '2'
-            
-            self.ocr_config = OCRConfig(
-                languages=languages,
-                use_gpu=use_gpu,
-                engine=self.ocr_engine_var.get()
-            )
+            engine_choice = self.ocr_engine_var.get()
             
             # 在后台线程中初始化OCR（避免阻塞GUI）
             init_thread = threading.Thread(
                 target=self._init_ocr_in_thread,
-                args=(engine_choice,),
+                args=(engine_choice, languages, use_gpu),
                 daemon=True
             )
             init_thread.start()
@@ -594,28 +601,28 @@ class MainGUI:
             self.is_running = False
             self.start_btn.config(state=tk.NORMAL)
     
-    def _init_ocr_in_thread(self, engine_choice):
+    def _init_ocr_in_thread(self, engine_choice, languages, use_gpu):
         """在后台线程中初始化OCR"""
         try:
-            # 创建OCR适配器
-            self.ocr_adapter = OCRFactory.create(engine_choice)
-            
-            # 初始化OCR阅读器（这可能会耗时较长）
-            self.ocr_adapter.init_reader(self.ocr_config, force_reinit=False)
+            # 初始化扫描服务
+            self.scan_service.init_ocr(
+                engine_choice=engine_choice,
+                languages=languages,
+                use_gpu=use_gpu
+            )
             
             # 在主线程中更新UI
             self.root.after(0, self._on_ocr_init_complete)
             
         except Exception as e:
             # 在主线程中显示错误
-            # 注意：需要将e的值捕获到lambda的默认参数中，避免闭包问题
             error_msg = str(e)
             self.root.after(0, lambda msg=error_msg: self._on_ocr_init_failed(msg))
     
     def _on_ocr_init_complete(self):
         """OCR初始化完成后的回调（在主线程中执行）"""
         try:
-            self.append_log(f"{self.ocr_adapter.engine_name}初始化完成", "INFO")
+            self.append_log(f"OCR初始化完成", "INFO")
             
             # 如果启用ROI，先最小化窗口，然后选择ROI区域
             if self.enable_roi_var.get():
@@ -645,6 +652,9 @@ class MainGUI:
                 self.roi = None
                 # 如果没有ROI选择，直接最小化窗口
                 self.root.iconify()
+            
+            # 设置ROI到服务
+            self.scan_service.set_roi(self.roi)
             
             # 启动扫描线程
             self.is_running = True
@@ -905,18 +915,9 @@ class MainGUI:
         # 获取配置
         output_dir = config.get('files.output_dir', 'output')
         scan_interval = self.scan_interval_var.get()
-        roi_padding = config.get('scan.roi_padding', 10)
-        folder_mode = config.get('files.folder_mode', 'minute')
-        max_folders = config.get('files.max_folders', 10)
-        
-        # 创建输出目录
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            self.append_log(f"创建输出目录: {output_dir}", "INFO")
         
         # 启动清理线程
         cleanup_enabled = config.get('cleanup.enabled', True)
-        cleanup_thread = None
         if cleanup_enabled:
             max_age_hours = config.get('cleanup.max_age_hours', 1)
             cleanup_interval = config.get('cleanup.interval_minutes', 10)
@@ -928,13 +929,9 @@ class MainGUI:
                 )
                 self.append_log("清理线程已启动", "INFO")
         
-        current_minute_folder = None
-        current_minute = None
-        
         try:
             while not self.stop_event.is_set():
                 self.scan_count += 1
-                scan_start_time = time.time()
                 self.append_log(f"开始第 {self.scan_count} 次扫描...", "INFO")
                 
                 # 获取当前时间
@@ -944,90 +941,33 @@ class MainGUI:
                 # 更新统计信息（在主线程中）
                 self.root.after(0, self.update_stats)
                 
-                # 根据文件夹组织模式决定保存目录
-                if folder_mode == 'minute':
-                    minute_timestamp = now.strftime("%Y%m%d_%H%M")
-                    
-                    if current_minute != minute_timestamp:
-                        current_minute = minute_timestamp
-                        current_minute_folder = os.path.join(output_dir, current_minute)
-                        
-                        if not os.path.exists(current_minute_folder):
-                            os.makedirs(current_minute_folder)
-                            self.append_log(f"创建新的分钟文件夹: {current_minute}", "INFO")
-                            
-                            # 清理旧的分钟文件夹
-                            from src.utils.cleanup_old_files import cleanup_old_folders_by_count
-                            cleanup_old_folders_by_count(output_dir, max_folders=max_folders)
-                    
-                    save_dir = current_minute_folder
-                else:
-                    second_timestamp = now.strftime("%Y%m%d_%H%M%S")
-                    save_dir = os.path.join(output_dir, second_timestamp)
-                    os.makedirs(save_dir, exist_ok=True)
+                # 执行扫描
+                result = self.scan_service.scan_once()
                 
-                # 生成秒级时间戳
-                second_timestamp = now.strftime("%Y%m%d_%H%M%S")
-                
-                try:
-                    # 扫描屏幕
-                    screenshot, timestamp = scan_screen(
-                        save_dir=save_dir,
-                        timestamp=second_timestamp,
-                        roi=self.roi,
-                        padding=roi_padding
-                    )
+                if result['success']:
+                    self.append_log(f"扫描完成，耗时 {result['duration']:.2f}秒", "INFO")
+                    if 'screenshot_path' in result and result['screenshot_path']:
+                        self.append_log(f"截图已保存: {os.path.basename(result['screenshot_path'])}", "DEBUG")
                     
-                    if screenshot:
-                        # 在按分钟模式下，删除旧截图
-                        if folder_mode == 'minute':
-                            import glob
-                            old_screenshots = glob.glob(os.path.join(save_dir, "screenshot_*.png"))
-                            for old_screenshot in old_screenshots:
-                                if old_screenshot != os.path.join(save_dir, f"screenshot_{second_timestamp}.png"):
-                                    try:
-                                        os.remove(old_screenshot)
-                                    except:
-                                        pass
+                    # 如果有匹配结果，显示浮窗（在主线程中）
+                    if 'matches' in result and result['matches']:
+                        matches = result['matches']
+                        self.append_log(f"匹配成功: {matches}", "INFO")
                         
-                        # OCR识别
-                        ocr_results = self.ocr_adapter.recognize_and_print(
-                            screenshot,
-                            config=self.ocr_config,
-                            save_dir=save_dir,
-                            timestamp=second_timestamp,
-                            roi=None
-                        )
+                        # 在主线程中显示
+                        self.root.after(0, lambda: display_matches(
+                            matches,
+                            duration=self.scan_service.display_duration,
+                            position=self.scan_service.display_position,
+                            font_size=self.scan_service.display_font_size,
+                            parent_root=self.root
+                        ))
                         
-                        # 文字匹配
-                        if self.enable_matching_var.get() and ocr_results:
-                            banlist_file = self.banlist_path_var.get()
-                            display_duration = self.display_duration_var.get()
-                            position = self.display_position_var.get()
-                            position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
-                            position = position_map.get(position, 'center')
-                            
-                            # 统一OCR结果格式
-                            if isinstance(ocr_results, str):
-                                text_lines = [line.strip() for line in ocr_results.split('\n') if line.strip()]
-                                ocr_results_for_match = [{'text': line} for line in text_lines]
-                            elif isinstance(ocr_results, list):
-                                ocr_results_for_match = ocr_results
-                            else:
-                                ocr_results_for_match = [{'text': str(ocr_results)}]
-                            
-                            display_font_size = self.display_font_size_var.get()
-                            match_and_display(ocr_results_for_match, txt_file=banlist_file,
-                                            duration=display_duration, position=position, font_size=display_font_size)
-                        
-                        scan_duration = time.time() - scan_start_time
-                        self.append_log(f"扫描完成，耗时 {scan_duration:.2f}秒", "INFO")
-                
-                except Exception as e:
-                    self.append_log(f"扫描或OCR处理出错: {e}", "ERROR")
+                elif 'error' in result:
+                    self.append_log(f"扫描出错: {result['error']}", "ERROR")
                 
                 # 计算等待时间
-                scan_duration = time.time() - scan_start_time
+                scan_duration = result['duration']
                 wait_time = max(0, scan_interval - scan_duration)
                 
                 if wait_time > 0:

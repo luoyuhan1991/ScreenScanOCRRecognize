@@ -128,7 +128,7 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
 
 
 def recognize_and_print(image, languages=None, save_dir="output",
-                        timestamp=None, use_gpu=None, roi=None):
+                        timestamp=None, use_gpu=None, roi=None, save_result=True):
     """
     使用PaddleOCR进行文字识别并保存结果
 
@@ -139,12 +139,14 @@ def recognize_and_print(image, languages=None, save_dir="output",
         timestamp: 时间戳
         use_gpu: 是否使用GPU
         roi: ROI区域信息
+        save_result: 是否保存OCR结果文件
 
     Returns:
         list: 识别结果列表
     """
     # 确保保存目录存在
-    os.makedirs(save_dir, exist_ok=True)
+    if save_result:
+        os.makedirs(save_dir, exist_ok=True)
 
     # 初始化OCR（使用缓存的实例）
     ocr = init_reader(languages, use_gpu)
@@ -179,8 +181,9 @@ def recognize_and_print(image, languages=None, save_dir="output",
     logger.debug(f"图像取反处理完成，图像尺寸: {img_array_inverted.shape}")
 
     # 保存处理后的图像（根据配置决定是否保存）
+    # 如果 save_result 为 False，则不保存处理后的图像
     save_processed_image = config.get('ocr.save_processed_image', True)
-    if save_processed_image:
+    if save_processed_image and save_result:
         if timestamp is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -252,7 +255,8 @@ def recognize_and_print(image, languages=None, save_dir="output",
             logger.info("未识别到任何文本")
 
         # 保存识别结果（传入耗时信息）
-        save_ocr_results(extracted_text, save_dir, timestamp, roi, ocr_duration)
+        if save_result:
+            save_ocr_results(extracted_text, save_dir, timestamp, roi, ocr_duration)
 
         # 打印识别结果
         print_ocr_results(extracted_text)

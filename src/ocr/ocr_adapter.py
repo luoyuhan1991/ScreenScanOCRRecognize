@@ -214,7 +214,8 @@ class OCRAdapter(ABC):
         config: OCRConfig,
         save_dir: str = "output",
         timestamp: Optional[str] = None,
-        roi: Optional[tuple] = None
+        roi: Optional[tuple] = None,
+        save_result: bool = True
     ) -> Any:
         """
         对图片进行OCR识别并保存结果
@@ -225,6 +226,7 @@ class OCRAdapter(ABC):
             save_dir: 保存目录
             timestamp: 时间戳，用于生成文件名
             roi: 感兴趣区域 (x1, y1, x2, y2)
+            save_result: 是否保存OCR结果文件
             
         Returns:
             识别结果（格式可能因引擎而异）
@@ -288,7 +290,8 @@ class PaddleOCRAdapter(OCRAdapter):
         config: OCRConfig,
         save_dir: str = "output",
         timestamp: Optional[str] = None,
-        roi: Optional[tuple] = None
+        roi: Optional[tuple] = None,
+        save_result: bool = True
     ) -> List[Dict[str, Any]]:
         """使用PaddleOCR进行识别"""
         from . import paddle_ocr
@@ -308,7 +311,8 @@ class PaddleOCRAdapter(OCRAdapter):
             save_dir=save_dir,
             timestamp=timestamp,
             use_gpu=config.use_gpu,
-            roi=roi
+            roi=roi,
+            save_result=save_result
         )
 
 
@@ -358,7 +362,8 @@ class EasyOCRAdapter(OCRAdapter):
         config: OCRConfig,
         save_dir: str = "output",
         timestamp: Optional[str] = None,
-        roi: Optional[tuple] = None
+        roi: Optional[tuple] = None,
+        save_result: bool = True
     ) -> str:
         """使用EasyOCR进行识别"""
         from . import easy_ocr
@@ -378,7 +383,8 @@ class EasyOCRAdapter(OCRAdapter):
             save_dir=save_dir,
             timestamp=timestamp,
             use_gpu=params['gpu'],
-            roi=roi
+            roi=roi,
+            save_result=save_result
         )
 
 

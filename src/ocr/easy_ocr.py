@@ -245,7 +245,7 @@ def recognize_text(image, languages=None,
 
 
 def recognize_and_print(image, languages=None, save_dir="output", 
-                       timestamp=None, use_gpu=None, roi=None):
+                       timestamp=None, use_gpu=None, roi=None, save_result=True):
     """
     对图片进行OCR识别并保存结果到文件
     
@@ -256,6 +256,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
         timestamp (str): 时间戳，用于生成文件名。如果为None，则自动生成
         use_gpu (bool): 是否使用GPU，默认为None（自动检测）
         roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
+        save_result (bool): 是否保存OCR结果文件
     
     Returns:
         str: 识别出的文字内容
@@ -272,6 +273,10 @@ def recognize_and_print(image, languages=None, save_dir="output",
     else:
         logger.info(f"OCR识别完成，未识别到文字内容，耗时: {ocr_duration:.3f}秒")
     
+    # 如果不保存结果，直接返回
+    if not save_result:
+        return text
+        
     # 保存到文件
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

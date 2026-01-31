@@ -5,7 +5,6 @@
 
 import os
 import threading
-import time
 import tkinter as tk
 
 from .logger import logger
@@ -116,7 +115,7 @@ class TextMatcher:
 class FloatingTextDisplay:
     """遮罩式文字显示器（水印效果）"""
 
-    def __init__(self, text, duration=3, position="center", font_size=30):
+    def __init__(self, text, duration=3, position="center", font_size=30, parent_root=None):
         """
         初始化遮罩式文字显示器
 
@@ -125,130 +124,152 @@ class FloatingTextDisplay:
             duration (int): 显示时长（秒），默认为3
             position (str): 显示位置，"center"（屏幕中央）、"top"（顶部）、"bottom"（底部）
             font_size (int): 字体大小，默认为30
+            parent_root: 可选的父窗口（Tkinter根窗口）。如果提供，将使用Toplevel创建浮窗。
         """
         self.text = text
         self.duration = duration
         self.position = position
         self.font_size = font_size
+        self.parent_root = parent_root
         self.root = None
 
     def show(self):
         """显示遮罩文字（水印效果）"""
-        def _show():
+        if self.parent_root:
+            # 如果有父窗口，在主线程中调度显示
+            self.parent_root.after(0, self._show_in_main_thread)
+        else:
+            # 如果没有父窗口（命令行模式），在新线程中显示
+            # 注意：如果主线程没有运行mainloop，这里创建tk.Tk()是安全的
+            # 但如果主线程有mainloop，这里会报错。所以确保只在命令行模式下使用无parent_root的方式
+            thread = threading.Thread(target=self._show_standalone, daemon=True)
+            thread.start()
+
+    def _show_in_main_thread(self):
+        """在主线程中显示（使用Toplevel）"""
+        try:
+            self.root = tk.Toplevel(self.parent_root)
+            self._setup_window()
+            
+            # 定时关闭
+            self.root.after(int(self.duration * 1000), self._close)
+        except Exception as e:
+            logger.error(f"显示水印文字失败: {e}")
+
+    def _show_standalone(self):
+        """独立显示（创建新的Tk实例）"""
+        try:
+            self.root = tk.Tk()
+            self._setup_window()
+            
+            # 定时关闭
+            self.root.after(int(self.duration * 1000), self._close_standalone)
+            
+            self.root.mainloop()
+        except Exception as e:
+            logger.error(f"显示独立水印文字失败: {e}")
+
+    def _close(self):
+        """关闭窗口"""
+        if self.root:
             try:
-                # 创建透明窗口用于显示水印文字
-                self.root = tk.Tk()
-                self.root.overrideredirect(True)  # 无边框
-                self.root.attributes('-topmost', True)  # 置顶
+                self.root.destroy()
+            except:
+                pass
+            self.root = None
 
-                # 设置为工具窗口，减少系统干扰
-                try:
-                    self.root.attributes('-toolwindow', True)
-                except:
-                    pass  # 某些tkinter版本不支持
+    def _close_standalone(self):
+        """关闭独立窗口"""
+        if self.root:
+            try:
+                self.root.destroy()
+                # 退出mainloop
+                self.root.quit()
+            except:
+                pass
+            self.root = None
 
-                # 关键：设置半透明窗口（而不是完全透明），确保文字可见但不干扰操作
-                self.root.attributes('-alpha', 0.5)  # 50%透明度，水印效果
+    def _setup_window(self):
+        """设置窗口属性和内容"""
+        self.root.overrideredirect(True)  # 无边框
+        self.root.attributes('-topmost', True)  # 置顶
 
-                # 重要：确保窗口不会获得焦点，真正实现水印效果
-                self.root.attributes('-disabled', True)  # 禁用窗口输入
-                try:
-                    self.root.attributes('-focusable', False)  # 窗口不可获得焦点
-                except:
-                    pass  # 某些tkinter版本不支持此属性
+        # 设置为工具窗口，减少系统干扰
+        try:
+            self.root.attributes('-toolwindow', True)
+        except:
+            pass
 
-                # 防止窗口出现在任务栏
-                try:
-                    self.root.attributes('-type', 'splash')  # 设置为启动画面类型
-                except:
-                    pass  # 某些系统不支持
+        # 关键：设置半透明窗口
+        self.root.attributes('-alpha', 0.5)
 
-                # 获取屏幕尺寸
-                screen_width = self.root.winfo_screenwidth()
-                screen_height = self.root.winfo_screenheight()
+        # 禁用窗口输入
+        self.root.attributes('-disabled', True)
+        try:
+            self.root.attributes('-focusable', False)
+        except:
+            pass
 
-                # 计算文字区域的尺寸和位置
-                text_width, text_height, window_x, window_y = self._calculate_window_geometry(screen_width, screen_height)
+        # 防止窗口出现在任务栏
+        try:
+            self.root.attributes('-type', 'splash')
+        except:
+            pass
 
-                # 设置窗口大小为紧贴文字的大小（最小包裹，只添加2像素边距避免裁剪）
-                padding = 2  # 最小边距，避免文字被裁剪
-                window_width = text_width + padding * 2
-                window_height = text_height + padding * 2
-                self.root.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
+        # 获取屏幕尺寸
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
 
-                # 创建Canvas，大小匹配窗口
-                canvas = tk.Canvas(
-                    self.root,
-                    width=window_width,
-                    height=window_height,
-                    highlightthickness=0,  # 无边框
-                    takefocus=False  # 不接受焦点
-                )
-                canvas.pack()
+        # 计算文字区域的尺寸和位置
+        text_width, text_height, window_x, window_y = self._calculate_window_geometry(screen_width, screen_height)
 
-                # 计算文字在Canvas中的位置（居中）
-                text_x = window_width // 2
-                text_y = window_height // 2
+        # 设置窗口大小
+        padding = 2
+        window_width = text_width + padding * 2
+        window_height = text_height + padding * 2
+        self.root.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
 
-                # 构建字体元组
-                font_tuple = ('Microsoft YaHei', self.font_size, 'bold')
+        # 创建Canvas
+        canvas = tk.Canvas(
+            self.root,
+            width=window_width,
+            height=window_height,
+            highlightthickness=0,
+            takefocus=False
+        )
+        canvas.pack()
 
-                # 在Canvas上绘制文字，使用半透明颜色
-                canvas.create_text(
-                    text_x, text_y,
-                    text=self.text,
-                    font=font_tuple,
-                    fill='#FF4444',  # 半透明红色
-                    anchor='center',
-                    tags='watermark_text'
-                )
+        # 计算文字在Canvas中的位置
+        text_x = window_width // 2
+        text_y = window_height // 2
 
-                # 添加文字阴影效果，让水印更明显
-                shadow_offset = max(1, self.font_size // 30)  # 根据字体大小调整阴影偏移
-                canvas.create_text(
-                    text_x + shadow_offset, text_y + shadow_offset,
-                    text=self.text,
-                    font=font_tuple,
-                    fill='#000000',  # 黑色阴影
-                    anchor='center',
-                    tags='watermark_shadow'
-                )
+        # 构建字体元组
+        font_tuple = ('Microsoft YaHei', self.font_size, 'bold')
 
-                # 重新排列图层，确保文字在阴影之上
-                canvas.tag_raise('watermark_text', 'watermark_shadow')
+        # 绘制文字
+        canvas.create_text(
+            text_x, text_y,
+            text=self.text,
+            font=font_tuple,
+            fill='#FF4444',
+            anchor='center',
+            tags='watermark_text'
+        )
 
-                # 更新窗口
-                self.root.update_idletasks()
-                self.root.update()
+        # 添加阴影
+        shadow_offset = max(1, self.font_size // 30)
+        canvas.create_text(
+            text_x + shadow_offset, text_y + shadow_offset,
+            text=self.text,
+            font=font_tuple,
+            fill='#000000',
+            anchor='center',
+            tags='watermark_shadow'
+        )
 
-                # 直接显示（无渐显渐隐效果）
+        # 重新排列图层
+        canvas.tag_raise('watermark_text', 'watermark_shadow')
 
-                # 等待指定时间（保持显示）
-                start_time = time.time()
-                while time.time() - start_time < self.duration:
-                    # 短暂休眠，让其他事件处理
-                    time.sleep(0.1)
-                    # 保持窗口更新
-                    try:
-                        self.root.update_idletasks()
-                    except:
-                        break  # 窗口可能已被销毁
-
-                # 直接关闭窗口（无渐隐效果）
-
-            except Exception as e:
-                logger.error(f"显示水印文字时出错: {e}")
-            finally:
-                # 关闭窗口
-                if self.root:
-                    try:
-                        self.root.destroy()
-                    except:
-                        pass
-
-        # 在新线程中显示，避免阻塞主线程
-        thread = threading.Thread(target=_show, daemon=True)
-        thread.start()
 
     def _calculate_window_geometry(self, screen_width, screen_height):
         """计算窗口几何信息（位置和大小）"""
@@ -311,16 +332,36 @@ def _get_cached_matcher(txt_file: str) -> TextMatcher:
     return matcher
 
 
+def display_matches(matched_keywords, duration=3, position="center", font_size=30, parent_root=None):
+    """
+    显示匹配的关键词
+    
+    Args:
+        matched_keywords (list): 匹配到的关键词列表
+        duration (int): 显示时长
+        position (str): 显示位置
+        font_size (int): 字体大小
+        parent_root: 可选的父窗口
+    """
+    if matched_keywords:
+        # 将所有匹配的关键词合并为一个字符串
+        display_text = " | ".join(matched_keywords)
+        
+        # 创建并显示浮动文字
+        display = FloatingTextDisplay(display_text, duration, position, font_size, parent_root)
+        display.show()
+
+
 def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center", font_size=30):
     """
-    匹配关键词并显示
+    匹配关键词并显示（兼容旧接口，建议使用 match_keywords + display_matches）
     
     Args:
         ocr_results (list): OCR识别结果列表
-        txt_file (str): 关键词TXT文件路径，默认为 docs/banlist.txt
-        duration (int): 显示时长（秒）
+        txt_file (str): 关键词TXT文件路径
+        duration (int): 显示时长
         position (str): 显示位置
-        font_size (int): 字体大小，默认为30
+        font_size (int): 字体大小
     
     Returns:
         list: 匹配到的关键词列表
@@ -331,14 +372,8 @@ def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, posi
     # 匹配关键词
     matched_keywords = matcher.match(ocr_results)
     
-    # 如果有匹配的关键词，显示在屏幕上
-    if matched_keywords:
-        # 将所有匹配的关键词合并为一个字符串
-        display_text = " | ".join(matched_keywords)
-        
-        # 创建并显示浮动文字
-        display = FloatingTextDisplay(display_text, duration, position, font_size)
-        display.show()
+    # 显示
+    display_matches(matched_keywords, duration, position, font_size)
     
     return matched_keywords
 
