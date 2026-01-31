@@ -22,6 +22,8 @@ class TextMatcher:
             txt_file (str): 关键词TXT文件路径，默认为 docs/banlist.txt
         """
         self.txt_file = txt_file
+        self.keywords = []
+        self._last_mtime = None
         self.keywords = self._load_keywords()
     
     def _load_keywords(self):
@@ -29,6 +31,7 @@ class TextMatcher:
         keywords = []
         if os.path.exists(self.txt_file):
             try:
+                self._last_mtime = os.path.getmtime(self.txt_file)
                 with open(self.txt_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         line = line.strip()
@@ -41,6 +44,7 @@ class TextMatcher:
             logger.warning(f"关键词文件不存在: {self.txt_file}")
             # 创建默认关键词文件
             self._create_default_keywords_file()
+            self._last_mtime = None
         
         return keywords
     
@@ -58,6 +62,20 @@ class TextMatcher:
     def reload_keywords(self):
         """重新加载关键词"""
         self.keywords = self._load_keywords()
+
+    def reload_if_changed(self):
+        """如果关键词文件已更新则重新加载"""
+        if not os.path.exists(self.txt_file):
+            # 文件不存在时保持现有关键词，避免频繁清空
+            return
+        
+        try:
+            current_mtime = os.path.getmtime(self.txt_file)
+        except Exception:
+            return
+        
+        if self._last_mtime is None or current_mtime != self._last_mtime:
+            self.reload_keywords()
     
     def match(self, ocr_results):
         """
@@ -277,6 +295,22 @@ class FloatingTextDisplay:
 
         return text_width, text_height, window_x, window_y
 
+_matcher_cache = {}
+_cache_lock = threading.Lock()
+
+
+def _get_cached_matcher(txt_file: str) -> TextMatcher:
+    """获取（或创建）缓存的关键词匹配器"""
+    file_path = os.path.abspath(txt_file)
+    with _cache_lock:
+        matcher = _matcher_cache.get(file_path)
+        if matcher is None:
+            matcher = TextMatcher(file_path)
+            _matcher_cache[file_path] = matcher
+    matcher.reload_if_changed()
+    return matcher
+
+
 def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center", font_size=30):
     """
     匹配关键词并显示
@@ -291,8 +325,8 @@ def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, posi
     Returns:
         list: 匹配到的关键词列表
     """
-    # 创建匹配器
-    matcher = TextMatcher(txt_file)
+    # 使用缓存的匹配器（避免每次读取文件）
+    matcher = _get_cached_matcher(txt_file)
     
     # 匹配关键词
     matched_keywords = matcher.match(ocr_results)

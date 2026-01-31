@@ -151,7 +151,7 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, pad
         tuple: (PIL.Image截图对象, str时间戳)，如果出错返回 (None, None)
     """
     try:
-        # 获取屏幕尺寸
+        # 获取屏幕尺寸（只抓取一次，避免重复截图带来的内存抖动）
         screen = ImageGrab.grab()
         screen_width, screen_height = screen.size
         
@@ -165,10 +165,15 @@ def scan_screen(save_dir="output", save_file=True, timestamp=None, roi=None, pad
             x2 = min(screen_width, x2 + padding)
             y2 = min(screen_height, y2 + padding)
             
-            screenshot = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+            screenshot = screen.crop((x1, y1, x2, y2))
+            # 释放全屏截图内存
+            try:
+                screen.close()
+            except Exception:
+                pass
             logger.info(f"使用ROI区域: ({x1}, {y1}, {x2}, {y2}), 边距: {padding}px")
         else:
-            screenshot = ImageGrab.grab()
+            screenshot = screen
         
         # 获取截图尺寸
         width, height = screenshot.size

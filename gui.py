@@ -6,11 +6,48 @@ ScreenScanOCRRecognize - GUI主程序
 import logging
 import os
 import queue
+import sys
 import threading
 import time
 import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, filedialog, messagebox, scrolledtext
+
+try:
+    from mem_monitor import get_working_set_mb
+except Exception:
+    get_working_set_mb = None
+
+# Windows任务栏API支持
+try:
+    if sys.platform == 'win32':
+        import ctypes
+        from ctypes import wintypes
+        
+        # Windows任务栏API常量
+        TBPF_NOPROGRESS = 0
+        TBPF_INDETERMINATE = 0x1
+        TBPF_NORMAL = 0x2
+        TBPF_ERROR = 0x4
+        TBPF_PAUSED = 0x8
+        
+        # 尝试加载Windows任务栏API
+        try:
+            _comdlg32 = ctypes.windll.comdlg32
+            _ole32 = ctypes.windll.ole32
+            _shell32 = ctypes.windll.shell32
+            
+            # 定义ITaskbarList3接口
+            class ITaskbarList3(ctypes.c_void_p):
+                pass
+            
+            WINDOWS_TASKBAR_AVAILABLE = True
+        except:
+            WINDOWS_TASKBAR_AVAILABLE = False
+    else:
+        WINDOWS_TASKBAR_AVAILABLE = False
+except:
+    WINDOWS_TASKBAR_AVAILABLE = False
 
 # 导入项目模块
 from src.config.config import config
@@ -45,9 +82,14 @@ class MainGUI:
         self.is_running = False
         self.scan_thread = None
         self.stop_event = threading.Event()
-        self.log_queue = queue.Queue()
+        # 限制日志队列大小，避免高频日志导致内存增长
+        self.log_queue = queue.Queue(maxsize=2000)
         self.scan_count = 0
         self.last_scan_time = None
+        self.cleanup_thread = None
+        self.memory_label = None
+        self._memory_interval_ms = 2000
+        self._memory_pid = os.getpid()
         
         # OCR相关
         self.ocr_adapter = None
@@ -69,6 +111,12 @@ class MainGUI:
         # 绑定窗口事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         self.root.bind('<Configure>', self.on_window_configure)
+        
+        # 初始化窗口标题（显示状态）
+        self.update_window_title("已停止")
+        
+        # 启动内存监控显示
+        self._schedule_memory_update()
     
     def create_widgets(self):
         """创建所有控件"""
@@ -110,6 +158,10 @@ class MainGUI:
         # 最后扫描时间
         self.last_scan_label = ttk.Label(status_frame, text="最后扫描: 无", font=("Microsoft YaHei", 10))
         self.last_scan_label.pack(side=tk.LEFT, padx=5)
+        
+        # 内存占用
+        self.memory_label = ttk.Label(status_frame, text="内存: -- MB", font=("Microsoft YaHei", 10))
+        self.memory_label.pack(side=tk.LEFT, padx=5)
     
     def create_scan_config_widgets(self, parent):
         """创建扫描配置控件"""
@@ -127,6 +179,8 @@ class MainGUI:
         self.remember_roi_var = tk.BooleanVar()
         remember_roi_check = ttk.Checkbutton(row1, text="记住上次的ROI区域", variable=self.remember_roi_var)
         remember_roi_check.pack(side=tk.LEFT, padx=5)
+        # 绑定事件：当开关关闭时，清除保存的ROI记忆
+        self.remember_roi_var.trace('w', self.on_remember_roi_changed)
         
         self.enable_gpu_var = tk.BooleanVar()
         gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
@@ -429,6 +483,14 @@ class MainGUI:
         except:
             pass
     
+    def on_remember_roi_changed(self, *args):
+        """记住ROI开关改变事件：如果关闭开关，清除保存的ROI"""
+        if not self.remember_roi_var.get():
+            # 开关关闭时，清除保存的ROI
+            self.state_manager.set_saved_roi(None)
+            self.state_manager.save_state()
+            self.append_log("已清除保存的ROI区域", "INFO")
+    
     def load_settings(self):
         """加载设置"""
         # 从config.yaml加载业务配置
@@ -464,7 +526,11 @@ class MainGUI:
         # 注意：scan.enable_roi是GUI新增的配置项
         config.set('scan.enable_roi', self.enable_roi_var.get())
         # 保存是否记住ROI到GUI状态管理器
-        self.state_manager.set_remember_roi(self.remember_roi_var.get())
+        remember_roi = self.remember_roi_var.get()
+        self.state_manager.set_remember_roi(remember_roi)
+        # 如果关闭了记住ROI，确保清除保存的ROI
+        if not remember_roi:
+            self.state_manager.set_saved_roi(None)
         config.set('gpu.force_gpu', self.enable_gpu_var.get())
         config.set('scan.interval_seconds', self.scan_interval_var.get())
         
@@ -556,16 +622,14 @@ class MainGUI:
                 # 先最小化窗口
                 self.root.iconify()
                 
-                # 检查是否记住ROI且有保存的ROI
+                # 选中“记住ROI”：直接使用上次保存的ROI；未选中：每次重新选择
                 remember_roi = self.remember_roi_var.get()
                 saved_roi = self.state_manager.get_saved_roi() if remember_roi else None
                 
-                if saved_roi:
-                    # 使用保存的ROI，跳过选择步骤
+                if remember_roi and saved_roi:
                     self.roi = saved_roi
                     self.append_log(f"使用上次保存的ROI区域: {self.roi}", "INFO")
                 else:
-                    # 没有保存的ROI，需要交互式选择
                     self.append_log("请选择ROI区域...", "INFO")
                     self.roi = select_roi_interactive(parent=self.root)
                     if self.roi is None:
@@ -573,7 +637,6 @@ class MainGUI:
                     else:
                         self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
                         
-                        # 如果启用了记住ROI，保存当前选择的ROI
                         if remember_roi:
                             self.state_manager.set_saved_roi(self.roi)
                             self.state_manager.save_state()
@@ -715,6 +778,43 @@ class MainGUI:
         """更新状态显示"""
         status_text = f"状态: ● {status}"
         self.status_label.config(text=status_text)
+        # 同时更新窗口标题（任务栏显示）
+        self.update_window_title(status)
+    
+    def update_window_title(self, status):
+        """更新窗口标题，在任务栏显示状态"""
+        base_title = "屏幕扫描OCR识别系统"
+        # Windows任务栏可能不支持emoji颜色显示，使用清晰的文字前缀
+        if status == "运行中":
+            # 扫描中：使用明显的文字前缀
+            title = f"【扫描中】{base_title}"
+        elif status == "初始化中...":
+            # 初始化中：使用明显的文字前缀
+            title = f"【初始化中】{base_title}"
+        elif status == "已停止":
+            # 已停止：使用默认标题
+            title = base_title
+        else:
+            title = f"{base_title} - {status}"
+        
+        self.root.title(title)
+    
+    def _set_taskbar_state(self, state):
+        """设置Windows任务栏按钮状态（仅在Windows上有效）"""
+        if not WINDOWS_TASKBAR_AVAILABLE:
+            return
+        
+        try:
+            # 获取窗口句柄
+            hwnd = self.root.winfo_id()
+            if sys.platform == 'win32':
+                # Windows任务栏状态设置需要COM接口，这里先简化处理
+                # 实际上完整的实现需要创建COM对象并调用ITaskbarList3接口
+                # 对于tkinter，这可能比较复杂，我们先用标题显示状态
+                pass
+        except Exception as e:
+            # 如果API调用失败，静默忽略，使用标题显示即可
+            pass
     
     def update_stats(self):
         """更新统计信息"""
@@ -723,6 +823,20 @@ class MainGUI:
             self.last_scan_label.config(text=f"最后扫描: {self.last_scan_time}")
         else:
             self.last_scan_label.config(text="最后扫描: 无")
+    
+    def _schedule_memory_update(self):
+        """定时刷新内存显示"""
+        try:
+            if self.memory_label and get_working_set_mb is not None:
+                ws_mb = get_working_set_mb(self._memory_pid)
+                if ws_mb is None:
+                    self.memory_label.config(text="内存: -- MB")
+                else:
+                    self.memory_label.config(text=f"内存: {ws_mb:.1f} MB")
+        except Exception:
+            pass
+        
+        self.root.after(self._memory_interval_ms, self._schedule_memory_update)
     
     def setup_gui_logger(self):
         """设置GUI日志处理器"""
@@ -806,9 +920,13 @@ class MainGUI:
         if cleanup_enabled:
             max_age_hours = config.get('cleanup.max_age_hours', 1)
             cleanup_interval = config.get('cleanup.interval_minutes', 10)
-            cleanup_thread = start_cleanup_thread(output_dir, max_age_hours=max_age_hours, 
-                                                interval_minutes=cleanup_interval)
-            self.append_log("清理线程已启动", "INFO")
+            if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
+                self.cleanup_thread = start_cleanup_thread(
+                    output_dir,
+                    max_age_hours=max_age_hours,
+                    interval_minutes=cleanup_interval
+                )
+                self.append_log("清理线程已启动", "INFO")
         
         current_minute_folder = None
         current_minute = None
