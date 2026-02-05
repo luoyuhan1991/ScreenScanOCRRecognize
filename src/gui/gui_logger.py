@@ -31,8 +31,8 @@ class GUILoggerHandler(logging.Handler):
         """
         super().__init__()
         self.log_queue = log_queue
-        # 使用自定义的格式化器，自动添加换行符
-        self.setFormatter(NewlineFormatter('%(asctime)s - %(levelname)s - %(message)s', 
+        # 使用自定义的格式化器，自动添加换行符（界面日志不需要显示日志级别）
+        self.setFormatter(NewlineFormatter('%(asctime)s - %(message)s', 
                                            datefmt='%Y-%m-%d %H:%M:%S'))
     
     def emit(self, record):
