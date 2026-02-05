@@ -7,11 +7,9 @@ ScreenScanOCRRecognize - 主程序入口
 import os
 import sys
 import time
-from datetime import datetime
 
 from src.config.config import config
 from src.services.scan_service import ScanService
-from src.utils.cleanup_old_files import start_cleanup_thread
 from src.utils.logger import logger
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_matches
@@ -53,8 +51,6 @@ def main():
     output_dir = config.get('files.output_dir', 'output')
     scan_interval = config.get('scan.interval_seconds', 5)
     roi_padding = config.get('scan.roi_padding', 10)
-    folder_mode = config.get('files.folder_mode', 'minute')  # 文件夹组织模式
-    max_folders = config.get('files.max_folders', 10)  # 最大保留文件夹数量
     
     # 创建输出目录
     if not os.path.exists(output_dir):
@@ -66,13 +62,6 @@ def main():
     logger.info(f"每{scan_interval}秒自动扫描一次屏幕并进行OCR识别")
     logger.info(f"文件夹组织模式: {'按分钟' if folder_mode == 'minute' else '按次扫描'}")
     logger.info(f"截图和OCR结果将保存到: {os.path.abspath(output_dir)}")
-    if folder_mode == 'minute':
-        logger.info(f"最多保留 {max_folders} 个分钟文件夹")
-    
-    cleanup_enabled = config.get('cleanup.enabled', True)
-    if cleanup_enabled:
-        cleanup_interval = config.get('cleanup.interval_minutes', 10)
-        logger.info(f"自动清理超过{config.get('cleanup.max_age_hours', 1)}小时的旧文件（每{cleanup_interval}分钟执行一次）")
     logger.info("按 Ctrl+C 停止程序")
     logger.info("=" * 60)
     
@@ -171,15 +160,6 @@ def main():
     
     # 设置ROI
     scan_service.set_roi(roi)
-    
-    # 启动清理线程（如果启用）
-    cleanup_thread = None
-    if cleanup_enabled:
-        max_age_hours = config.get('cleanup.max_age_hours', 1)
-        cleanup_interval = config.get('cleanup.interval_minutes', 10)
-        cleanup_thread = start_cleanup_thread(output_dir, max_age_hours=max_age_hours, 
-                                            interval_minutes=cleanup_interval)
-        logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 清理线程已启动")
     
     try:
         scan_count = 0
