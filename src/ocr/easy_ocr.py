@@ -8,6 +8,7 @@ OCR识别模块
 import os
 import time
 from datetime import datetime
+from typing import List, Dict, Any, Tuple
 
 import easyocr
 import numpy as np
@@ -16,10 +17,9 @@ from PIL import Image
 from ..config.config import config
 from ..utils.logger import logger
 
-# 全局 EasyOCR 阅读器（延迟初始化）
 _reader = None
-_languages = ['ch_sim', 'en']  # 中文简体和英文
-_use_gpu = False  # 是否使用GPU，自动检测
+_languages = ['ch_sim', 'en']
+_use_gpu = False
 
 # EasyOCR语言代码映射（将通用代码转换为EasyOCR支持的代码）
 EASYOCR_LANG_MAP = {
@@ -139,12 +139,14 @@ def recognize_text(image, languages=None,
     Args:
         image: PIL.Image对象或图片文件路径
         languages (list): OCR语言列表，默认为 ['ch_sim', 'en']
-        min_confidence (float): 最小置信度阈值，默认为0.15（降低以提高识别率）
+        min_confidence (float): 最小置信度阈值，默认为0.15
         use_gpu (bool): 是否使用GPU，默认为None（自动检测）
         roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
     
     Returns:
-        str: 识别出的文字内容，如果出错返回空字符串
+        Tuple[List[Dict[str, Any]], float]: (识别结果列表, 耗时)
+            - 识别结果列表：每个元素包含 text, confidence, bbox
+            - 耗时：OCR识别耗时（秒）
     """
     global _reader
     
@@ -215,29 +217,20 @@ def recognize_text(image, languages=None,
         logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果，耗时: {ocr_duration:.3f}秒")
         
         # 提取所有识别到的文字，按位置排序
-        text_items = []
+        text_items: List[Dict[str, Any]] = []
         for (bbox, text, confidence) in results:
             if confidence >= min_confidence:
-                # 计算文本的Y坐标（用于排序）
                 y_coord = np.mean([point[1] for point in bbox])
-                text_items.append((y_coord, text, confidence))
+                text_items.append({
+                    'text': text,
+                    'confidence': float(confidence),
+                    'bbox': bbox.tolist()
+                })
                 
         # 按Y坐标排序（从上到下）
-        text_items.sort(key=lambda x: x[0])
+        text_items.sort(key=lambda x: x['bbox'][0][1])
         
-        # 提取文字内容
-        text_lines = [item[1] for item in text_items]
-        
-        # 合并所有文字行
-        text = '\n'.join(text_lines)
-        text = text.strip()
-        
-        # 后处理文本（当前版本不执行具体逻辑）
-        text = postprocess_text(text)
-        
-        # 将耗时信息附加到返回值（通过全局变量传递，因为返回值是字符串）
-        # 这里我们通过修改函数签名来传递耗时
-        return text, ocr_duration
+        return text_items, ocr_duration
         
     except Exception as e:
         logger.error(f"OCR识别时出错: {e}", exc_info=True)
@@ -259,66 +252,57 @@ def recognize_and_print(image, languages=None, save_dir="output",
         save_result (bool): 是否保存OCR结果文件
     
     Returns:
-        str: 识别出的文字内容
+        List[Dict[str, Any]]: 识别结果列表，每个元素包含 text, confidence, bbox
     """
-    # 获取配置中的最小置信度阈值
     min_confidence = config.get('ocr.min_confidence', 0.3)
     
-    text, ocr_duration = recognize_text(image, languages, 
+    text_items, ocr_duration = recognize_text(image, languages, 
                          min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)
     
-    # 记录识别时间（不输出识别结果内容）
-    if text:
-        logger.info(f"OCR识别完成，已识别到文字内容，耗时: {ocr_duration:.3f}秒")
+    if text_items:
+        logger.info(f"OCR识别完成，已识别到 {len(text_items)} 个文本区域，耗时: {ocr_duration:.3f}秒")
     else:
         logger.info(f"OCR识别完成，未识别到文字内容，耗时: {ocr_duration:.3f}秒")
     
-    # 如果不保存结果，直接返回
     if not save_result:
-        return text
+        return text_items
         
-    # 保存到文件
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # 创建输出目录
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     
-    # 保存OCR结果到文本文件
-    # 判断是否在按分钟模式下：save_dir的父目录是output，且save_dir是分钟文件夹（格式：YYYYMMDD_HHMM）
     save_dir_basename = os.path.basename(save_dir)
-    # 分钟文件夹格式：YYYYMMDD_HHMM（13个字符，包含下划线）
-    # 例如：20251229_0145（下划线在第9位，索引8）
     is_minute_mode = (len(save_dir_basename) == 13 and 
                      save_dir_basename[8] == '_' and 
                      save_dir_basename[:8].isdigit() and 
                      save_dir_basename[9:].isdigit())
     
     if is_minute_mode:
-        # 按分钟模式：使用固定的ocr_result.txt文件名
         txt_filename = os.path.join(save_dir, "ocr_result.txt")
     else:
-        # 其他模式：使用带时间戳的文件名
         txt_filename = os.path.join(save_dir, f"ocr_result_{timestamp}.txt")
+    
+    text_lines = [item['text'] for item in text_items]
+    text_content = '\n'.join(text_lines)
+    
     try:
         with open(txt_filename, 'w', encoding='utf-8') as f:
-            # 在文件开头显示耗时信息（更明显）
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
             f.write(f"OCR识别结果 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
             f.write("="*60 + "\n\n")
             
-            # 写入识别内容
-            if text:
-                f.write(text)
+            if text_content:
+                f.write(text_content)
             else:
                 f.write("未识别到文字内容")
             f.write("\n")
             
-            # 统计信息
             f.write(f"\n--- 识别统计 ---\n")
+            f.write(f"识别到 {len(text_items)} 个文本区域\n")
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
@@ -326,7 +310,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
     except Exception as e:
         logger.error(f"保存OCR结果时出错: {e}", exc_info=True)
     
-    return text
+    return text_items
 
 
 if __name__ == "__main__":

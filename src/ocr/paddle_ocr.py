@@ -85,40 +85,30 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
         if use_gpu:
             logger.info("PaddleOCR: 使用传入的GPU设置（启用）")
     
-    # 确定设备类型（新版本PaddleOCR使用device参数替代use_gpu）
+    # 确定设备类型（新版本PaddleOCR使用device参数）
     device = 'gpu' if use_gpu else 'cpu'
-    logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'} (device={device})")
+    logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'}")
 
-    # 创建PaddleOCR实例
-    # 注意：新版本PaddleOCR（3.0+）使用device参数替代use_gpu
-    # use_angle_cls在新版本中可能已弃用，先尝试不使用该参数
+    # 检测PaddleOCR版本，选择正确的初始化参数
     try:
-        # 优先使用新版本参数（3.0+）
+        from paddleocr import __version__ as paddle_version
+        major_version = int(paddle_version.split('.')[0])
+    except (ImportError, ValueError):
+        major_version = 2
+
+    if major_version >= 3:
         ocr = PaddleOCR(
-            lang=ocr_lang,         # 语言设置
-            device=device,         # 设备类型：'gpu' 或 'cpu'（新版本）
-            enable_mkldnn=False,  # Intel CPU优化（Windows上可能有问题，先关闭）
+            lang=ocr_lang,
+            device=device,
+            enable_mkldnn=False,
         )
-        logger.debug("使用PaddleOCR新版本参数（device）")
-    except (TypeError, ValueError) as e:
-        # 如果device参数不支持，尝试添加use_angle_cls（兼容2.x版本）
-        try:
-            logger.warning("PaddleOCR版本可能较旧，尝试使用use_angle_cls参数")
-            ocr = PaddleOCR(
-                lang=ocr_lang,
-                device=device,
-                use_angle_cls=True,  # 角度分类（2.x版本）
-                enable_mkldnn=False,
-            )
-        except (TypeError, ValueError):
-            # 如果还是失败，尝试使用use_gpu（兼容更旧版本）
-            logger.warning("尝试使用use_gpu参数（兼容旧版本）")
-            ocr = PaddleOCR(
-                lang=ocr_lang,
-                use_gpu=use_gpu,    # 旧版本参数
-                use_angle_cls=True,
-                enable_mkldnn=False,
-            )
+    else:
+        ocr = PaddleOCR(
+            lang=ocr_lang,
+            use_gpu=use_gpu,
+            use_angle_cls=True,
+            enable_mkldnn=False,
+        )
 
     # 缓存实例和配置
     _ocr_instance = ocr

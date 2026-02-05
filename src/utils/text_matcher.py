@@ -48,8 +48,12 @@ class TextMatcher:
         return keywords
     
     def _create_default_keywords_file(self):
-        """创建默认关键词文件"""
+        """创建默认关键词文件（如果不存在）"""
+        if os.path.exists(self.txt_file):
+            return
+        
         try:
+            os.makedirs(os.path.dirname(self.txt_file), exist_ok=True) if os.path.dirname(self.txt_file) else None
             with open(self.txt_file, 'w', encoding='utf-8') as f:
                 f.write("示例关键词1\n")
                 f.write("示例关键词2\n")

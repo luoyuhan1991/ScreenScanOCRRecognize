@@ -364,7 +364,7 @@ class EasyOCRAdapter(OCRAdapter):
         timestamp: Optional[str] = None,
         roi: Optional[tuple] = None,
         save_result: bool = True
-    ) -> str:
+    ) -> List[Dict[str, Any]]:
         """使用EasyOCR进行识别"""
         from . import easy_ocr
         
