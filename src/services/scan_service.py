@@ -122,14 +122,13 @@ class ScanService:
         try:
             # 1. 准备保存目录
             now = datetime.now()
-            save_dir = self._prepare_save_dir(now)
+            self._prepare_save_dir(now)
             second_timestamp = now.strftime("%Y%m%d_%H%M%S")
             result['timestamp'] = second_timestamp
             
             # 2. 截图
-            # 如果不保存截图文件，scan_screen 仍然会返回 PIL Image 对象
             screenshot, _ = scan_screen(
-                save_dir=save_dir,
+                save_dir=self.output_dir,
                 save_file=self.save_screenshot,
                 timestamp=second_timestamp,
                 roi=self.roi,
