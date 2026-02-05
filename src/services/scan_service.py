@@ -1,6 +1,6 @@
 """
 扫描服务模块
-封装扫描、OCR识别、匹配和结果保存的核心逻辑
+封装扫描、OCR识别、匹配和文件保存的核心逻辑
 """
 
 import glob
@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 
 from ..config.config import config
-from ..ocr import paddle_ocr, easy_ocr
 from ..ocr.ocr_adapter import OCRConfig
 from ..utils.logger import logger
 from ..utils.scan_screen import scan_screen
@@ -78,6 +77,7 @@ class ScanService:
         # 直接初始化对应引擎
         if self.ocr_engine == 'paddle':
             logger.info("正在初始化 PaddleOCR 模型...")
+            from ..ocr import paddle_ocr
             paddle_ocr.init_reader(
                 languages=self.ocr_config.get_paddle_params()['lang'],
                 use_gpu=self.ocr_config.use_gpu
@@ -85,6 +85,7 @@ class ScanService:
             logger.info("PaddleOCR 模型初始化完成")
         else:
             logger.info("正在初始化 EasyOCR 模型...")
+            from ..ocr import easy_ocr
             easy_ocr.init_reader(
                 languages=self.ocr_config.get_easy_params()['languages'],
                 use_gpu=self.ocr_config.use_gpu
@@ -94,8 +95,10 @@ class ScanService:
     def release_resources(self):
         """释放资源（OCR模型等）"""
         if self.ocr_engine == 'paddle':
+            from ..ocr import paddle_ocr
             paddle_ocr._ocr_instance = None
         else:
+            from ..ocr import easy_ocr
             easy_ocr._reader = None
         import gc
         gc.collect()
@@ -151,6 +154,7 @@ class ScanService:
                 if self.ocr_engine:
                     # 直接调用底层OCR模块（使用缓存的配置）
                     if self.ocr_engine == 'paddle':
+                        from ..ocr import paddle_ocr
                         ocr_results = paddle_ocr.recognize_and_print(
                             screenshot,
                             languages=self.ocr_config.get_paddle_params()['lang'],
@@ -161,6 +165,7 @@ class ScanService:
                             save_result=self.save_ocr_result
                         )
                     else:
+                        from ..ocr import easy_ocr
                         ocr_results = easy_ocr.recognize_and_print(
                             screenshot,
                             languages=self.ocr_config.get_easy_params()['languages'],
