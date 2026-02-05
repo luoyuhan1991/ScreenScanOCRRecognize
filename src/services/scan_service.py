@@ -11,7 +11,8 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 
 from ..config.config import config
-from ..ocr.ocr_adapter import OCRConfig, OCRFactory, OCRAdapter
+from ..ocr import paddle_ocr, easy_ocr
+from ..ocr.ocr_adapter import OCRConfig
 from ..utils.logger import logger
 from ..utils.scan_screen import scan_screen
 from ..utils.text_matcher import _get_cached_matcher
@@ -20,11 +21,11 @@ from ..utils.text_matcher import _get_cached_matcher
 class ScanService:
     """
     扫描服务类
-    负责协调截图、OCR识别、结果匹配和文件保存
+    负责协调截图、OCR识别、匹配和文件保存
     """
     
     def __init__(self):
-        self.ocr_adapter: Optional[OCRAdapter] = None
+        self.ocr_engine: Optional[str] = None
         self.ocr_config: Optional[OCRConfig] = None
         self.roi = None
         self.is_running = False
@@ -64,34 +65,41 @@ class ScanService:
         """
         if languages is None:
             languages = config.get('ocr.languages', ['ch', 'en'])
-            
+        
+        self.ocr_engine = engine_choice.lower()
+        
         # 创建OCR配置
         self.ocr_config = OCRConfig(
             languages=languages,
             use_gpu=use_gpu,
-            engine=engine_choice
+            engine=self.ocr_engine
         )
         
-        # 创建适配器
-        ocr_type = '1' if engine_choice == 'paddle' else '2'
-        self.ocr_adapter = OCRFactory.create(ocr_type)
-        
-        # 初始化模型
-        logger.info(f"正在初始化 {self.ocr_adapter.engine_name} 模型...")
-        self.ocr_adapter.init_reader(self.ocr_config)
-        logger.info(f"{self.ocr_adapter.engine_name} 模型初始化完成")
+        # 直接初始化对应引擎
+        if self.ocr_engine == 'paddle':
+            logger.info("正在初始化 PaddleOCR 模型...")
+            paddle_ocr.init_reader(
+                languages=self.ocr_config.get_paddle_params()['lang'],
+                use_gpu=self.ocr_config.use_gpu
+            )
+            logger.info("PaddleOCR 模型初始化完成")
+        else:
+            logger.info("正在初始化 EasyOCR 模型...")
+            easy_ocr.init_reader(
+                languages=self.ocr_config.get_easy_params()['languages'],
+                use_gpu=self.ocr_config.use_gpu
+            )
+            logger.info("EasyOCR 模型初始化完成")
     
     def release_resources(self):
         """释放资源（OCR模型等）"""
-        if self.ocr_adapter:
-            try:
-                self.ocr_adapter.release()
-                self.ocr_adapter = None
-                import gc
-                gc.collect()
-                logger.info("OCR资源已释放")
-            except Exception as e:
-                logger.warning(f"释放OCR资源失败: {e}")
+        if self.ocr_engine == 'paddle':
+            paddle_ocr._ocr_instance = None
+        else:
+            easy_ocr._reader = None
+        import gc
+        gc.collect()
+        logger.info("OCR资源已释放")
 
     def set_roi(self, roi):
         """设置ROI区域"""
@@ -140,16 +148,28 @@ class ScanService:
                     result['screenshot_path'] = os.path.join(self.output_dir, f"screenshot_{second_timestamp}.png")
                 
                 # 3. OCR识别
-                if self.ocr_adapter:
-                    # 注意：recognize_and_print 内部目前包含了保存文件的逻辑
-                    ocr_results = self.ocr_adapter.recognize_and_print(
-                        screenshot,
-                        config=self.ocr_config,
-                        save_dir=self.output_dir,
-                        timestamp=second_timestamp,
-                        roi=None, # 截图已裁剪
-                        save_result=self.save_ocr_result
-                    )
+                if self.ocr_engine:
+                    # 直接调用底层OCR模块（使用缓存的配置）
+                    if self.ocr_engine == 'paddle':
+                        ocr_results = paddle_ocr.recognize_and_print(
+                            screenshot,
+                            languages=self.ocr_config.get_paddle_params()['lang'],
+                            save_dir=self.output_dir,
+                            timestamp=second_timestamp,
+                            use_gpu=self.ocr_config.use_gpu,
+                            roi=None,
+                            save_result=self.save_ocr_result
+                        )
+                    else:
+                        ocr_results = easy_ocr.recognize_and_print(
+                            screenshot,
+                            languages=self.ocr_config.get_easy_params()['languages'],
+                            save_dir=self.output_dir,
+                            timestamp=second_timestamp,
+                            use_gpu=self.ocr_config.use_gpu,
+                            roi=None,
+                            save_result=self.save_ocr_result
+                        )
                     
                     # 统一结果格式
                     ocr_list = self._normalize_ocr_results(ocr_results)

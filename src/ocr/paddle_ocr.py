@@ -35,56 +35,23 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     """
     global _ocr_instance, _ocr_config
 
-    # 检查是否需要重新初始化
-    current_config = (languages, use_gpu)
-    if not force_reinit and _ocr_instance is not None and _ocr_config == current_config:
-        return _ocr_instance
-
-    # 处理语言参数（只支持字符串）
-    # PaddleOCR只支持单个语言字符串，不支持多语言组合
-    # 使用OCRConfig中的语言映射（统一管理）
-    from ..ocr.ocr_adapter import OCRConfig
-    
+    # 处理语言参数
     if languages is None:
-        ocr_lang = 'ch'  # 默认中文
+        ocr_lang = 'ch'
     elif isinstance(languages, str):
-        # 使用统一的语言映射
+        from ..ocr.ocr_adapter import OCRConfig
         ocr_lang = OCRConfig.PADDLE_LANG_MAP.get(languages, languages)
-        # 如果映射后不在有效值中，使用默认值
         if ocr_lang not in OCRConfig.PADDLE_LANG_MAP.values():
             ocr_lang = 'ch'
     else:
-        # 如果不是字符串，转换为字符串（兼容处理）
         ocr_lang = str(languages) if languages else 'ch'
-        logger.warning(f"PaddleOCR期望字符串类型语言参数，收到: {type(languages)}，已转换")
 
-    logger.debug(f"初始化PaddleOCR，语言: {ocr_lang}")
+    # 检查是否需要重新初始化（使用实际的 ocr_lang）
+    current_config = (ocr_lang, use_gpu)
+    if not force_reinit and _ocr_instance is not None and _ocr_config == current_config:
+        logger.debug("使用缓存的 PaddleOCR 实例")
+        return _ocr_instance
 
-    # GPU配置处理（适配器模式已通过OCRConfig统一处理，这里保留简化逻辑以兼容直接调用）
-    if use_gpu is None:
-        # 从配置读取GPU设置（简化版，完整逻辑在OCRConfig中）
-        force_cpu = config.get('gpu.force_cpu', False)
-        force_gpu = config.get('gpu.force_gpu', True)
-        auto_detect = config.get('gpu.auto_detect', False)
-        
-        if force_cpu:
-            use_gpu = False
-        elif force_gpu:
-            use_gpu = True
-        elif auto_detect:
-            try:
-                import paddle
-                use_gpu = paddle.is_compiled_with_cuda()
-            except ImportError:
-                use_gpu = False
-        else:
-            use_gpu = True  # 默认使用GPU
-        logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'}")
-    else:
-        use_gpu = bool(use_gpu)
-        if use_gpu:
-            logger.info("PaddleOCR: 使用传入的GPU设置（启用）")
-    
     # 确定设备类型（新版本PaddleOCR使用device参数）
     device = 'gpu' if use_gpu else 'cpu'
     logger.info(f"PaddleOCR GPU设置: {'启用' if use_gpu else '禁用'}")

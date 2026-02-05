@@ -54,50 +54,24 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     if languages is None:
         languages = _languages
     else:
-        # 转换语言代码为EasyOCR支持的格式
         if isinstance(languages, list):
-            # 如果是列表，转换每个语言代码
             languages = [EASYOCR_LANG_MAP.get(lang, lang) for lang in languages]
         elif isinstance(languages, str):
-            # 如果是字符串，转换为列表并映射
             languages = [EASYOCR_LANG_MAP.get(languages, languages)]
         else:
             languages = _languages
     
-    # GPU配置处理（适配器模式已通过OCRConfig统一处理，这里保留简化逻辑以兼容直接调用）
-    if use_gpu is None:
-        # 从配置读取GPU设置（简化版，完整逻辑在OCRConfig中）
-        force_cpu = config.get('gpu.force_cpu', False)
-        force_gpu = config.get('gpu.force_gpu', True)
-        auto_detect = config.get('gpu.auto_detect', False)
-        
-        if force_cpu:
-            new_use_gpu = False
-        elif force_gpu:
-            new_use_gpu = True
-        elif auto_detect:
-            try:
-                import torch
-                new_use_gpu = torch.cuda.is_available()
-            except ImportError:
-                new_use_gpu = False
-        else:
-            new_use_gpu = True  # 默认使用GPU
-        logger.info(f"EasyOCR GPU设置: {'启用' if new_use_gpu else '禁用'}")
-    else:
-        new_use_gpu = bool(use_gpu)
-        if new_use_gpu:
-            logger.info("EasyOCR: 使用传入的GPU设置（启用）")
+    # 处理GPU设置
+    new_use_gpu = bool(use_gpu) if use_gpu is not None else _use_gpu
     
     # 检查是否需要重新初始化
-    # 1. reader为None（首次初始化）
-    # 2. 强制重新初始化
-    # 3. GPU状态发生变化（从CPU变成GPU）
     need_reinit = (_reader is None or 
                    force_reinit or 
-                   (new_use_gpu and not _use_gpu))
+                   (new_use_gpu != _use_gpu) or
+                   (languages != _languages))
     
     _use_gpu = new_use_gpu
+    _languages = languages
     
     if need_reinit:
         logger.info("正在初始化 EasyOCR（首次运行会下载模型，请稍候）...")
