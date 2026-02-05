@@ -55,7 +55,6 @@ from src.config.config_editor import ConfigEditor
 from src.config.gui_state import GUIStateManager
 from src.gui.gui_logger import GUILoggerHandler
 from src.services.scan_service import ScanService
-from src.utils.cleanup_old_files import start_cleanup_thread
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_matches
 
@@ -89,7 +88,6 @@ class MainGUI:
         self.log_queue = queue.Queue(maxsize=2000)
         self.scan_count = 0
         self.last_scan_time = None
-        self.cleanup_thread = None
         self.memory_label = None
         self._memory_interval_ms = 2000
         self._memory_pid = os.getpid()
@@ -913,21 +911,7 @@ class MainGUI:
     def _run_scan_loop(self):
         """运行扫描循环（在独立线程中）"""
         # 获取配置
-        output_dir = config.get('files.output_dir', 'output')
         scan_interval = self.scan_interval_var.get()
-        
-        # 启动清理线程
-        cleanup_enabled = config.get('cleanup.enabled', True)
-        if cleanup_enabled:
-            max_age_hours = config.get('cleanup.max_age_hours', 1)
-            cleanup_interval = config.get('cleanup.interval_minutes', 10)
-            if self.cleanup_thread is None or not self.cleanup_thread.is_alive():
-                self.cleanup_thread = start_cleanup_thread(
-                    output_dir,
-                    max_age_hours=max_age_hours,
-                    interval_minutes=cleanup_interval
-                )
-                self.append_log("清理线程已启动", "INFO")
         
         try:
             while not self.stop_event.is_set():

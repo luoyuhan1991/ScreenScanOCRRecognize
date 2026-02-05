@@ -12,7 +12,6 @@ from typing import Optional, Dict, List, Any
 
 from ..config.config import config
 from ..ocr.ocr_adapter import OCRConfig, OCRFactory, OCRAdapter
-from ..utils.cleanup_old_files import cleanup_old_folders_by_count
 from ..utils.logger import logger
 from ..utils.scan_screen import scan_screen
 from ..utils.text_matcher import _get_cached_matcher
@@ -34,8 +33,6 @@ class ScanService:
         # 运行时状态
         self.scan_count = 0
         self.last_scan_time = None
-        self.current_minute_folder = None
-        self.current_minute = None
         
         # 配置缓存（避免频繁读取）
         self._cache_config()
@@ -45,8 +42,6 @@ class ScanService:
         self.output_dir = config.get('files.output_dir', 'output')
         self.scan_interval = config.get('scan.interval_seconds', 5)
         self.roi_padding = config.get('scan.roi_padding', 10)
-        self.folder_mode = config.get('files.folder_mode', 'minute')
-        self.max_folders = config.get('files.max_folders', 10)
         self.enable_matching = config.get('matching.enabled', True)
         self.banlist_file = config.get('files.banlist_file', 'docs/banlist.txt')
         self.display_duration = config.get('matching.display_duration', 3)
@@ -108,6 +103,10 @@ class ScanService:
         Returns:
             dict: 包含扫描结果的字典
         """
+        # 重新读取配置，确保使用最新的配置值
+        # 解决GUI勾选框设置后配置不生效的问题
+        self._cache_config()
+        
         result = {
             'success': False,
             'timestamp': None,
@@ -137,12 +136,9 @@ class ScanService:
             )
             
             if screenshot:
-                # 清理旧截图（仅在按分钟模式且保存文件时）
-                if self.folder_mode == 'minute' and self.save_screenshot:
-                    self._cleanup_old_screenshots(save_dir, second_timestamp)
-                
                 if self.save_screenshot:
-                    result['screenshot_path'] = os.path.join(save_dir, f"screenshot_{second_timestamp}.png")
+                    result['screenshot_path'] = os.path.join(self.output_dir, f"screenshot_{second_timestamp}.png")
+                    self._cleanup_old_outputs(second_timestamp)
                 
                 # 3. OCR识别
                 if self.ocr_adapter:
@@ -179,36 +175,38 @@ class ScanService:
 
     def _prepare_save_dir(self, now: datetime) -> str:
         """准备保存目录"""
-        if self.folder_mode == 'minute':
-            minute_timestamp = now.strftime("%Y%m%d_%H%M")
-            
-            if self.current_minute != minute_timestamp:
-                self.current_minute = minute_timestamp
-                self.current_minute_folder = os.path.join(self.output_dir, self.current_minute)
-                
-                if not os.path.exists(self.current_minute_folder):
-                    os.makedirs(self.current_minute_folder, exist_ok=True)
-                    # 清理旧文件夹
-                    cleanup_old_folders_by_count(self.output_dir, max_folders=self.max_folders)
-            
-            return self.current_minute_folder
-        else:
-            second_timestamp = now.strftime("%Y%m%d_%H%M%S")
-            save_dir = os.path.join(self.output_dir, second_timestamp)
-            os.makedirs(save_dir, exist_ok=True)
-            return save_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+        return self.output_dir
 
-    def _cleanup_old_screenshots(self, save_dir, current_timestamp):
-        """清理当前文件夹中的旧截图"""
+    def _cleanup_old_outputs(self, current_timestamp):
+        """清理旧输出文件，只保留最新的10组"""
         try:
-            pattern = os.path.join(save_dir, "screenshot_*.png")
-            current_file = os.path.join(save_dir, f"screenshot_{current_timestamp}.png")
-            for f in glob.glob(pattern):
-                if f != current_file:
+            os.makedirs(self.output_dir, exist_ok=True)
+            
+            all_files = []
+            prefix = f"screenshot_{current_timestamp}"
+            
+            for f in glob.glob(os.path.join(self.output_dir, "*")):
+                if os.path.isfile(f):
+                    all_files.append(f)
+            
+            if len(all_files) <= 20:
+                return
+            
+            files_to_delete = []
+            for f in all_files:
+                filename = os.path.basename(f)
+                if filename.startswith("screenshot_") or filename.startswith("ocr_result_"):
+                    files_to_delete.append(f)
+            
+            if len(files_to_delete) > 10:
+                files_to_delete.sort(key=os.path.getmtime)
+                for f in files_to_delete[:len(files_to_delete) - 10]:
                     try:
                         os.remove(f)
                     except OSError:
                         pass
+                    
         except Exception:
             pass
 
