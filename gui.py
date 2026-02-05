@@ -1,4 +1,4 @@
-"""
+﻿"""
 ScreenScanOCRRecognize - GUI主程序
 提供图形用户界面，支持参数配置、状态监控和日志显示
 """
@@ -176,10 +176,8 @@ class MainGUI:
         roi_check.pack(side=tk.LEFT, padx=5)
         
         self.remember_roi_var = tk.BooleanVar()
-        remember_roi_check = ttk.Checkbutton(row1, text="记住上次的ROI区域", variable=self.remember_roi_var)
+        remember_roi_check = ttk.Checkbutton(row1, text="记住ROI区域", variable=self.remember_roi_var)
         remember_roi_check.pack(side=tk.LEFT, padx=5)
-        # 绑定事件：当开关关闭时，清除保存的ROI记忆
-        self.remember_roi_var.trace('w', self.on_remember_roi_changed)
         
         self.enable_gpu_var = tk.BooleanVar()
         gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
@@ -485,21 +483,11 @@ class MainGUI:
         except:
             pass
     
-    def on_remember_roi_changed(self, *args):
-        """记住ROI开关改变事件：如果关闭开关，清除保存的ROI"""
-        if not self.remember_roi_var.get():
-            # 开关关闭时，清除保存的ROI
-            self.state_manager.set_saved_roi(None)
-            self.state_manager.save_state()
-            self.append_log("已清除保存的ROI区域", "INFO")
-    
     def load_settings(self):
         """加载设置"""
         # 从config.yaml加载业务配置
-        # 注意：scan.enable_roi不在默认配置中，使用False作为默认值
         self.enable_roi_var.set(config.get('scan.enable_roi', False))
-        # 从GUI状态管理器读取是否记住ROI
-        self.remember_roi_var.set(self.state_manager.get_remember_roi())
+        self.remember_roi_var.set(config.get('scan.remember_roi', True))
         self.enable_gpu_var.set(config.get('gpu.force_gpu', True))
         self.scan_interval_var.set(config.get('scan.interval_seconds', 5))
         
@@ -528,14 +516,8 @@ class MainGUI:
     def save_settings(self):
         """保存设置"""
         # 保存业务配置到config.yaml
-        # 注意：scan.enable_roi是GUI新增的配置项
         config.set('scan.enable_roi', self.enable_roi_var.get())
-        # 保存是否记住ROI到GUI状态管理器
-        remember_roi = self.remember_roi_var.get()
-        self.state_manager.set_remember_roi(remember_roi)
-        # 如果关闭了记住ROI，确保清除保存的ROI
-        if not remember_roi:
-            self.state_manager.set_saved_roi(None)
+        config.set('scan.remember_roi', self.remember_roi_var.get())
         config.set('gpu.force_gpu', self.enable_gpu_var.get())
         config.set('scan.interval_seconds', self.scan_interval_var.get())
         
@@ -627,13 +609,13 @@ class MainGUI:
                 # 先最小化窗口
                 self.root.iconify()
                 
-                # 选中“记住ROI”：直接使用上次保存的ROI；未选中：每次重新选择
+                # 从配置读取记住ROI状态和已保存的ROI
                 remember_roi = self.remember_roi_var.get()
-                saved_roi = self.state_manager.get_saved_roi() if remember_roi else None
+                saved_roi = config.get('scan.saved_roi')
                 
                 if remember_roi and saved_roi:
-                    self.roi = saved_roi
-                    self.append_log(f"使用上次保存的ROI区域: {self.roi}", "INFO")
+                    self.roi = tuple(saved_roi)
+                    self.append_log(f"使用保存的ROI区域: {self.roi}", "INFO")
                 else:
                     self.append_log("请选择ROI区域...", "INFO")
                     self.roi = select_roi_interactive(parent=self.root)
@@ -643,9 +625,9 @@ class MainGUI:
                         self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
                         
                         if remember_roi:
-                            self.state_manager.set_saved_roi(self.roi)
-                            self.state_manager.save_state()
-                            self.append_log("ROI区域已保存，下次启动将自动使用", "INFO")
+                            config.set('scan.saved_roi', list(self.roi))
+                            config.save()
+                            self.append_log("ROI区域已保存", "INFO")
             else:
                 self.roi = None
                 # 如果没有ROI选择，直接最小化窗口

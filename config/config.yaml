@@ -2,13 +2,19 @@ scan:
   interval_seconds: 5.0
   roi_padding: 10
   enable_roi: true
+  saved_roi:
+  - 1638
+  - 272
+  - 1880
+  - 752
+  remember_roi: true
 ocr:
   default_engine: paddle
   languages:
   - ch
   - en
   min_confidence: 0.3
-  save_processed_image: true
+  save_processed_image: false
   easyocr:
     canvas_size: 1920
     mag_ratio: 1.5
@@ -20,8 +26,8 @@ gpu:
 files:
   output_dir: output
   banlist_file: C:/Users/Administrator/Desktop/banlist.txt
-  save_screenshot: true
-  save_ocr_result: true
+  save_screenshot: false
+  save_ocr_result: false
   folder_mode: minute
   max_folders: 10
 cleanup:

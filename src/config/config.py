@@ -32,7 +32,8 @@ class Config:
             'scan': {
                 'interval_seconds': 5,
                 'roi_padding': 10,
-                'enable_roi': False
+                'enable_roi': False,
+                'saved_roi': None
             },
             'ocr': {
                 'default_engine': 'paddle',
