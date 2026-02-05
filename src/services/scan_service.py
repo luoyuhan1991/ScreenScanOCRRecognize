@@ -33,6 +33,7 @@ class ScanService:
         # 运行时状态
         self.scan_count = 0
         self.last_scan_time = None
+        self.output_count = 0
         
         # 配置缓存（避免频繁读取）
         self._cache_config()
@@ -138,16 +139,14 @@ class ScanService:
             if screenshot:
                 if self.save_screenshot:
                     result['screenshot_path'] = os.path.join(self.output_dir, f"screenshot_{second_timestamp}.png")
-                    self._cleanup_old_outputs(second_timestamp)
                 
                 # 3. OCR识别
                 if self.ocr_adapter:
                     # 注意：recognize_and_print 内部目前包含了保存文件的逻辑
-                    # 这是一个设计上的耦合，暂时保留，后续可以重构 ocr_adapter 拆分识别和保存
                     ocr_results = self.ocr_adapter.recognize_and_print(
                         screenshot,
                         config=self.ocr_config,
-                        save_dir=save_dir,
+                        save_dir=self.output_dir,
                         timestamp=second_timestamp,
                         roi=None, # 截图已裁剪
                         save_result=self.save_ocr_result
@@ -166,6 +165,12 @@ class ScanService:
                         
                 result['success'] = True
                 
+                # 每10次扫描清空一次
+                self.output_count += 1
+                if self.output_count >= 10:
+                    self.output_count = 0
+                    self._cleanup_old_outputs()
+                    
         except Exception as e:
             logger.error(f"扫描流程出错: {e}", exc_info=True)
             result['error'] = str(e)
@@ -178,35 +183,26 @@ class ScanService:
         os.makedirs(self.output_dir, exist_ok=True)
         return self.output_dir
 
-    def _cleanup_old_outputs(self, current_timestamp):
+    def _cleanup_old_outputs(self):
         """清理旧输出文件，只保留最新的10组"""
         try:
             os.makedirs(self.output_dir, exist_ok=True)
             
-            all_files = []
-            prefix = f"screenshot_{current_timestamp}"
-            
+            files_to_delete = []
             for f in glob.glob(os.path.join(self.output_dir, "*")):
                 if os.path.isfile(f):
-                    all_files.append(f)
+                    filename = os.path.basename(f)
+                    if filename.startswith("screenshot_") or filename.startswith("ocr_result_"):
+                        files_to_delete.append(f)
             
-            if len(all_files) <= 20:
-                return
-            
-            files_to_delete = []
-            for f in all_files:
-                filename = os.path.basename(f)
-                if filename.startswith("screenshot_") or filename.startswith("ocr_result_"):
-                    files_to_delete.append(f)
+            files_to_delete.sort(key=os.path.getmtime)
             
             if len(files_to_delete) > 10:
-                files_to_delete.sort(key=os.path.getmtime)
-                for f in files_to_delete[:len(files_to_delete) - 10]:
+                for f in files_to_delete[:-10]:
                     try:
                         os.remove(f)
                     except OSError:
                         pass
-                    
         except Exception:
             pass
 
