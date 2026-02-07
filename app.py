@@ -577,12 +577,7 @@ class MainGUI:
         try:
             self.append_log(f"OCR初始化完成", "INFO")
             
-            # 如果启用ROI，先最小化窗口，然后选择ROI区域
             if self.enable_roi_var.get():
-                # 先最小化窗口
-                self.root.iconify()
-                
-                # 从配置读取记住ROI状态和已保存的ROI
                 remember_roi = self.remember_roi_var.get()
                 saved_roi = config.get('scan.saved_roi')
                 
@@ -590,6 +585,8 @@ class MainGUI:
                     self.roi = tuple(saved_roi)
                     self.append_log(f"使用保存的ROI区域: {self.roi}", "INFO")
                 else:
+                    self.root.iconify()
+                    time.sleep(0.5)
                     self.append_log("请选择ROI区域...", "INFO")
                     self.roi = select_roi_interactive(parent=self.root)
                     if self.roi is None:
@@ -603,10 +600,7 @@ class MainGUI:
                             self.append_log("ROI区域已保存", "INFO")
             else:
                 self.roi = None
-                # 如果没有ROI选择，直接最小化窗口
-                self.root.iconify()
             
-            # 设置ROI到服务
             self.scan_service.set_roi(self.roi)
             
             # 启动扫描线程

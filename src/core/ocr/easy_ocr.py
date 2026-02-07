@@ -179,10 +179,11 @@ def recognize_text(image, languages=None,
         for (bbox, text, confidence) in results:
             if confidence >= min_confidence:
                 y_coord = np.mean([point[1] for point in bbox])
+                bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else list(bbox)
                 text_items.append({
                     'text': text,
                     'confidence': float(confidence),
-                    'bbox': bbox.tolist()
+                    'bbox': bbox_list
                 })
                 
         # 按Y坐标排序（从上到下）
