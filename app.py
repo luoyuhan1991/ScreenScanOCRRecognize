@@ -62,6 +62,10 @@ class MainGUI:
         
         # OCR相关
         self.roi = None
+        self.ocr_initialized = False
+        self.last_ocr_engine = None
+        self.last_ocr_languages = None
+        self.last_ocr_gpu = None
         
         # ROI可视化窗口
         self.roi_window = None
@@ -529,23 +533,36 @@ class MainGUI:
             # 保存当前配置
             self.save_settings()
             
-            # 禁用开始按钮，显示初始化状态
-            self.start_btn.config(state=tk.DISABLED)
-            self.update_status("初始化中...")
-            self.append_log("正在初始化OCR引擎...", "INFO")
-            
             # 获取参数
             languages = config.get('ocr.languages', ['ch', 'en'])
             use_gpu = self.enable_gpu_var.get()
             engine_choice = self.ocr_engine_var.get()
             
-            # 在后台线程中初始化OCR（避免阻塞GUI）
-            init_thread = threading.Thread(
-                target=self._init_ocr_in_thread,
-                args=(engine_choice, languages, use_gpu),
-                daemon=True
+            # 检查是否需要重新初始化OCR
+            need_reinit = (
+                not self.ocr_initialized or
+                self.last_ocr_engine != engine_choice or
+                self.last_ocr_languages != tuple(languages) or
+                self.last_ocr_gpu != use_gpu
             )
-            init_thread.start()
+            
+            # 如果需要重新初始化，先初始化
+            if need_reinit:
+                # 禁用开始按钮，显示初始化状态
+                self.start_btn.config(state=tk.DISABLED)
+                self.update_status("初始化中...")
+                self.append_log("正在初始化OCR引擎...", "INFO")
+                
+                # 在后台线程中初始化OCR（避免阻塞GUI）
+                init_thread = threading.Thread(
+                    target=self._init_ocr_in_thread,
+                    args=(engine_choice, languages, use_gpu),
+                    daemon=True
+                )
+                init_thread.start()
+            else:
+                # OCR已初始化且配置未变化，直接启动扫描
+                self.root.after(0, self._on_ocr_init_complete)
             
         except Exception as e:
             self.append_log(f"启动失败: {e}", "ERROR")
@@ -563,6 +580,12 @@ class MainGUI:
                 languages=languages,
                 use_gpu=use_gpu
             )
+            
+            # 记录初始化后的配置
+            self.last_ocr_engine = engine_choice
+            self.last_ocr_languages = tuple(languages)
+            self.last_ocr_gpu = use_gpu
+            self.ocr_initialized = True
             
             # 在主线程中更新UI
             self.root.after(0, self._on_ocr_init_complete)
