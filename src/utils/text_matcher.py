@@ -204,13 +204,21 @@ class FloatingTextDisplay:
         except:
             pass
 
-        # 关键：设置半透明窗口
-        self.root.attributes('-alpha', 0.5)
+        # 关键：设置透明背景，让鼠标事件穿透
+        self.root.attributes('-transparentcolor', 'black')
+        self.root.config(bg='black')
+        self.root.attributes('-alpha', 0.7)
 
-        # 禁用窗口输入
-        self.root.attributes('-disabled', True)
+        # 允许鼠标穿透窗口（Windows API）
         try:
-            self.root.attributes('-focusable', False)
+            import ctypes
+            from ctypes import windll
+            hwnd = windll.user32.GetParent(self.root.winfo_id())
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TRANSPARENT = 0x00000020
+            style = windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT)
         except:
             pass
 
@@ -238,6 +246,7 @@ class FloatingTextDisplay:
             self.root,
             width=window_width,
             height=window_height,
+            bg='black',
             highlightthickness=0,
             takefocus=False
         )
@@ -255,7 +264,7 @@ class FloatingTextDisplay:
             text_x, text_y,
             text=self.text,
             font=font_tuple,
-            fill='#FF4444',
+            fill='#ff3333',
             anchor='center',
             tags='watermark_text'
         )
