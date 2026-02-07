@@ -208,25 +208,18 @@ class ScanService:
         return self.output_dir
 
     def _cleanup_old_outputs(self):
-        """清理旧输出文件，只保留最新的10组"""
+        """清理旧输出文件，删除全部历史截图和OCR结果"""
         try:
             os.makedirs(self.output_dir, exist_ok=True)
             
-            files_to_delete = []
             for f in glob.glob(os.path.join(self.output_dir, "*")):
                 if os.path.isfile(f):
                     filename = os.path.basename(f)
                     if filename.startswith("screenshot_") or filename.startswith("ocr_result_"):
-                        files_to_delete.append(f)
-            
-            files_to_delete.sort(key=os.path.getmtime)
-            
-            if len(files_to_delete) > 10:
-                for f in files_to_delete[:-10]:
-                    try:
-                        os.remove(f)
-                    except OSError:
-                        pass
+                        try:
+                            os.remove(f)
+                        except OSError:
+                            pass
         except Exception:
             pass
 

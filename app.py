@@ -63,6 +63,10 @@ class MainGUI:
         # OCR相关
         self.roi = None
         
+        # ROI可视化窗口
+        self.roi_window = None
+        self.roi_canvas = None
+        
         # 创建界面
         self.create_widgets()
         
@@ -616,6 +620,9 @@ class MainGUI:
             self.update_status("运行中")
             self.append_log("扫描已启动", "INFO")
             
+            # 显示ROI区域边框
+            self._show_roi_border()
+            
         except Exception as e:
             self.append_log(f"扫描失败: {e}", "ERROR")
             self.show_error(f"扫描失败: {e}")
@@ -638,6 +645,9 @@ class MainGUI:
         
         self.is_running = False
         self.stop_event.set()
+        
+        # 隐藏ROI区域边框
+        self._hide_roi_border()
         
         # 更新UI
         self.start_btn.config(state=tk.NORMAL)
@@ -728,10 +738,86 @@ class MainGUI:
                 self.on_stop()
                 time.sleep(0.5)  # 等待线程结束
         
+        # 隐藏ROI区域边框
+        self._hide_roi_border()
+        
         # 保存GUI状态
         self.state_manager.save_state()
         
         self.root.destroy()
+    
+    def _show_roi_border(self):
+        """显示ROI区域红色边框（使用实际截图区域）"""
+        try:
+            roi = self.scan_service.roi
+            padding = getattr(self.scan_service, 'roi_padding', 10)
+            
+            import ctypes
+            user32 = ctypes.windll.user32
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+            
+            if roi is not None:
+                # 有框选区域
+                x1, y1, x2, y2 = roi
+                
+                x1_actual = max(0, x1 - padding)
+                y1_actual = max(0, y1 - padding)
+                x2_actual = min(screen_width, x2 + padding)
+                y2_actual = min(screen_height, y2 + padding)
+            else:
+                # 全屏模式
+                x1_actual = 0
+                y1_actual = 0
+                x2_actual = screen_width
+                y2_actual = screen_height
+            
+            width = x2_actual - x1_actual
+            height = y2_actual - y1_actual
+            
+            if width <= 0 or height <= 0:
+                return
+            
+            self.roi_window = tk.Toplevel(self.root)
+            self.roi_window.withdraw()
+            self.roi_window.overrideredirect(True)
+            self.roi_window.attributes('-topmost', True)
+            self.roi_window.attributes('-transparentcolor', 'black')
+            
+            self.roi_window.geometry(f'{width}x{height}+{x1_actual}+{y1_actual}')
+            self.roi_window.config(bg='black')
+            
+            self.roi_canvas = tk.Canvas(
+                self.roi_window,
+                width=width,
+                height=height,
+                bg='black',
+                highlightthickness=0,
+                bd=0
+            )
+            self.roi_canvas.pack(fill=tk.BOTH, expand=True)
+            
+            self.roi_canvas.create_rectangle(
+                1, 1, width - 1, height - 1,
+                outline='#ff3333',
+                width=4,
+                fill=''
+            )
+            
+            self.roi_window.deiconify()
+            
+        except Exception as e:
+            print(f"显示ROI边框失败: {e}")
+    
+    def _hide_roi_border(self):
+        """隐藏ROI区域红色边框"""
+        try:
+            if self.roi_window:
+                self.roi_window.destroy()
+                self.roi_window = None
+                self.roi_canvas = None
+        except Exception:
+            pass
     
     def update_status(self, status):
         """更新状态显示"""
