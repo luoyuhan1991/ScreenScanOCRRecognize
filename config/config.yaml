@@ -9,7 +9,7 @@ scan:
   - 752
   remember_roi: true
 ocr:
-  default_engine: easy
+  default_engine: paddle
   languages:
   - ch
   - en
