@@ -97,95 +97,105 @@ def recognize_text(image, languages=None,
     Args:
         image: PIL.Image对象或图片文件路径
         languages (list): OCR语言列表，默认为 ['ch_sim', 'en']
-        min_confidence (float): 最小置信度阈值，默认为0.15
-        use_gpu (bool): 是否使用GPU，默认为None（自动检测）
-        roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
+        min_confidence (float): 最小置信度阈值，默认为0.15。低于此值的识别结果将被过滤
+        use_gpu (bool): 是否使用GPU，默认为None（自动检测）。GPU可以显著提高识别速度
+        roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）。
+                     只对指定区域进行识别，可以提高准确率和速度
     
     Returns:
         Tuple[List[Dict[str, Any]], float]: (识别结果列表, 耗时)
             - 识别结果列表：每个元素包含 text, confidence, bbox
+              - text: 识别出的文本内容
+              - confidence: 识别置信度（0-1之间）
+              - bbox: 文本边界框坐标 [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
             - 耗时：OCR识别耗时（秒）
+    
+    Raises:
+        Exception: 当OCR识别过程中发生错误时
     """
     global _reader
     
     try:
-        # 初始化阅读器（如果尚未初始化）
+        # 初始化OCR阅读器（如果尚未初始化）
         if _reader is None:
             init_reader(languages, use_gpu)
         
-        # 如果传入的是文件路径，则打开图片
+        # 如果输入是文件路径，则加载图片
         if isinstance(image, str):
             image = Image.open(image)
         
-        # 调试信息
-        logger.debug(f"图像类型: {type(image)}, 尺寸: {image.size}")
-        logger.debug(f"languages: {languages}, min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
-        
-        # 应用ROI裁剪
+        # 如果指定了ROI区域，则裁剪图片
         if roi is not None:
             x1, y1, x2, y2 = roi
             image = image.crop((x1, y1, x2, y2))
         
-        # 直接使用原始图像，不进行预处理
+        # 将PIL图像转换为numpy数组
         img_array = np.array(image)
         
-        # 获取EasyOCR性能参数（支持动态调整）
+        # 从配置中获取OCR参数
         default_canvas_size = config.get('ocr.easyocr.canvas_size', 1920)
         default_mag_ratio = config.get('ocr.easyocr.mag_ratio', 1.5)
         dynamic_params = config.get('ocr.easyocr.dynamic_params', True)
         
-        # 根据图像尺寸动态调整参数
+        # 根据图片尺寸动态调整OCR参数
+        # 对于大图，使用较小的canvas_size和mag_ratio以提高速度
+        # 对于小图，使用较大的mag_ratio以提高识别准确率
         if dynamic_params:
             width, height = image.size
-            # 对于大图像，降低canvas_size和mag_ratio以提升速度
             if width > 1920 or height > 1080:
+                # 超高清图片：降低参数以提高处理速度
                 canvas_size = min(default_canvas_size, 1280)
                 mag_ratio = min(default_mag_ratio, 1.0)
             elif width > 1280 or height > 720:
+                # 高清图片：使用默认参数
                 canvas_size = default_canvas_size
                 mag_ratio = default_mag_ratio
             else:
-                # 小图像可以使用更小的参数
+                # 普通图片：使用较小的canvas_size和较大的mag_ratio
                 canvas_size = min(default_canvas_size, 1280)
                 mag_ratio = default_mag_ratio
         else:
+            # 不使用动态参数，直接使用配置的默认值
             canvas_size = default_canvas_size
             mag_ratio = default_mag_ratio
         
-        logger.debug(f"EasyOCR参数: canvas_size={canvas_size}, mag_ratio={mag_ratio}")
+        logger.debug(f"开始OCR识别，图像尺寸: {img_array.shape}")
         
-        # 进行OCR识别，使用优化后的参数
-        logger.debug("开始OCR识别...")
+        # 执行OCR识别
         start_time = time.time()
         results = _reader.readtext(
             img_array,
-            detail=1,  # 返回详细信息（边界框、置信度）
-            paragraph=False,  # 不自动合并段落
-            width_ths=0.5,  # 宽度阈值，提高以增加合并
-            height_ths=0.5,  # 高度阈值，提高以增加合并
-            contrast_ths=0.2,  # 对比度阈值，降低
-            adjust_contrast=0.5,  # 对比度调整
-            text_threshold=0.4,  # 文本阈值，降低
-            low_text=0.2,  # 低文本阈值，降低
-            link_threshold=0.2,  # 链接阈值，降低
-            canvas_size=canvas_size,  # 动态调整的画布大小
-            mag_ratio=mag_ratio  # 动态调整的放大比例
+            detail=1,              # 返回详细信息（边界框、文本、置信度）
+            paragraph=False,       # 不合并为段落，保持独立的文本行
+            width_ths=0.5,         # 文本框宽度阈值，用于合并相邻文本
+            height_ths=0.5,        # 文本框高度阈值，用于合并相邻文本
+            contrast_ths=0.2,      # 对比度阈值，低于此值的区域将被忽略
+            adjust_contrast=0.5,   # 对比度调整值
+            text_threshold=0.4,    # 文本概率阈值，低于此值的区域不视为文本
+            low_text=0.2,          # 低文本区域阈值
+            link_threshold=0.2,    # 链接阈值，用于连接文本框
+            canvas_size=canvas_size,  # 画布大小，用于内部处理
+            mag_ratio=mag_ratio    # 放大比例，用于提高小文本的识别率
         )
         ocr_duration = time.time() - start_time
-        logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果，耗时: {ocr_duration:.3f}秒")
+        logger.debug(f"OCR识别完成，结果类型: {type(results)}, 结果长度: {len(results)}, 耗时: {ocr_duration:.3f}秒")
         
-        # 提取所有识别到的文字，按位置排序
+        # 处理识别结果
         text_items: List[Dict[str, Any]] = []
         for (bbox, text, confidence) in results:
+            # 过滤低置信度的结果
             if confidence >= min_confidence:
+                # 计算文本框的y坐标平均值（用于排序）
                 y_coord = np.mean([point[1] for point in bbox])
+                # 将numpy数组转换为列表
+                bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else list(bbox)
                 text_items.append({
                     'text': text,
                     'confidence': float(confidence),
-                    'bbox': bbox.tolist()
+                    'bbox': bbox_list
                 })
-                
-        # 按Y坐标排序（从上到下）
+        
+        # 按照y坐标排序，使文本从上到下排列
         text_items.sort(key=lambda x: x['bbox'][0][1])
         
         return text_items, ocr_duration
@@ -207,10 +217,13 @@ def recognize_and_print(image, languages=None, save_dir="output",
         timestamp (str): 时间戳，用于生成文件名。如果为None，则自动生成
         use_gpu (bool): 是否使用GPU，默认为None（自动检测）
         roi (tuple): 感兴趣区域 (x1, y1, x2, y2)，默认为None（全图）
-        save_result (bool): 是否保存OCR结果文件
+        save_result (bool): 是否保存OCR结果文件，默认为True
     
     Returns:
         List[Dict[str, Any]]: 识别结果列表，每个元素包含 text, confidence, bbox
+    
+    Raises:
+        Exception: 当保存结果文件时发生错误
     """
     min_confidence = config.get('ocr.min_confidence', 0.3)
     
@@ -218,9 +231,11 @@ def recognize_and_print(image, languages=None, save_dir="output",
                          min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)
     
     if text_items:
-        logger.info(f"OCR识别完成，已识别到 {len(text_items)} 个文本区域，耗时: {ocr_duration:.3f}秒")
+        logger.info(f"提取识别结果，共 {len(text_items)} 行")
     else:
-        logger.info(f"OCR识别完成，未识别到文字内容，耗时: {ocr_duration:.3f}秒")
+        logger.info("未识别到任何文本")
+    
+    print_ocr_results(text_items)
     
     if not save_result:
         return text_items
@@ -242,33 +257,58 @@ def recognize_and_print(image, languages=None, save_dir="output",
     else:
         txt_filename = os.path.join(save_dir, f"ocr_result_{timestamp}.txt")
     
-    text_lines = [item['text'] for item in text_items]
-    text_content = '\n'.join(text_lines)
-    
     try:
         with open(txt_filename, 'w', encoding='utf-8') as f:
-            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
-            f.write(f"OCR识别结果 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
             f.write("="*60 + "\n\n")
             
-            if text_content:
-                f.write(text_content)
-            else:
-                f.write("未识别到文字内容")
-            f.write("\n")
-            
+            for item in text_items:
+                text = item['text']
+                confidence = item['confidence']
+                f.write(f"[置信度: {confidence:.2f}] {text}\n")
+
+            total_chars = sum(len(item['text']) for item in text_items)
+            avg_confidence = sum(item['confidence'] for item in text_items) / len(text_items) if text_items else 0
+
             f.write(f"\n--- 识别统计 ---\n")
-            f.write(f"识别到 {len(text_items)} 个文本区域\n")
+            f.write(f"总字符数: {total_chars}\n")
+            f.write(f"平均置信度: {avg_confidence:.2f}\n")
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
-            if roi:
-                f.write(f"ROI区域: {roi}\n")
-        logger.info(f"OCR结果已保存: {txt_filename}")
+        logger.info(f"OCR结果已保存到: {txt_filename}")
     except Exception as e:
         logger.error(f"保存OCR结果时出错: {e}", exc_info=True)
     
     return text_items
+
+
+def print_ocr_results(results):
+    """
+    打印OCR结果到控制台
+    
+    Args:
+        results (List[Dict[str, Any]]): 识别结果列表，每个元素包含 text, confidence, bbox
+    """
+    if not results:
+        logger.info("未识别到任何文本")
+        return
+
+    logger.info("OCR识别结果:")
+    logger.info("-" * 50)
+
+    for i, item in enumerate(results, 1):
+        text = item['text']
+        confidence = item['confidence']
+        logger.info(f"{i:2d}. [置信度: {confidence:.2f}] {text}")
+
+    logger.info("-" * 50)
+
+    total_chars = sum(len(item['text']) for item in results)
+    avg_confidence = sum(item['confidence'] for item in results) / len(results) if results else 0
+
+    logger.info(f"总计: {len(results)} 个文本块, {total_chars} 个字符")
+    logger.info(f"平均置信度: {avg_confidence:.2f}")
 
 
 if __name__ == "__main__":
