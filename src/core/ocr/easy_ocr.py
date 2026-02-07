@@ -109,35 +109,24 @@ def recognize_text(image, languages=None,
     global _reader
     
     try:
-        # 初始化阅读器（如果尚未初始化）
         if _reader is None:
             init_reader(languages, use_gpu)
         
-        # 如果传入的是文件路径，则打开图片
         if isinstance(image, str):
             image = Image.open(image)
         
-        # 调试信息
-        logger.debug(f"图像类型: {type(image)}, 尺寸: {image.size}")
-        logger.debug(f"languages: {languages}, min_confidence: {min_confidence}, use_gpu: {use_gpu}, roi: {roi}")
-        
-        # 应用ROI裁剪
         if roi is not None:
             x1, y1, x2, y2 = roi
             image = image.crop((x1, y1, x2, y2))
         
-        # 直接使用原始图像，不进行预处理
         img_array = np.array(image)
         
-        # 获取EasyOCR性能参数（支持动态调整）
         default_canvas_size = config.get('ocr.easyocr.canvas_size', 1920)
         default_mag_ratio = config.get('ocr.easyocr.mag_ratio', 1.5)
         dynamic_params = config.get('ocr.easyocr.dynamic_params', True)
         
-        # 根据图像尺寸动态调整参数
         if dynamic_params:
             width, height = image.size
-            # 对于大图像，降低canvas_size和mag_ratio以提升速度
             if width > 1920 or height > 1080:
                 canvas_size = min(default_canvas_size, 1280)
                 mag_ratio = min(default_mag_ratio, 1.0)
@@ -145,36 +134,32 @@ def recognize_text(image, languages=None,
                 canvas_size = default_canvas_size
                 mag_ratio = default_mag_ratio
             else:
-                # 小图像可以使用更小的参数
                 canvas_size = min(default_canvas_size, 1280)
                 mag_ratio = default_mag_ratio
         else:
             canvas_size = default_canvas_size
             mag_ratio = default_mag_ratio
         
-        logger.debug(f"EasyOCR参数: canvas_size={canvas_size}, mag_ratio={mag_ratio}")
+        logger.debug(f"开始OCR识别，图像尺寸: {img_array.shape}")
         
-        # 进行OCR识别，使用优化后的参数
-        logger.debug("开始OCR识别...")
         start_time = time.time()
         results = _reader.readtext(
             img_array,
-            detail=1,  # 返回详细信息（边界框、置信度）
-            paragraph=False,  # 不自动合并段落
-            width_ths=0.5,  # 宽度阈值，提高以增加合并
-            height_ths=0.5,  # 高度阈值，提高以增加合并
-            contrast_ths=0.2,  # 对比度阈值，降低
-            adjust_contrast=0.5,  # 对比度调整
-            text_threshold=0.4,  # 文本阈值，降低
-            low_text=0.2,  # 低文本阈值，降低
-            link_threshold=0.2,  # 链接阈值，降低
-            canvas_size=canvas_size,  # 动态调整的画布大小
-            mag_ratio=mag_ratio  # 动态调整的放大比例
+            detail=1,
+            paragraph=False,
+            width_ths=0.5,
+            height_ths=0.5,
+            contrast_ths=0.2,
+            adjust_contrast=0.5,
+            text_threshold=0.4,
+            low_text=0.2,
+            link_threshold=0.2,
+            canvas_size=canvas_size,
+            mag_ratio=mag_ratio
         )
         ocr_duration = time.time() - start_time
-        logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果，耗时: {ocr_duration:.3f}秒")
+        logger.debug(f"OCR识别完成，结果类型: {type(results)}, 结果长度: {len(results)}, 耗时: {ocr_duration:.3f}秒")
         
-        # 提取所有识别到的文字，按位置排序
         text_items: List[Dict[str, Any]] = []
         for (bbox, text, confidence) in results:
             if confidence >= min_confidence:
@@ -186,7 +171,6 @@ def recognize_text(image, languages=None,
                     'bbox': bbox_list
                 })
                 
-        # 按Y坐标排序（从上到下）
         text_items.sort(key=lambda x: x['bbox'][0][1])
         
         return text_items, ocr_duration
@@ -219,9 +203,11 @@ def recognize_and_print(image, languages=None, save_dir="output",
                          min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)
     
     if text_items:
-        logger.info(f"OCR识别完成，已识别到 {len(text_items)} 个文本区域，耗时: {ocr_duration:.3f}秒")
+        logger.info(f"提取识别结果，共 {len(text_items)} 行")
     else:
-        logger.info(f"OCR识别完成，未识别到文字内容，耗时: {ocr_duration:.3f}秒")
+        logger.info("未识别到任何文本")
+    
+    print_ocr_results(text_items)
     
     if not save_result:
         return text_items
@@ -243,33 +229,53 @@ def recognize_and_print(image, languages=None, save_dir="output",
     else:
         txt_filename = os.path.join(save_dir, f"ocr_result_{timestamp}.txt")
     
-    text_lines = [item['text'] for item in text_items]
-    text_content = '\n'.join(text_lines)
-    
     try:
         with open(txt_filename, 'w', encoding='utf-8') as f:
-            f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
-            f.write(f"OCR识别结果 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"识别时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if roi:
                 f.write(f"ROI区域: {roi}\n")
             f.write("="*60 + "\n\n")
             
-            if text_content:
-                f.write(text_content)
-            else:
-                f.write("未识别到文字内容")
-            f.write("\n")
-            
+            for item in text_items:
+                text = item['text']
+                confidence = item['confidence']
+                f.write(f"[置信度: {confidence:.2f}] {text}\n")
+
+            total_chars = sum(len(item['text']) for item in text_items)
+            avg_confidence = sum(item['confidence'] for item in text_items) / len(text_items) if text_items else 0
+
             f.write(f"\n--- 识别统计 ---\n")
-            f.write(f"识别到 {len(text_items)} 个文本区域\n")
+            f.write(f"总字符数: {total_chars}\n")
+            f.write(f"平均置信度: {avg_confidence:.2f}\n")
             f.write(f"OCR耗时: {ocr_duration:.3f}秒\n")
-            if roi:
-                f.write(f"ROI区域: {roi}\n")
-        logger.info(f"OCR结果已保存: {txt_filename}")
+        logger.info(f"OCR结果已保存到: {txt_filename}")
     except Exception as e:
         logger.error(f"保存OCR结果时出错: {e}", exc_info=True)
     
     return text_items
+
+
+def print_ocr_results(results):
+    """打印OCR结果到控制台"""
+    if not results:
+        logger.info("未识别到任何文本")
+        return
+
+    logger.info("OCR识别结果:")
+    logger.info("-" * 50)
+
+    for i, item in enumerate(results, 1):
+        text = item['text']
+        confidence = item['confidence']
+        logger.info(f"{i:2d}. [置信度: {confidence:.2f}] {text}")
+
+    logger.info("-" * 50)
+
+    total_chars = sum(len(item['text']) for item in results)
+    avg_confidence = sum(item['confidence'] for item in results) / len(results) if results else 0
+
+    logger.info(f"总计: {len(results)} 个文本块, {total_chars} 个字符")
+    logger.info(f"平均置信度: {avg_confidence:.2f}")
 
 
 if __name__ == "__main__":
