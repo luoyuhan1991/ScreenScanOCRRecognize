@@ -89,22 +89,6 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     return _reader
 
 
-def postprocess_text(text):
-    """
-    后处理文本，修复常见的OCR错误
-    （当前版本保留方法结构，暂不实现具体逻辑）
-    
-    Args:
-        text (str): 原始OCR识别文本
-    
-    Returns:
-        str: 后处理后的文本
-    """
-    # 保留方法结构，暂不实现具体后处理逻辑
-    # 未来可以根据需要添加文本纠错、格式化等功能
-    return text
-
-
 def recognize_text(image, languages=None, 
                    min_confidence=0.15, use_gpu=None, roi=None):
     """

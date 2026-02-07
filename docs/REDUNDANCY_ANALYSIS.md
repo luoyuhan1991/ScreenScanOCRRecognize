@@ -96,7 +96,7 @@ if roi is not None:
 
 ## 中等冗余（可考虑优化）
 
-### 4. postprocess_text 函数未使用
+### 4. postprocess_text 函数未使用 ✅ 已删除
 
 **涉及文件**：`src/ocr/easy_ocr.py`
 
@@ -109,25 +109,25 @@ def postprocess_text(text):
     return text  # 函数体只是返回输入，没有任何处理
 ```
 
-**建议**：要么实现功能，要么删除
+**修复**：2026-02-07 删除此空壳函数
 
 ---
 
-### 5. 清理逻辑分散
+### 5. 清理逻辑分散 ✅ 已确认
 
 **涉及文件**：
 - `src/services/scan_service.py` - `_cleanup_old_outputs()`
 - `cleanup_old_files.py`（已删除）
 
 **详情**：
-- scan_service.py 中有清理逻辑
-- config.yaml 中还有 cleanup 配置项
+- scan_service.py 中有清理逻辑（基于文件数量，每10次扫描清理）
+- 已与基于时间的 cleanup 配置解耦
 
-**建议**：统一清理逻辑，移除不再使用的配置项
+**结论**：无需修改，保留现有功能
 
 ---
 
-### 6. 配置文件中的过期配置
+### 6. 配置文件中的过期配置 ✅ 已删除
 
 **涉及文件**：`config/config.yaml`
 
@@ -139,6 +139,8 @@ cleanup:                    # 不再使用的配置
   max_age_hours: 1
   interval_minutes: 10
 ```
+
+**修复**：2026-02-07 已从 config.yaml 中删除 cleanup 配置块
 
 **建议**：删除这些配置项
 
@@ -241,5 +243,7 @@ ScreenScanOCRRecognize/
 | 2026-02-06 | 第1项：删除 OCRAdapter 适配器层（保留 OCRConfig） | ✅ 已完成 |
 | 2026-02-06 | scan_service.py 采用延迟导入 OCR 模块 | ✅ 已完成 |
 | 2026-02-06 | 启动速度优化：6秒 → 0.09秒 | ✅ 已完成 |
+| 2026-02-07 | 第6项：删除 config.yaml 中过期的 cleanup 配置 | ✅ 已完成 |
+| 2026-02-07 | 第4项：删除 easy_ocr.py 中未使用的 postprocess_text | ✅ 已完成 |
 
 ---
