@@ -13,6 +13,11 @@ from datetime import datetime
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 try:
+    import keyboard
+except ImportError:
+    keyboard = None
+
+try:
     from src.utils.mem_monitor import get_working_set_mb
 except Exception:
     get_working_set_mb = None
@@ -92,9 +97,42 @@ class MainGUI:
         
         # 启动内存监控显示
         self._schedule_memory_update()
+        
+        # 启动快捷键监听线程
+        self._start_hotkey_listener()
     
+    def _save_checkbox_setting(self, config_key, var):
+        """实时保存复选框设置到配置文件"""
+        config.set(config_key, var.get())
+        config.save()
+    
+    def _start_hotkey_listener(self):
+        """启动全局快捷键监听线程"""
+        def hotkey_listener():
+            if keyboard is None:
+                return
+            
+            try:
+                keyboard.add_hotkey('ctrl+alt+1', self._on_hotkey_start)
+                keyboard.add_hotkey('ctrl+alt+2', self._on_hotkey_stop)
+                keyboard.wait()
+            except Exception:
+                pass
+        
+        thread = threading.Thread(target=hotkey_listener, daemon=True)
+        thread.start()
+    
+    def _on_hotkey_start(self):
+        """快捷键开始扫描（在监听线程中调用，通过 after 转到主线程）"""
+        if not self.is_running:
+            self.root.after(0, self.on_start)
+    
+    def _on_hotkey_stop(self):
+        """快捷键停止扫描（在监听线程中调用，通过 after 转到主线程）"""
+        if self.is_running:
+            self.root.after(0, self.on_stop)
+
     def create_widgets(self):
-        """创建所有控件"""
         # 主容器
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -158,6 +196,11 @@ class MainGUI:
         self.enable_gpu_var = tk.BooleanVar()
         gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
         gpu_check.pack(side=tk.LEFT, padx=5)
+        
+        # 绑定复选框实时保存回调
+        self.enable_roi_var.trace_add('write', lambda *args: self._save_checkbox_setting('scan.enable_roi', self.enable_roi_var))
+        self.remember_roi_var.trace_add('write', lambda *args: self._save_checkbox_setting('scan.remember_roi', self.remember_roi_var))
+        self.enable_gpu_var.trace_add('write', lambda *args: self._save_checkbox_setting('gpu.force_gpu', self.enable_gpu_var))
         
         # 第二行：扫描间隔
         interval_frame = ttk.Frame(frame)
@@ -238,6 +281,9 @@ class MainGUI:
         self.enable_matching_var = tk.BooleanVar()
         matching_check = ttk.Checkbutton(row1, text="启用文字匹配", variable=self.enable_matching_var)
         matching_check.pack(side=tk.LEFT, padx=5)
+        
+        # 绑定复选框实时保存回调
+        self.enable_matching_var.trace_add('write', lambda *args: self._save_checkbox_setting('matching.enabled', self.enable_matching_var))
         
         ttk.Label(row1, text="关键词文件:").pack(side=tk.LEFT, padx=(10, 5))
         
@@ -626,10 +672,10 @@ class MainGUI:
                     else:
                         self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
                         
-                        if remember_roi:
-                            config.set('scan.saved_roi', list(self.roi))
-                            config.save()
-                            self.append_log("ROI区域已保存", "INFO")
+                        # 始终保存ROI到配置
+                        config.set('scan.saved_roi', list(self.roi))
+                        config.save()
+                        self.append_log("ROI区域已保存", "INFO")
             else:
                 # 不启用ROI时最小化窗口
                 self.root.iconify()
