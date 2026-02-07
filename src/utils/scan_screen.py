@@ -28,13 +28,13 @@ def select_roi_interactive(parent=None):
         from tkinter import messagebox
         from PIL import ImageTk
         
-        logger.info("\n[ROI选择模式]")
+        logger.info("[ROI选择模式]")
         logger.info("请按照以下步骤选择ROI区域：")
         logger.info("1. 将鼠标移动到要识别区域的左上角")
         logger.info("2. 按住鼠标左键并拖动到右下角")
         logger.info("3. 松开鼠标左键完成选择")
         logger.info("4. 按ESC键取消选择")
-        logger.info("\n提示：选择完成后，该区域将用于后续的OCR识别")
+        logger.info("提示：选择完成后，该区域将用于后续的OCR识别")
         
         # 捕获整个屏幕
         screenshot = ImageGrab.grab()
