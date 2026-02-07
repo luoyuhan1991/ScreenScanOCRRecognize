@@ -172,17 +172,21 @@ def recognize_text(image, languages=None,
             mag_ratio=mag_ratio  # 动态调整的放大比例
         )
         ocr_duration = time.time() - start_time
-        logger.debug(f"OCR识别完成，共识别到 {len(results)} 个结果，耗时: {ocr_duration:.3f}秒")
         
         # 提取所有识别到的文字，按位置排序
         text_items: List[Dict[str, Any]] = []
         for (bbox, text, confidence) in results:
             if confidence >= min_confidence:
                 y_coord = np.mean([point[1] for point in bbox])
+                # 确保 bbox 是可序列化的列表
+                if hasattr(bbox, 'tolist'):
+                    bbox_list = bbox.tolist()
+                else:
+                    bbox_list = list(bbox)
                 text_items.append({
                     'text': text,
                     'confidence': float(confidence),
-                    'bbox': bbox.tolist()
+                    'bbox': bbox_list
                 })
                 
         # 按Y坐标排序（从上到下）
@@ -217,13 +221,26 @@ def recognize_and_print(image, languages=None, save_dir="output",
     text_items, ocr_duration = recognize_text(image, languages, 
                          min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)
     
+    # 输出识别结果（与 PaddleOCR 保持一致）
     if text_items:
-        logger.info(f"OCR识别完成，已识别到 {len(text_items)} 个文本区域，耗时: {ocr_duration:.3f}秒")
+        avg_confidence = sum(item['confidence'] for item in text_items) / len(text_items)
+        total_chars = sum(len(item['text']) for item in text_items)
+        logger.info(f"OCR识别完成，共 {len(text_items)} 个文本块, {total_chars} 个字符，平均置信度: {avg_confidence:.2f}，耗时: {ocr_duration:.3f}秒")
     else:
-        logger.info(f"OCR识别完成，未识别到文字内容，耗时: {ocr_duration:.3f}秒")
+        logger.info(f"OCR识别完成，未识别到任何文本，耗时: {ocr_duration:.3f}秒")
     
     if not save_result:
         return text_items
+    
+    # 输出详细结果（与 PaddleOCR 保持一致）
+    if text_items:
+        logger.info("OCR识别结果:")
+        logger.info("-" * 50)
+        for i, item in enumerate(text_items, 1):
+            text = item['text']
+            confidence = item['confidence']
+            logger.info(f"{i:2d}. [置信度: {confidence:.2f}] {text}")
+        logger.info("-" * 50)
         
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
