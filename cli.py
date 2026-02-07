@@ -9,7 +9,7 @@ import sys
 import time
 
 from src.config.config import config
-from src.services.scan_service import ScanService
+from src.core.scan_service import ScanService
 from src.utils.logger import logger
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_matches

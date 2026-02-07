@@ -14,8 +14,8 @@ import easyocr
 import numpy as np
 from PIL import Image
 
-from ..config.config import config
-from ..utils.logger import logger
+from ...config.config import config
+from ...utils.logger import logger
 
 _reader = None
 _languages = ['ch_sim', 'en']

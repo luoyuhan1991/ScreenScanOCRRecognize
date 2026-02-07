@@ -13,8 +13,8 @@ import cv2
 import numpy as np
 from paddleocr import PaddleOCR
 
-from ..config.config import config
-from ..utils.logger import logger
+from ...config.config import config
+from ...utils.logger import logger
 
 # 全局OCR实例缓存
 _ocr_instance = None
@@ -39,7 +39,7 @@ def init_reader(languages=None, use_gpu=None, force_reinit=False):
     if languages is None:
         ocr_lang = 'ch'
     elif isinstance(languages, str):
-        from ..ocr.ocr_adapter import OCRConfig
+        from .ocr_adapter import OCRConfig
         ocr_lang = OCRConfig.PADDLE_LANG_MAP.get(languages, languages)
         if ocr_lang not in OCRConfig.PADDLE_LANG_MAP.values():
             ocr_lang = 'ch'

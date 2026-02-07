@@ -1,4 +1,4 @@
-﻿"""
+"""
 ScreenScanOCRRecognize - GUI主程序
 提供图形用户界面，支持参数配置、状态监控和日志显示
 """
@@ -14,7 +14,7 @@ from datetime import datetime
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 try:
-    from mem_monitor import get_working_set_mb
+    from src.utils.mem_monitor import get_working_set_mb
 except Exception:
     get_working_set_mb = None
 
@@ -53,8 +53,8 @@ except:
 from src.config.config import config
 from src.config.config_editor import ConfigEditor
 from src.config.gui_state import GUIStateManager
-from src.gui.gui_logger import GUILoggerHandler
-from src.services.scan_service import ScanService
+from src.utils.gui_logger import GUILoggerHandler
+from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_matches
 

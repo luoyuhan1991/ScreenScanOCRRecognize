@@ -7,7 +7,7 @@ set "vbs=%temp%\gui_launcher_%random%.vbs"
 (
 echo Set objShell = CreateObject^(^"WScript.Shell^"^)
 echo objShell.CurrentDirectory = "%cd%"
-echo strCommand = "cmd /c .venv\Scripts\activate.bat && python gui.py"
+echo strCommand = "cmd /c .venv\Scripts\activate.bat && python app.py"
 echo objShell.Run strCommand, 0, False
 ) > "%vbs%"
 

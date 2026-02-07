@@ -6,8 +6,8 @@ OCR统一模块
 
 from typing import Optional, List, Dict, Any, Union
 
-from ..config.config import config
-from ..utils.logger import logger
+from ...config.config import config
+from ...utils.logger import logger
 
 
 # ============================================================================
