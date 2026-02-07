@@ -562,8 +562,8 @@ class MainGUI:
                 init_thread.start()
             else:
                 # OCR已初始化且配置未变化，直接启动扫描
-                self.root.after(0, self._on_ocr_init_complete)
-            
+                self._start_scanning()
+                
         except Exception as e:
             self.append_log(f"启动失败: {e}", "ERROR")
             self.show_error(f"启动失败: {e}")
@@ -597,22 +597,28 @@ class MainGUI:
     
     def _on_ocr_init_complete(self):
         """OCR初始化完成后的回调（在主线程中执行）"""
+        self.append_log(f"OCR初始化完成", "INFO")
+        self._start_scanning()
+    
+    def _start_scanning(self):
+        """启动扫描流程（处理ROI和启动扫描线程）"""
         try:
-            self.append_log(f"OCR初始化完成", "INFO")
+            # 禁用开始按钮
+            self.start_btn.config(state=tk.DISABLED)
             
-            # 如果启用ROI，先最小化窗口，然后选择ROI区域
+            # 如果启用ROI，处理ROI选择
             if self.enable_roi_var.get():
-                # 先最小化窗口
-                self.root.iconify()
-                
-                # 从配置读取记住ROI状态和已保存的ROI
                 remember_roi = self.remember_roi_var.get()
                 saved_roi = config.get('scan.saved_roi')
                 
                 if remember_roi and saved_roi:
+                    # 使用已保存的ROI，无需最小化
                     self.roi = tuple(saved_roi)
                     self.append_log(f"使用保存的ROI区域: {self.roi}", "INFO")
                 else:
+                    # 需要选择新ROI，最小化窗口
+                    self.root.iconify()
+                    time.sleep(0.5)  # 等待窗口最小化完成
                     self.append_log("请选择ROI区域...", "INFO")
                     self.roi = select_roi_interactive(parent=self.root)
                     if self.roi is None:
@@ -625,9 +631,9 @@ class MainGUI:
                             config.save()
                             self.append_log("ROI区域已保存", "INFO")
             else:
-                self.roi = None
-                # 如果没有ROI选择，直接最小化窗口
+                # 不启用ROI时最小化窗口
                 self.root.iconify()
+                self.roi = None
             
             # 设置ROI到服务
             self.scan_service.set_roi(self.roi)
