@@ -1,7 +1,7 @@
 scan:
   interval_seconds: 5.0
   roi_padding: 10
-  enable_roi: false
+  enable_roi: true
   saved_roi:
   - 1638
   - 272

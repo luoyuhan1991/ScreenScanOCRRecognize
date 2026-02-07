@@ -31,22 +31,10 @@ try:
         TBPF_ERROR = 0x4
         TBPF_PAUSED = 0x8
         
-        # 尝试加载Windows任务栏API
-        try:
-            _comdlg32 = ctypes.windll.comdlg32
-            _ole32 = ctypes.windll.ole32
-            _shell32 = ctypes.windll.shell32
-            
-            # 定义ITaskbarList3接口
-            class ITaskbarList3(ctypes.c_void_p):
-                pass
-            
-            WINDOWS_TASKBAR_AVAILABLE = True
-        except:
-            WINDOWS_TASKBAR_AVAILABLE = False
+        WINDOWS_TASKBAR_AVAILABLE = True
     else:
         WINDOWS_TASKBAR_AVAILABLE = False
-except:
+except Exception:
     WINDOWS_TASKBAR_AVAILABLE = False
 
 # 导入项目模块
@@ -580,6 +568,7 @@ class MainGUI:
             self.show_error(f"启动失败: {e}")
             self.is_running = False
             self.start_btn.config(state=tk.NORMAL)
+            self.update_status("已停止")
     
     def _init_ocr_in_thread(self, engine_choice, languages, use_gpu):
         """在后台线程中初始化OCR"""
@@ -788,23 +777,6 @@ class MainGUI:
             title = f"{base_title} - {status}"
         
         self.root.title(title)
-    
-    def _set_taskbar_state(self, state):
-        """设置Windows任务栏按钮状态（仅在Windows上有效）"""
-        if not WINDOWS_TASKBAR_AVAILABLE:
-            return
-        
-        try:
-            # 获取窗口句柄
-            hwnd = self.root.winfo_id()
-            if sys.platform == 'win32':
-                # Windows任务栏状态设置需要COM接口，这里先简化处理
-                # 实际上完整的实现需要创建COM对象并调用ITaskbarList3接口
-                # 对于tkinter，这可能比较复杂，我们先用标题显示状态
-                pass
-        except Exception as e:
-            # 如果API调用失败，静默忽略，使用标题显示即可
-            pass
     
     def update_stats(self):
         """更新统计信息"""
