@@ -210,7 +210,7 @@ ScreenScanOCRRecognize/
 │   ├── ocr/
 │   │   ├── __init__.py
 │   │   ├── easy_ocr.py        # EasyOCR引擎
-│   │   ├── ocr_adapter.py      # OCR适配器（冗余层）
+│   │   ├── ocr_adapter.py     # OCR配置（已简化）
 │   │   └── paddle_ocr.py      # PaddleOCR引擎
 │   ├── services/
 │   │   └── scan_service.py    # 扫描服务
@@ -238,5 +238,8 @@ ScreenScanOCRRecognize/
 | 2026-02-06 | 第5项：统一 OCR 返回类型 | ✅ 已完成 |
 | 2026-02-06 | 第8项：简化 PaddleOCR 版本兼容代码 | ✅ 已完成 |
 | 2026-02-06 | 第9项：优化 _create_default_keywords_file 调用 | ✅ 已完成 |
+| 2026-02-06 | 第1项：删除 OCRAdapter 适配器层（保留 OCRConfig） | ✅ 已完成 |
+| 2026-02-06 | scan_service.py 采用延迟导入 OCR 模块 | ✅ 已完成 |
+| 2026-02-06 | 启动速度优化：6秒 → 0.09秒 | ✅ 已完成 |
 
 ---
