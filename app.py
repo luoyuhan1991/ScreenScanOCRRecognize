@@ -597,10 +597,9 @@ class MainGUI:
                     else:
                         self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
                         
-                        if remember_roi:
-                            config.set('scan.saved_roi', list(self.roi))
-                            config.save()
-                            self.append_log("ROI区域已保存", "INFO")
+                        config.set('scan.saved_roi', list(self.roi))
+                        config.save()
+                        self.append_log("ROI区域已保存", "INFO")
             else:
                 self.roi = None
                 # 如果没有ROI选择，直接最小化窗口
