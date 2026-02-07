@@ -6,7 +6,6 @@ ScreenScanOCRRecognize - GUI主程序
 import logging
 import os
 import queue
-import sys
 import threading
 import time
 import tkinter as tk
@@ -17,25 +16,6 @@ try:
     from src.utils.mem_monitor import get_working_set_mb
 except Exception:
     get_working_set_mb = None
-
-# Windows任务栏API支持
-try:
-    if sys.platform == 'win32':
-        import ctypes
-        from ctypes import wintypes
-        
-        # Windows任务栏API常量
-        TBPF_NOPROGRESS = 0
-        TBPF_INDETERMINATE = 0x1
-        TBPF_NORMAL = 0x2
-        TBPF_ERROR = 0x4
-        TBPF_PAUSED = 0x8
-        
-        WINDOWS_TASKBAR_AVAILABLE = True
-    else:
-        WINDOWS_TASKBAR_AVAILABLE = False
-except Exception:
-    WINDOWS_TASKBAR_AVAILABLE = False
 
 # 导入项目模块
 from src.config.config import config
@@ -763,15 +743,11 @@ class MainGUI:
     def update_window_title(self, status):
         """更新窗口标题，在任务栏显示状态"""
         base_title = "屏幕扫描OCR识别系统"
-        # Windows任务栏可能不支持emoji颜色显示，使用清晰的文字前缀
         if status == "运行中":
-            # 扫描中：使用明显的文字前缀
             title = f"【扫描中】{base_title}"
         elif status == "初始化中...":
-            # 初始化中：使用明显的文字前缀
             title = f"【初始化中】{base_title}"
         elif status == "已停止":
-            # 已停止：使用默认标题
             title = base_title
         else:
             title = f"{base_title} - {status}"
