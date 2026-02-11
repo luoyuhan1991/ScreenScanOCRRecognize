@@ -119,18 +119,18 @@ class TextMatcher:
 class FloatingTextDisplay:
     """遮罩式文字显示器（水印效果）"""
 
-    def __init__(self, text, duration=3, position="center", font_size=30, parent_root=None):
+    def __init__(self, text_lines, duration=3, position="center", font_size=20, parent_root=None):
         """
         初始化遮罩式文字显示器
 
         Args:
-            text (str): 要显示的文字
+            text_lines (list): 要显示的文字行列表，每行是 (text, color) 元组
             duration (int): 显示时长（秒），默认为3
             position (str): 显示位置，"center"（屏幕中央）、"top"（顶部）、"bottom"（底部）
-            font_size (int): 字体大小，默认为30
+            font_size (int): 字体大小，默认为20
             parent_root: 可选的父窗口（Tkinter根窗口）。如果提供，将使用Toplevel创建浮窗。
         """
-        self.text = text
+        self.text_lines = text_lines
         self.duration = duration
         self.position = position
         self.font_size = font_size
@@ -252,68 +252,77 @@ class FloatingTextDisplay:
         )
         canvas.pack()
 
-        # 计算文字在Canvas中的位置
-        text_x = window_width // 2
-        text_y = window_height // 2
-
         # 构建字体元组
         font_tuple = ('Microsoft YaHei', self.font_size, 'bold')
 
-        # 绘制文字
-        canvas.create_text(
-            text_x, text_y,
-            text=self.text,
-            font=font_tuple,
-            fill='#ff3333',
-            anchor='center',
-            tags='watermark_text'
-        )
+        # 绘制多行文字
+        line_height = self.font_size * 1.3
+        start_y = padding + line_height / 2
+        
+        for i, (text, color) in enumerate(self.text_lines):
+            # 计算文字在Canvas中的位置
+            text_x = window_width // 2
+            text_y = start_y + i * line_height
 
-        # 添加阴影
-        shadow_offset = max(1, self.font_size // 30)
-        canvas.create_text(
-            text_x + shadow_offset, text_y + shadow_offset,
-            text=self.text,
-            font=font_tuple,
-            fill='#000000',
-            anchor='center',
-            tags='watermark_shadow'
-        )
+            # 添加阴影
+            shadow_offset = max(1, self.font_size // 30)
+            canvas.create_text(
+                text_x + shadow_offset, text_y + shadow_offset,
+                text=text,
+                font=font_tuple,
+                fill='#000000',
+                anchor='center',
+                tags=f'watermark_shadow_{i}'
+            )
 
-        # 重新排列图层
-        canvas.tag_raise('watermark_text', 'watermark_shadow')
+            # 绘制文字
+            canvas.create_text(
+                text_x, text_y,
+                text=text,
+                font=font_tuple,
+                fill=color,
+                anchor='center',
+                tags=f'watermark_text_{i}'
+            )
+
+            # 重新排列图层
+            canvas.tag_raise(f'watermark_text_{i}', f'watermark_shadow_{i}')
 
 
     def _calculate_window_geometry(self, screen_width, screen_height):
         """计算窗口几何信息（位置和大小）"""
-        # 使用更准确的文字尺寸计算
         font = ('Microsoft YaHei', self.font_size, 'bold')
 
-        # 创建临时标签来测量文字尺寸
-        temp_label = tk.Label(self.root, text=self.text, font=font)
-        self.root.update_idletasks()  # 确保标签被正确初始化
+        # 计算所有文字行的最大宽度和总高度
+        max_text_width = 0
+        total_text_height = 0
+        line_height = int(self.font_size * 1.3)
 
-        try:
-            # 获取文字的实际尺寸
-            text_width = temp_label.winfo_reqwidth()
-            text_height = temp_label.winfo_reqheight()
-        except:
-            # 如果测量失败，使用估算值（根据字体大小动态调整）
-            text_width = len(self.text) * int(self.font_size * 0.6)
-            text_height = int(self.font_size * 1.2)
+        for text, _ in self.text_lines:
+            # 创建临时标签来测量文字尺寸
+            temp_label = tk.Label(self.root, text=text, font=font)
+            self.root.update_idletasks()
 
-        # 销毁临时标签
-        temp_label.destroy()
+            try:
+                text_width = temp_label.winfo_reqwidth()
+            except:
+                text_width = len(text) * int(self.font_size * 0.6)
+
+            temp_label.destroy()
+
+            max_text_width = max(max_text_width, text_width)
+            total_text_height += line_height
 
         # 最小边距（用于计算窗口位置时保持一致）
         padding = 2
-        window_width = text_width + padding * 2
+        window_width = max_text_width + padding * 2
+        window_height = total_text_height + padding * 2
 
         # 根据位置计算窗口在屏幕上的位置（紧贴文字，无额外边距）
         if self.position == "center":
             # 窗口居中显示
             window_x = (screen_width - window_width) // 2
-            window_y = (screen_height - (text_height + padding * 2)) // 2
+            window_y = (screen_height - window_height) // 2
         elif self.position == "top":
             # 窗口显示在顶部
             window_x = (screen_width - window_width) // 2
@@ -321,13 +330,13 @@ class FloatingTextDisplay:
         elif self.position == "bottom":
             # 窗口显示在底部
             window_x = (screen_width - window_width) // 2
-            window_y = screen_height - (text_height + padding * 2) - 50
+            window_y = screen_height - window_height - 50
         else:
             # 默认居中
             window_x = (screen_width - window_width) // 2
-            window_y = (screen_height - (text_height + padding * 2)) // 2
+            window_y = (screen_height - window_height) // 2
 
-        return text_width, text_height, window_x, window_y
+        return int(max_text_width), int(total_text_height), int(window_x), int(window_y)
 
 _matcher_cache = {}
 _cache_lock = threading.Lock()
@@ -345,9 +354,42 @@ def _get_cached_matcher(txt_file: str) -> TextMatcher:
     return matcher
 
 
+def display_ocr_results(ocr_results, matched_keywords, duration=3, position="center", font_size=20, parent_root=None):
+    """
+    显示OCR识别结果，用颜色区分匹配状态
+    
+    Args:
+        ocr_results (list): OCR识别结果列表，每个元素包含 text, confidence, bbox
+        matched_keywords (list): 匹配到的关键词列表
+        duration (int): 显示时长
+        position (str): 显示位置
+        font_size (int): 字体大小
+        parent_root: 可选的父窗口
+    """
+    if not ocr_results:
+        return
+    
+    # 生成带颜色的文字行列表
+    text_lines = []
+    for result in ocr_results:
+        text = result.get('text', '')
+        if not text:
+            continue
+        
+        # 检查是否匹配
+        is_matched = any(keyword in text for keyword in matched_keywords)
+        # 匹配的用红色，未匹配的用绿色
+        color = '#ff3333' if is_matched else '#00ff00'
+        text_lines.append((text, color))
+    
+    # 创建并显示浮动文字
+    display = FloatingTextDisplay(text_lines, duration, position, font_size, parent_root)
+    display.show()
+
+
 def display_matches(matched_keywords, duration=3, position="center", font_size=30, parent_root=None):
     """
-    显示匹配的关键词
+    显示匹配的关键词（旧接口，保留兼容性）
     
     Args:
         matched_keywords (list): 匹配到的关键词列表
@@ -361,13 +403,13 @@ def display_matches(matched_keywords, duration=3, position="center", font_size=3
         display_text = " | ".join(matched_keywords)
         
         # 创建并显示浮动文字
-        display = FloatingTextDisplay(display_text, duration, position, font_size, parent_root)
+        display = FloatingTextDisplay([(display_text, '#ff3333')], duration, position, font_size, parent_root)
         display.show()
 
 
-def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center", font_size=30):
+def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center", font_size=20):
     """
-    匹配关键词并显示（兼容旧接口，建议使用 match_keywords + display_matches）
+    匹配关键词并显示（显示所有OCR结果，用颜色区分匹配状态）
     
     Args:
         ocr_results (list): OCR识别结果列表
@@ -385,8 +427,8 @@ def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, posi
     # 匹配关键词
     matched_keywords = matcher.match(ocr_results)
     
-    # 显示
-    display_matches(matched_keywords, duration, position, font_size)
+    # 显示所有OCR结果，用颜色区分匹配状态
+    display_ocr_results(ocr_results, matched_keywords, duration, position, font_size)
     
     return matched_keywords
 

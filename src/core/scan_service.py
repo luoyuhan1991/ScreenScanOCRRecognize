@@ -122,7 +122,7 @@ class ScanService:
         result = {
             'success': False,
             'timestamp': None,
-            'ocr_text': [],
+            'ocr_results': [],
             'matches': [],
             'duration': 0,
             'screenshot_path': None
@@ -178,7 +178,7 @@ class ScanService:
                     
                     # 统一结果格式
                     ocr_list = self._normalize_ocr_results(ocr_results)
-                    result['ocr_text'] = ocr_list
+                    result['ocr_results'] = ocr_list
                     
                     # 4. 关键词匹配
                     if self.enable_matching and ocr_list:

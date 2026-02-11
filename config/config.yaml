@@ -38,7 +38,7 @@ matching:
   enabled: true
   display_duration: 3.0
   position: center
-  font_size: 30
+  font_size: 20
 logging:
   level: INFO
   file: logs/app.log

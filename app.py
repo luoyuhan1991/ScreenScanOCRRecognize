@@ -24,7 +24,7 @@ from src.config.gui_state import GUIStateManager
 from src.utils.gui_logger import GUILoggerHandler
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
-from src.utils.text_matcher import display_matches
+from src.utils.text_matcher import display_ocr_results
 
 
 class MainGUI:
@@ -943,13 +943,15 @@ class MainGUI:
                     if 'screenshot_path' in result and result['screenshot_path']:
                         self.append_log(f"截图已保存: {os.path.basename(result['screenshot_path'])}", "DEBUG")
                     
-                    # 如果有匹配结果，显示浮窗（在主线程中）
-                    if 'matches' in result and result['matches']:
-                        matches = result['matches']
-                        self.append_log(f"匹配成功: {matches}", "INFO")
+                    # 如果有OCR结果，显示所有识别结果（用颜色区分匹配状态）
+                    if 'ocr_results' in result and result['ocr_results']:
+                        ocr_results = result['ocr_results']
+                        matches = result.get('matches', [])
+                        self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
                         
                         # 在主线程中显示
-                        self.root.after(0, lambda: display_matches(
+                        self.root.after(0, lambda: display_ocr_results(
+                            ocr_results,
                             matches,
                             duration=self.scan_service.display_duration,
                             position=self.scan_service.display_position,
