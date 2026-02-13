@@ -1,5 +1,5 @@
 scan:
-  interval_seconds: 5.0
+  interval_seconds: 3.0
   roi_padding: 10
   enable_roi: true
   saved_roi:
@@ -38,6 +38,7 @@ matching:
   enabled: true
   display_duration: 3.0
   position: center
+  match_ratio_threshold: 0.75
   font_size: 20
 logging:
   level: INFO

@@ -9,20 +9,31 @@ import tkinter as tk
 
 from .logger import logger
 
+try:
+    from ..config.config import config
+except Exception:
+    config = None
+
+
+# 匹配阈值：关键词中至少该比例字符（按顺序）在 OCR 文本中出现则算匹配
+MATCH_RATIO_THRESHOLD = 0.75
+
 
 class TextMatcher:
     """文字匹配器"""
     
-    def __init__(self, txt_file="docs/banlist.txt"):
+    def __init__(self, txt_file="docs/banlist.txt", match_ratio_threshold=None):
         """
         初始化文字匹配器
         
         Args:
             txt_file (str): 关键词TXT文件路径，默认为 docs/banlist.txt
+            match_ratio_threshold (float): 匹配比例阈值，默认 0.75，即 75% 以上文字匹配则算数
         """
         self.txt_file = txt_file
         self.keywords = []
         self._last_mtime = None
+        self.match_ratio_threshold = match_ratio_threshold if match_ratio_threshold is not None else MATCH_RATIO_THRESHOLD
         self.keywords = self._load_keywords()
     
     def _load_keywords(self):
@@ -79,10 +90,42 @@ class TextMatcher:
         
         if self._last_mtime is None or current_mtime != self._last_mtime:
             self.reload_keywords()
+
+    def _match_ratio(self, keyword, ocr_text):
+        """
+        计算关键词在 OCR 文本中的匹配比例（按顺序出现的字符数 / 关键词长度）。
+        用于实现“75% 以上文字匹配则算数”。
+        
+        Args:
+            keyword (str): 关键词
+            ocr_text (str): OCR 识别出的文本
+        
+        Returns:
+            float: 0.0~1.0，表示关键词中有多少比例字符按顺序在 ocr_text 中出现
+        """
+        if not keyword:
+            return 1.0
+        if not ocr_text:
+            return 0.0
+        pos = 0
+        matched = 0
+        for c in keyword:
+            i = ocr_text.find(c, pos)
+            if i != -1:
+                matched += 1
+                pos = i + 1
+        return matched / len(keyword)
     
+    def _get_match_threshold(self):
+        """获取当前匹配比例阈值（优先从配置读取，便于界面可调）"""
+        if config is not None:
+            return float(config.get('matching.match_ratio_threshold', self.match_ratio_threshold))
+        return self.match_ratio_threshold
+
     def match(self, ocr_results):
         """
-        匹配OCR结果中的关键词（基于字符串包含）
+        匹配OCR结果中的关键词。当关键词中至少有 match_ratio_threshold（默认 75%）的
+        字符按顺序在 OCR 文本中出现时，视为匹配。
         
         Args:
             ocr_results (list): OCR识别结果列表，每个元素是包含'text'键的字典
@@ -91,6 +134,7 @@ class TextMatcher:
             list: 匹配到的关键词列表
         """
         matched_keywords = []
+        threshold = self._get_match_threshold()
         
         if not self.keywords:
             return matched_keywords
@@ -101,13 +145,13 @@ class TextMatcher:
             if isinstance(result, dict) and 'text' in result:
                 ocr_texts.append(result['text'])
         
-        # 检查每个关键词是否在OCR结果中
+        # 检查每个关键词是否在OCR结果中达到匹配比例
         for keyword in self.keywords:
             for ocr_text in ocr_texts:
-                # 检查关键词是否包含在OCR结果中
-                if keyword in ocr_text:
+                ratio = self._match_ratio(keyword, ocr_text)
+                if ratio >= threshold:
                     matched_keywords.append(keyword)
-                    logger.info(f"匹配成功: '{keyword}' (OCR: '{ocr_text}')")
+                    logger.info(f"匹配成功: '{keyword}' (OCR: '{ocr_text}', 匹配比例: {ratio:.0%})")
                     break
         
         if matched_keywords:
@@ -354,9 +398,10 @@ def _get_cached_matcher(txt_file: str) -> TextMatcher:
     return matcher
 
 
-def display_ocr_results(ocr_results, matched_keywords, duration=3, position="center", font_size=20, parent_root=None):
+def display_ocr_results(ocr_results, matched_keywords, duration=3, position="center", font_size=20, parent_root=None, matcher=None):
     """
-    显示OCR识别结果，用颜色区分匹配状态
+    显示OCR识别结果，用颜色区分匹配状态。
+    若传入 matcher，则用与匹配逻辑一致的 75% 规则判断该行是否算匹配。
     
     Args:
         ocr_results (list): OCR识别结果列表，每个元素包含 text, confidence, bbox
@@ -365,6 +410,7 @@ def display_ocr_results(ocr_results, matched_keywords, duration=3, position="cen
         position (str): 显示位置
         font_size (int): 字体大小
         parent_root: 可选的父窗口
+        matcher (TextMatcher): 可选，用于按相同比例阈值判断单行是否匹配（红/绿）
     """
     if not ocr_results:
         return
@@ -376,8 +422,15 @@ def display_ocr_results(ocr_results, matched_keywords, duration=3, position="cen
         if not text:
             continue
         
-        # 检查是否匹配
-        is_matched = any(keyword in text for keyword in matched_keywords)
+        # 检查是否匹配：有 matcher 时用可配置的匹配比例规则，否则用“关键词包含在文本中”
+        if matcher is not None:
+            threshold = matcher._get_match_threshold()
+            is_matched = any(
+                matcher._match_ratio(kw, text) >= threshold
+                for kw in matched_keywords
+            )
+        else:
+            is_matched = any(keyword in text for keyword in matched_keywords)
         # 匹配的用红色，未匹配的用绿色
         color = '#ff3333' if is_matched else '#00ff00'
         text_lines.append((text, color))
@@ -424,11 +477,11 @@ def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, posi
     # 使用缓存的匹配器（避免每次读取文件）
     matcher = _get_cached_matcher(txt_file)
     
-    # 匹配关键词
+    # 匹配关键词（75% 以上文字匹配则算数）
     matched_keywords = matcher.match(ocr_results)
     
-    # 显示所有OCR结果，用颜色区分匹配状态
-    display_ocr_results(ocr_results, matched_keywords, duration, position, font_size)
+    # 显示所有OCR结果，用颜色区分匹配状态（使用同一 matcher 保证高亮与匹配一致）
+    display_ocr_results(ocr_results, matched_keywords, duration, position, font_size, matcher=matcher)
     
     return matched_keywords
 

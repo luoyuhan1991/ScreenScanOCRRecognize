@@ -24,7 +24,7 @@ from src.config.gui_state import GUIStateManager
 from src.utils.gui_logger import GUILoggerHandler
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
-from src.utils.text_matcher import display_ocr_results
+from src.utils.text_matcher import display_ocr_results, _get_cached_matcher
 
 
 class MainGUI:
@@ -139,7 +139,7 @@ class MainGUI:
         frame = ttk.LabelFrame(parent, text="扫描配置", padding="5")
         frame.pack(fill=tk.X, pady=(0, 5))
         
-        # 第一行：ROI和GPU选项
+        # 第一行：ROI、GPU、扫描间隔
         row1 = ttk.Frame(frame)
         row1.pack(fill=tk.X, pady=2)
         
@@ -155,21 +155,16 @@ class MainGUI:
         gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
         gpu_check.pack(side=tk.LEFT, padx=5)
         
-        # 第二行：扫描间隔
-        interval_frame = ttk.Frame(frame)
-        interval_frame.pack(fill=tk.X, pady=2)
+        ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
         
-        ttk.Label(interval_frame, text="扫描间隔:").pack(side=tk.LEFT, padx=(0, 5))
-        
+        ttk.Label(row1, text="扫描间隔:").pack(side=tk.LEFT, padx=(0, 5))
         self.scan_interval_var = tk.DoubleVar()
-        self.scan_interval_scale = ttk.Scale(interval_frame, from_=1, to=15, orient=tk.HORIZONTAL, variable=self.scan_interval_var, length=200, command=self.on_interval_scale_change)
+        self.scan_interval_scale = ttk.Scale(row1, from_=1, to=15, orient=tk.HORIZONTAL, variable=self.scan_interval_var, length=200, command=self.on_interval_scale_change)
         self.scan_interval_scale.pack(side=tk.LEFT, padx=5)
-        
-        self.scan_interval_entry = ttk.Entry(interval_frame, width=5, textvariable=self.scan_interval_var)
+        self.scan_interval_entry = ttk.Entry(row1, width=5, textvariable=self.scan_interval_var)
         self.scan_interval_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Label(interval_frame, text="秒").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(row1, text="秒").pack(side=tk.LEFT, padx=(0, 5))
         
-        # 绑定滑动条和输入框
         self.scan_interval_var.trace('w', self.on_interval_change)
         self.scan_interval_scale.configure(command=self.on_interval_scale_change)
     
@@ -178,7 +173,7 @@ class MainGUI:
         frame = ttk.LabelFrame(parent, text="OCR配置", padding="5")
         frame.pack(fill=tk.X, pady=(0, 5))
         
-        # 第一行：OCR引擎和最小置信度
+        # 第一行：OCR引擎、最小置信度、保存结果
         row1 = ttk.Frame(frame)
         row1.pack(fill=tk.X, pady=2)
         
@@ -191,7 +186,6 @@ class MainGUI:
         easy_radio = ttk.Radiobutton(row1, text="EasyOCR", variable=self.ocr_engine_var, value="easy")
         easy_radio.pack(side=tk.LEFT, padx=5)
         
-        # 添加分隔
         ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
         
         ttk.Label(row1, text="最小置信度:").pack(side=tk.LEFT, padx=(0, 5))
@@ -210,17 +204,14 @@ class MainGUI:
         self.min_confidence_entry = ttk.Entry(row1, width=5, textvariable=self.min_confidence_var)
         self.min_confidence_entry.pack(side=tk.LEFT, padx=5)
         
-        # 绑定滑动条和输入框
-        self.min_confidence_var.trace('w', self.on_confidence_change)
-        self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
-        
-        # 第二行：保存文件选项
-        row2 = ttk.Frame(frame)
-        row2.pack(fill=tk.X, pady=2)
+        ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
         
         self.save_files_var = tk.BooleanVar()
-        save_files_check = ttk.Checkbutton(row2, text="保存截图和识别结果", variable=self.save_files_var)
+        save_files_check = ttk.Checkbutton(row1, text="保存截图和识别结果", variable=self.save_files_var)
         save_files_check.pack(side=tk.LEFT, padx=5)
+        
+        self.min_confidence_var.trace('w', self.on_confidence_change)
+        self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
     
     def create_matching_config_widgets(self, parent):
         """创建文字匹配控件"""
@@ -293,6 +284,47 @@ class MainGUI:
         position_combo = ttk.Combobox(row2, textvariable=self.display_position_var, width=12, state="readonly")
         position_combo['values'] = ('居中', '顶部', '底部')
         position_combo.pack(side=tk.LEFT, padx=5)
+        
+        # 第三行：匹配比例（关键词中该比例字符按顺序出现在 OCR 文本中即算匹配）
+        row3 = ttk.Frame(frame)
+        row3.pack(fill=tk.X, pady=2)
+        
+        ttk.Label(row3, text="匹配比例:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.match_ratio_var = tk.DoubleVar(value=0.75)
+        self.match_ratio_scale = ttk.Scale(
+            row3,
+            from_=0.5,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.match_ratio_var,
+            length=150,
+            command=self._on_match_ratio_scale_change
+        )
+        self.match_ratio_scale.pack(side=tk.LEFT, padx=5)
+        
+        self.match_ratio_entry = ttk.Entry(row3, width=5, textvariable=self.match_ratio_var)
+        self.match_ratio_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row3, text="(50%~100%，达到该比例即算匹配)").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.match_ratio_var.trace('w', self._on_match_ratio_change)
+    
+    def _on_match_ratio_scale_change(self, value):
+        """匹配比例滑动条变化时同步到输入框"""
+        try:
+            v = round(float(value), 2)
+            self.match_ratio_var.set(v)
+        except (ValueError, TypeError):
+            pass
+    
+    def _on_match_ratio_change(self, *args):
+        """匹配比例输入框变化时限制范围并同步滑动条"""
+        try:
+            v = float(self.match_ratio_var.get())
+            v = max(0.5, min(1.0, v))
+            self.match_ratio_var.set(round(v, 2))
+        except (ValueError, TypeError):
+            pass
     
     def create_log_widgets(self, parent):
         """创建日志显示控件"""
@@ -480,6 +512,7 @@ class MainGUI:
             banlist_path = config.get('files.banlist_file', 'docs/banlist.txt')
         self.banlist_path_var.set(banlist_path)
         self.display_duration_var.set(config.get('matching.display_duration', 3))
+        self.match_ratio_var.set(round(config.get('matching.match_ratio_threshold', 0.75), 2))
         position = config.get('matching.position', 'center')
         position_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
         self.display_position_var.set(position_map.get(position, '居中'))
@@ -510,6 +543,7 @@ class MainGUI:
         config.set('files.banlist_file', banlist_path)
         self.state_manager.set_last_banlist_path(banlist_path)
         config.set('matching.display_duration', self.display_duration_var.get())
+        config.set('matching.match_ratio_threshold', round(float(self.match_ratio_var.get()), 2))
         position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
         config.set('matching.position', position_map.get(self.display_position_var.get(), 'center'))
         config.set('matching.font_size', self.display_font_size_var.get())
@@ -949,14 +983,16 @@ class MainGUI:
                         matches = result.get('matches', [])
                         self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
                         
-                        # 在主线程中显示
-                        self.root.after(0, lambda: display_ocr_results(
-                            ocr_results,
-                            matches,
+                        # 在主线程中显示（传入 matcher 以按 75% 规则高亮匹配行）
+                        banlist_path = self.banlist_path_var.get()
+                        matcher = _get_cached_matcher(banlist_path) if banlist_path else None
+                        self.root.after(0, lambda ocr=ocr_results, m=matches, mat=matcher: display_ocr_results(
+                            ocr, m,
                             duration=self.scan_service.display_duration,
                             position=self.scan_service.display_position,
                             font_size=self.scan_service.display_font_size,
-                            parent_root=self.root
+                            parent_root=self.root,
+                            matcher=mat
                         ))
                         
                 elif 'error' in result:

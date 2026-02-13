@@ -65,7 +65,8 @@ class Config:
             'matching': {
                 'enabled': True,
                 'display_duration': 3,
-                'position': 'center'
+                'position': 'center',
+                'match_ratio_threshold': 0.75
             },
             'logging': {
                 'level': 'INFO',
