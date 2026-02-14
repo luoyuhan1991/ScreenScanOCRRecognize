@@ -3,11 +3,11 @@ scan:
   roi_padding: 10
   enable_roi: true
   saved_roi:
-  - 1165
-  - 250
-  - 1841
-  - 832
-  remember_roi: false
+  - 1175
+  - 256
+  - 1851
+  - 843
+  remember_roi: true
 ocr:
   default_engine: paddle
   languages:

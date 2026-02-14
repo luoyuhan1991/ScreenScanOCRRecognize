@@ -25,6 +25,7 @@ from src.utils.gui_logger import GUILoggerHandler
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_ocr_results, _get_cached_matcher
+from src.utils.global_hotkey import register_scan_hotkeys
 
 
 class MainGUI:
@@ -82,6 +83,11 @@ class MainGUI:
         # 绑定窗口事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         self.root.bind('<Configure>', self.on_window_configure)
+        
+        # 注册系统全局热键：Ctrl+Alt+1 开始，Ctrl+Alt+2 停止
+        self._hotkey_manager = register_scan_hotkeys(self.root, self.on_start, self.on_stop)
+        if self._hotkey_manager:
+            self.log_queue.put(("系统热键: Ctrl+Alt+1 开始扫描, Ctrl+Alt+2 停止扫描（小键盘或主键盘数字键均可）\n", "INFO"))
         
         # 初始化窗口标题（显示状态）
         self.update_window_title("已停止")
@@ -768,6 +774,10 @@ class MainGUI:
         
         # 隐藏ROI区域边框
         self._hide_roi_border()
+        
+        # 停止全局热键监听
+        if getattr(self, '_hotkey_manager', None):
+            self._hotkey_manager.stop()
         
         # 保存GUI状态
         self.state_manager.save_state()
