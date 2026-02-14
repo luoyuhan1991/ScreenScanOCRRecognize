@@ -26,6 +26,7 @@ from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_ocr_results, _get_cached_matcher
 from src.utils.global_hotkey import register_scan_hotkeys
+from src.utils.tray_icon import setup_tray
 
 
 class MainGUI:
@@ -81,13 +82,25 @@ class MainGUI:
         self.process_log_queue()
         
         # 绑定窗口事件
-        self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         self.root.bind('<Configure>', self.on_window_configure)
+        
+        # 托盘图标：关闭/最小化时缩到托盘，从托盘可显示主窗口或退出
+        self._tray = setup_tray(
+            self.root,
+            on_show=self._tray_show_main,
+            on_quit=self._tray_quit,
+            tooltip="屏幕扫描OCR识别",
+        )
+        if self._tray:
+            self.root.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
+            self.append_log("已启用任务栏托盘图标：点击关闭将缩到托盘，右键托盘图标可退出", "INFO")
+        else:
+            self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         
         # 注册系统全局热键：Ctrl+Alt+1 开始，Ctrl+Alt+2 停止
         self._hotkey_manager = register_scan_hotkeys(self.root, self.on_start, self.on_stop)
         if self._hotkey_manager:
-            self.log_queue.put(("系统热键: Ctrl+Alt+1 开始扫描, Ctrl+Alt+2 停止扫描（小键盘或主键盘数字键均可）\n", "INFO"))
+            self.append_log("系统热键: Ctrl+Alt+1 开始扫描, Ctrl+Alt+2 停止扫描（小键盘或主键盘数字键均可）", "INFO")
         
         # 初始化窗口标题（显示状态）
         self.update_window_title("已停止")
@@ -765,15 +778,35 @@ class MainGUI:
             except:
                 pass
     
+    def _minimize_to_tray(self):
+        """点击关闭按钮时缩到托盘（不退出）"""
+        self.root.withdraw()
+    
+    def _tray_show_main(self):
+        """从托盘恢复主窗口"""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+    
+    def _tray_quit(self):
+        """从托盘菜单选择退出，执行真正退出"""
+        self.on_window_close()
+    
     def on_window_close(self):
-        """窗口关闭事件"""
+        """真正退出：停止扫描、热键、托盘，保存并销毁窗口"""
         if self.is_running:
             if messagebox.askyesno("确认", "扫描正在运行，确定要退出吗？"):
                 self.on_stop()
                 time.sleep(0.5)  # 等待线程结束
+            else:
+                return
         
         # 隐藏ROI区域边框
         self._hide_roi_border()
+        
+        # 停止托盘图标
+        if getattr(self, '_tray', None):
+            self._tray.stop()
         
         # 停止全局热键监听
         if getattr(self, '_hotkey_manager', None):
