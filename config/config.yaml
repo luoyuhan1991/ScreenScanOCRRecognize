@@ -19,6 +19,8 @@ ocr:
     canvas_size: 1920
     mag_ratio: 1.5
     dynamic_params: true
+  enable_image_invert: false
+  auto_detect_invert: false
 gpu:
   auto_detect: false
   force_cpu: false

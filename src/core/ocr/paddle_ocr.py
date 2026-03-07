@@ -108,14 +108,21 @@ def recognize_and_print(image, languages=None, save_dir="output",
     # 初始化OCR（使用缓存的实例）
     ocr = init_reader(languages, use_gpu)
 
-    # 将PIL图像转换为numpy数组
-    if hasattr(image, 'convert'):  # PIL Image
+    # 将PIL图像转换为numpy数组（优化：避免重复转换）
+    if isinstance(image, np.ndarray):
+        # 已经是numpy数组，直接使用
+        img_array = image
+        logger.debug(f"图像已是numpy数组，跳过转换")
+    elif hasattr(image, 'convert'):  # PIL Image
         # 先转换为RGB（确保颜色通道正确）
         if image.mode != 'RGB':
             image = image.convert('RGB')
         img_array = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        logger.debug(f"PIL图像转换为numpy数组完成")
     else:
+        # 尝试直接使用
         img_array = image
+        logger.warning(f"未知图像类型: {type(image)}，尝试直接使用")
 
     # 应用ROI裁剪（如果提供）
     # 注意：如果image已经是裁剪后的图像，roi可能为None或不需要再次应用
@@ -133,9 +140,33 @@ def recognize_and_print(image, languages=None, save_dir="output",
         else:
             logger.warning(f"ROI坐标无效，跳过裁剪: ({x1}, {y1}, {x2}, {y2})")
 
-    # 图像取反处理：将黑底白字转换为白底黑字
-    img_array_inverted = cv2.bitwise_not(img_array)
-    logger.debug(f"图像取反处理完成，图像尺寸: {img_array_inverted.shape}")
+    # 图像预处理：根据配置决定是否进行取反处理
+    # 取反处理用于将黑底白字转换为白底黑字，提高识别准确率
+    # 但会增加 10-20ms 的处理时间，对于白底黑字场景可以关闭以提升速度
+    enable_invert = config.get('ocr.enable_image_invert', False)
+    auto_detect_invert = config.get('ocr.auto_detect_invert', False)
+
+    # 自动检测是否需要取反（基于图像亮度）
+    if auto_detect_invert and not enable_invert:
+        # 计算图像平均亮度
+        if len(img_array.shape) == 3:
+            # 彩色图像，转换为灰度
+            gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img_array
+
+        mean_brightness = np.mean(gray)
+        # 如果平均亮度低于 128（偏暗），可能是黑底白字，需要取反
+        if mean_brightness < 128:
+            enable_invert = True
+            logger.debug(f"自动检测到暗色背景（亮度: {mean_brightness:.1f}），启用图像取反")
+
+    if enable_invert:
+        img_array_inverted = cv2.bitwise_not(img_array)
+        logger.debug(f"图像取反处理完成，图像尺寸: {img_array_inverted.shape}")
+    else:
+        img_array_inverted = img_array
+        logger.debug(f"跳过图像取反处理（性能优化），图像尺寸: {img_array_inverted.shape}")
 
     # 保存处理后的图像（根据配置决定是否保存）
     # 如果 save_result 为 False，则不保存处理后的图像
