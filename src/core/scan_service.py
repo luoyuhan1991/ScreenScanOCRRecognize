@@ -52,6 +52,9 @@ class ScanService:
         # 新增配置：是否保存文件（默认开启以保持兼容性）
         self.save_screenshot = config.get('files.save_screenshot', True)
         self.save_ocr_result = config.get('files.save_ocr_result', True)
+
+        # 内存管理配置
+        self.explicit_image_cleanup = config.get('performance.explicit_image_cleanup', True)
     
     def init_ocr(self, engine_choice: str = 'paddle', languages: List[str] = None, use_gpu: bool = None):
         """
@@ -138,62 +141,73 @@ class ScanService:
             result['timestamp'] = second_timestamp
             
             # 2. 截图
-            screenshot, _ = scan_screen(
-                save_dir=self.output_dir,
-                save_file=self.save_screenshot,
-                timestamp=second_timestamp,
-                roi=self.roi,
-                padding=self.roi_padding
-            )
-            
-            if screenshot:
-                if self.save_screenshot:
-                    result['screenshot_path'] = os.path.join(self.output_dir, f"screenshot_{second_timestamp}.png")
-                
-                # 3. OCR识别
-                if self.ocr_engine:
-                    # 直接调用底层OCR模块（使用缓存的配置）
-                    if self.ocr_engine == 'paddle':
-                        from .ocr import paddle_ocr
-                        ocr_results = paddle_ocr.recognize_and_print(
-                            screenshot,
-                            languages=self.ocr_config.get_paddle_params()['lang'],
-                            save_dir=self.output_dir,
-                            timestamp=second_timestamp,
-                            use_gpu=self.ocr_config.use_gpu,
-                            roi=None,
-                            save_result=self.save_ocr_result
-                        )
-                    else:
-                        from .ocr import easy_ocr
-                        ocr_results = easy_ocr.recognize_and_print(
-                            screenshot,
-                            languages=self.ocr_config.get_easy_params()['languages'],
-                            save_dir=self.output_dir,
-                            timestamp=second_timestamp,
-                            use_gpu=self.ocr_config.use_gpu,
-                            roi=None,
-                            save_result=self.save_ocr_result
-                        )
-                    
-                    # 统一结果格式
-                    ocr_list = self._normalize_ocr_results(ocr_results)
-                    result['ocr_results'] = ocr_list
-                    
-                    # 4. 关键词匹配
-                    if self.enable_matching and ocr_list:
-                        # 使用缓存的匹配器进行匹配
-                        matcher = _get_cached_matcher(self.banlist_file)
-                        matches = matcher.match(ocr_list)
-                        result['matches'] = matches
-                        
-                result['success'] = True
-                
-                # 每10次扫描清空一次
-                self.output_count += 1
-                if self.output_count >= 10:
-                    self.output_count = 0
-                    self._cleanup_old_outputs()
+            screenshot = None
+            try:
+                screenshot, _ = scan_screen(
+                    save_dir=self.output_dir,
+                    save_file=self.save_screenshot,
+                    timestamp=second_timestamp,
+                    roi=self.roi,
+                    padding=self.roi_padding
+                )
+
+                if screenshot:
+                    if self.save_screenshot:
+                        result['screenshot_path'] = os.path.join(self.output_dir, f"screenshot_{second_timestamp}.png")
+
+                    # 3. OCR识别
+                    if self.ocr_engine:
+                        # 直接调用底层OCR模块（使用缓存的配置）
+                        if self.ocr_engine == 'paddle':
+                            from .ocr import paddle_ocr
+                            ocr_results = paddle_ocr.recognize_and_print(
+                                screenshot,
+                                languages=self.ocr_config.get_paddle_params()['lang'],
+                                save_dir=self.output_dir,
+                                timestamp=second_timestamp,
+                                use_gpu=self.ocr_config.use_gpu,
+                                roi=None,
+                                save_result=self.save_ocr_result
+                            )
+                        else:
+                            from .ocr import easy_ocr
+                            ocr_results = easy_ocr.recognize_and_print(
+                                screenshot,
+                                languages=self.ocr_config.get_easy_params()['languages'],
+                                save_dir=self.output_dir,
+                                timestamp=second_timestamp,
+                                use_gpu=self.ocr_config.use_gpu,
+                                roi=None,
+                                save_result=self.save_ocr_result
+                            )
+
+                        # 统一结果格式
+                        ocr_list = self._normalize_ocr_results(ocr_results)
+                        result['ocr_results'] = ocr_list
+
+                        # 4. 关键词匹配
+                        if self.enable_matching and ocr_list:
+                            # 使用缓存的匹配器进行匹配
+                            matcher = _get_cached_matcher(self.banlist_file)
+                            matches = matcher.match(ocr_list)
+                            result['matches'] = matches
+
+                    result['success'] = True
+
+                    # 每10次扫描清空一次
+                    self.output_count += 1
+                    if self.output_count >= 10:
+                        self.output_count = 0
+                        self._cleanup_old_outputs()
+
+            finally:
+                # 显式释放截图对象，减少内存占用
+                if screenshot and self.explicit_image_cleanup:
+                    try:
+                        screenshot.close()
+                        del screenshot
+                    except Exception:
+                        pass
                     
         except Exception as e:
             logger.error(f"扫描流程出错: {e}", exc_info=True)

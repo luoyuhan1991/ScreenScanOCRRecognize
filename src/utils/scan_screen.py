@@ -114,7 +114,14 @@ def select_roi_interactive(parent=None):
             root.wait_window()
         else:
             root.mainloop()
-        
+
+        # 显式释放截图对象，避免内存泄漏
+        try:
+            screenshot.close()
+            del screenshot
+        except Exception:
+            pass
+
         # 返回ROI
         if roi_data['completed'] and roi_data['start'] and roi_data['end']:
             x1, y1 = roi_data['start']
@@ -127,7 +134,6 @@ def select_roi_interactive(parent=None):
         else:
             logger.info("ROI选择已取消")
             return None
-            
     except ImportError:
         logger.warning("交互式ROI选择需要tkinter库，请安装或使用固定ROI")
         return None

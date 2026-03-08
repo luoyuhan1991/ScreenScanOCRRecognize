@@ -1,6 +1,7 @@
 """
 运行期内存监控小工具
 支持监控指定PID的工作集（RSS）内存。
+优化版本：优先使用 psutil，添加缓存机制
 """
 
 import argparse
@@ -8,16 +9,36 @@ import os
 import sys
 import time
 
+# 缓存 psutil 进程对象，避免重复创建
+_psutil_process_cache = {}
+
 
 def _try_psutil(pid: int):
+    """
+    使用 psutil 获取内存信息（推荐方式，更高效）
+
+    Args:
+        pid: 进程 ID
+
+    Returns:
+        float: 内存占用（MB），失败返回 None
+    """
     try:
         import psutil  # type: ignore
     except Exception:
         return None
-    
+
     try:
-        proc = psutil.Process(pid)
+        # 使用缓存的进程对象，避免重复创建
+        if pid not in _psutil_process_cache:
+            _psutil_process_cache[pid] = psutil.Process(pid)
+
+        proc = _psutil_process_cache[pid]
         return proc.memory_info().rss / (1024 * 1024)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        # 进程不存在或无权限，清除缓存
+        _psutil_process_cache.pop(pid, None)
+        return None
     except Exception:
         return None
 
@@ -143,18 +164,38 @@ def get_rss_mb(pid: int):
 
 
 def get_private_mb(pid: int):
-    rss = _try_psutil(pid)
-    if rss is not None:
-        try:
-            import psutil  # type: ignore
-            proc = psutil.Process(pid)
-            return proc.memory_info().private / (1024 * 1024)
-        except Exception:
-            pass
-    
+    """
+    获取进程私有内存占用（MB）
+
+    Args:
+        pid: 进程 ID
+
+    Returns:
+        float: 私有内存占用（MB），失败返回 None
+    """
+    # 优先使用 psutil（更高效）
+    try:
+        import psutil  # type: ignore
+
+        # 使用缓存的进程对象
+        if pid not in _psutil_process_cache:
+            _psutil_process_cache[pid] = psutil.Process(pid)
+
+        proc = _psutil_process_cache[pid]
+        # 尝试获取私有内存（private）
+        mem_info = proc.memory_info()
+        if hasattr(mem_info, 'private'):
+            return mem_info.private / (1024 * 1024)
+        else:
+            # 如果没有 private 属性，返回 rss
+            return mem_info.rss / (1024 * 1024)
+    except Exception:
+        pass
+
+    # 回退到 Windows API
     if sys.platform == "win32":
         return _get_private_windows(pid)
-    
+
     return None
 
 

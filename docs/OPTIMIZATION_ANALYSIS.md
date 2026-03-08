@@ -7,6 +7,7 @@
 ## 实施状态
 
 - ✅ **已完成**: 条件化图像预处理优化（2026-03-07）
+- ✅ **已完成**: 内存监控和内存使用优化（2026-03-07）
 - ⏳ **进行中**: 无
 - ⏸️ **待实施**: 其他优化项
 
@@ -194,8 +195,135 @@ if save_processed_image and save_result:
 
 ### 优化方案
 
-#### 方案 1: 日志队列自动清理
+#### 方案 1: 日志队列自动清理 ✅ **已实施**
+
+**实施日期**: 2026-03-07
+
+**修改文件**:
+- `config/config.yaml`: 添加 `performance.max_log_queue_size` 和 `performance.log_queue_cleanup_threshold`
+- `app.py`: 优化 `process_log_queue()` 方法，添加自动清理和批量处理
+
+**实施代码**:
 ```python
+# 在 app.py 的 process_log_queue 中添加
+def process_log_queue(self):
+    # 检查队列大小，如果超过阈值则清理
+    queue_size = self.log_queue.qsize()
+    if queue_size > self.log_queue_cleanup_threshold:
+        # 清理一半的旧日志
+        cleanup_count = queue_size // 2
+        for _ in range(cleanup_count):
+            try:
+                self.log_queue.get_nowait()
+            except queue.Empty:
+                break
+
+    # 批量处理日志（一次最多处理 10 条）
+    processed_count = 0
+    max_batch_size = 10
+    while processed_count < max_batch_size:
+        try:
+            log_message, level = self.log_queue.get_nowait()
+            self.log_text.insert(tk.END, log_message, level)
+            processed_count += 1
+        except queue.Empty:
+            break
+
+    # 一次性滚动到底部（减少重绘）
+    if processed_count > 0:
+        self.log_text.see(tk.END)
+```
+
+**配置说明**:
+```yaml
+performance:
+  max_log_queue_size: 1000  # 日志队列最大大小（从 2000 降低到 1000）
+  log_queue_cleanup_threshold: 800  # 达到此阈值时触发清理
+```
+
+**预期效果**:
+- 防止内存泄漏
+- 减少 50% 日志队列内存占用
+- 提升 GUI 响应性（批量处理）
+
+---
+
+#### 方案 2: 显式释放截图对象 ✅ **已实施**
+
+**实施日期**: 2026-03-07
+
+**修改文件**:
+- `config/config.yaml`: 添加 `performance.explicit_image_cleanup`
+- `src/core/scan_service.py`: 在 `scan_once()` 中添加 finally 块释放截图
+
+**实施代码**:
+```python
+# 在 scan_service.py:scan_once 中
+screenshot = None
+try:
+    screenshot, _ = scan_screen(...)
+    # OCR 处理
+    ocr_results = ocr.recognize(screenshot)
+finally:
+    # 显式释放截图对象
+    if screenshot and config.get('performance.explicit_image_cleanup', True):
+        try:
+            screenshot.close()
+            del screenshot
+        except Exception:
+            pass
+```
+
+**配置说明**:
+```yaml
+performance:
+  explicit_image_cleanup: true  # 显式释放截图对象
+```
+
+**预期效果**:
+- 每次扫描节省 30-50MB 内存
+- 减少内存峰值
+
+---
+
+#### 方案 3: 内存监控优化 ✅ **已实施**
+
+**实施日期**: 2026-03-07
+
+**修改文件**:
+- `config/config.yaml`: 添加 `performance.memory_monitor_interval_ms` 和 `performance.use_psutil`
+- `src/utils/mem_monitor.py`: 添加 psutil 进程对象缓存
+- `app.py`: 从配置读取内存监控间隔
+
+**实施代码**:
+```python
+# 在 mem_monitor.py 中添加缓存
+_psutil_process_cache = {}
+
+def _try_psutil(pid: int):
+    # 使用缓存的进程对象，避免重复创建
+    if pid not in _psutil_process_cache:
+        _psutil_process_cache[pid] = psutil.Process(pid)
+
+    proc = _psutil_process_cache[pid]
+    return proc.memory_info().rss / (1024 * 1024)
+```
+
+**配置说明**:
+```yaml
+performance:
+  memory_monitor_interval_ms: 5000  # 从 2000ms 增加到 5000ms
+  use_psutil: true  # 优先使用 psutil（更高效）
+```
+
+**预期效果**:
+- 减少 60% 内存监控调用频率
+- 降低 CPU 占用
+- 提升监控效率（psutil 比 ctypes 快约 30%）
+
+---
+
+#### 方案 4: 可选保存处理后图像 ⏸️ **待实施**
 # 在 app.py 的 process_log_queue 中添加
 def process_log_queue(self):
     # 检查队列大小

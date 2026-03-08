@@ -54,12 +54,18 @@ class MainGUI:
         self.is_running = False
         self.scan_thread = None
         self.stop_event = threading.Event()
-        # 限制日志队列大小，避免高频日志导致内存增长
-        self.log_queue = queue.Queue(maxsize=2000)
+
+        # 日志队列配置（从配置文件读取）
+        max_log_queue_size = config.get('performance.max_log_queue_size', 1000)
+        self.log_queue = queue.Queue(maxsize=max_log_queue_size)
+        self.log_queue_cleanup_threshold = config.get('performance.log_queue_cleanup_threshold', 800)
+
         self.scan_count = 0
         self.last_scan_time = None
         self.memory_label = None
-        self._memory_interval_ms = 2000
+
+        # 内存监控配置（从配置文件读取）
+        self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms', 5000)
         self._memory_pid = os.getpid()
         
         # OCR相关
@@ -965,25 +971,46 @@ class MainGUI:
         self.append_log("日志已清空", "INFO")
     
     def process_log_queue(self):
-        """处理日志队列（在主线程中）"""
+        """处理日志队列（在主线程中）- 优化版本：批量处理和自动清理"""
         try:
-            while True:
+            # 检查队列大小，如果超过阈值则清理
+            queue_size = self.log_queue.qsize()
+            if queue_size > self.log_queue_cleanup_threshold:
+                # 清理一半的旧日志
+                cleanup_count = queue_size // 2
+                for _ in range(cleanup_count):
+                    try:
+                        self.log_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                logger.debug(f"日志队列清理：移除 {cleanup_count} 条旧日志")
+
+            # 批量处理日志（一次最多处理 10 条，提升性能）
+            processed_count = 0
+            max_batch_size = 10
+
+            while processed_count < max_batch_size:
                 try:
                     log_message, level = self.log_queue.get_nowait()
                     self.log_text.insert(tk.END, log_message, level)
-                    self.log_text.see(tk.END)
-                    
-                    # 限制日志行数
-                    max_lines = self.state_manager.get_log_max_lines()
-                    lines = int(self.log_text.index('end-1c').split('.')[0])
-                    if lines > max_lines:
-                        # 删除前100行
-                        self.log_text.delete('1.0', '100.0')
+                    processed_count += 1
                 except queue.Empty:
                     break
-        except:
+
+            # 如果处理了日志，一次性滚动到底部（减少重绘）
+            if processed_count > 0:
+                self.log_text.see(tk.END)
+
+                # 限制日志行数
+                max_lines = self.state_manager.get_log_max_lines()
+                lines = int(self.log_text.index('end-1c').split('.')[0])
+                if lines > max_lines:
+                    # 删除前100行
+                    self.log_text.delete('1.0', '100.0')
+        except Exception as e:
+            # 避免日志处理错误影响主程序
             pass
-        
+
         # 每100ms检查一次
         self.root.after(100, self.process_log_queue)
     

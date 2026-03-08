@@ -48,3 +48,9 @@ logging:
   format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
   max_bytes: 10485760
   backup_count: 5
+performance:
+  memory_monitor_interval_ms: 5000
+  use_psutil: true
+  max_log_queue_size: 1000
+  log_queue_cleanup_threshold: 800
+  explicit_image_cleanup: true
