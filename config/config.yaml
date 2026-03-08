@@ -5,7 +5,7 @@ scan:
   saved_roi:
   - 1175
   - 256
-  - 1851
+  - 1860
   - 843
   remember_roi: true
 ocr:
