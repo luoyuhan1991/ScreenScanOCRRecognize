@@ -62,6 +62,10 @@ def register_scan_hotkeys(root, on_start, on_stop):
             self._on_stop = on_stop
             self._remove_start = None
             self._remove_stop = None
+            self._registered = False
+
+        def is_registered(self):
+            return self._registered
 
         def _safe_start(self):
             try:
@@ -76,6 +80,7 @@ def register_scan_hotkeys(root, on_start, on_stop):
                 pass
 
         def start(self):
+            self._registered = False
             try:
                 # add_hotkey 返回的移除函数，用于 stop 时注销
                 self._remove_start = keyboard.add_hotkey(
@@ -88,8 +93,16 @@ def register_scan_hotkeys(root, on_start, on_stop):
                     lambda: _run_on_main(self._root, self._safe_stop),
                     suppress=False,
                 )
+                self._registered = True
             except Exception as e:
                 logger.warning("热键注册失败: %s（若需管理员权限请以管理员运行）", e)
+                if self._remove_start is not None:
+                    try:
+                        self._remove_start()
+                    except Exception:
+                        pass
+                    self._remove_start = None
+                self._remove_stop = None
 
         def stop(self):
             try:
@@ -101,6 +114,8 @@ def register_scan_hotkeys(root, on_start, on_stop):
                     self._remove_stop = None
             except Exception:
                 pass
+            finally:
+                self._registered = False
 
     manager = _Manager()
     manager.start()

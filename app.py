@@ -6,6 +6,7 @@ ScreenScanOCRRecognize - GUI主程序
 import logging
 import os
 import queue
+import sys
 import threading
 import time
 import tkinter as tk
@@ -106,16 +107,40 @@ class MainGUI:
         else:
             self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
         
-        # 注册系统全局热键：Ctrl+Alt+1 开始，Ctrl+Alt+2 停止
-        self._hotkey_manager = register_scan_hotkeys(self.root, self.on_start, self.on_stop)
-        if self._hotkey_manager:
-            self.append_log("系统热键: Ctrl+Alt+1 开始扫描, Ctrl+Alt+2 停止扫描（小键盘或主键盘数字键均可）", "INFO")
+        # 全局热键：待主循环就绪后再注册底层键盘钩子（避免与托盘等初始化顺序冲突）
+        self._hotkey_manager = None
+        self.root.after_idle(self._setup_scan_hotkeys)
         
         # 初始化窗口标题（显示状态）
         self.update_window_title("已停止")
         
         # 启动内存监控显示
         self._schedule_memory_update()
+    
+    def _setup_scan_hotkeys(self):
+        """注册 Ctrl+Alt+1/2；仅在 keyboard 钩子真正成功时提示已启用。"""
+        try:
+            if not self.root.winfo_exists():
+                return
+        except Exception:
+            return
+        self._hotkey_manager = register_scan_hotkeys(self.root, self.on_start, self.on_stop)
+        if self._hotkey_manager and self._hotkey_manager.is_registered():
+            self.append_log(
+                "系统热键: Ctrl+Alt+1 开始扫描, Ctrl+Alt+2 停止扫描（小键盘或主键盘数字键均可）",
+                "INFO",
+            )
+        elif self._hotkey_manager is not None:
+            self.append_log(
+                "全局热键未生效：请查看上方警告；可尝试以管理员身份运行，"
+                "或检查杀毒软件是否拦截键盘钩子，并确认已执行 pip install keyboard。",
+                "WARNING",
+            )
+        elif sys.platform == "win32":
+            self.append_log(
+                "全局热键不可用：未安装或无法加载 keyboard 库，请执行 pip install keyboard。",
+                "WARNING",
+            )
     
     def create_widgets(self):
         """创建所有控件"""
