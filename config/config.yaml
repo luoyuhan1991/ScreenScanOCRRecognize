@@ -40,8 +40,8 @@ matching:
   enabled: true
   display_duration: 3.0
   position: center
-  match_ratio_threshold: 0.75
-  font_size: 20
+  match_ratio_threshold: 0.85
+  font_size: 18
 logging:
   level: INFO
   file: logs/app.log

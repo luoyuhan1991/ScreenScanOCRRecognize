@@ -165,7 +165,9 @@ class FloatingTextDisplay:
         初始化遮罩式文字显示器
 
         Args:
-            text_lines (list): 要显示的文字行列表，每行是 (text, color) 元组
+            text_lines (list): 要显示的文字行列表。
+                - 单列模式：每行是 (text, color) 元组
+                - 双列模式：每行是 (left_text, right_text, left_color, right_color) 元组
             duration (int): 显示时长（秒），默认为3
             position (str): 显示位置，"center"（屏幕中央）、"top"（顶部）、"bottom"（底部）
             font_size (int): 字体大小，默认为20
@@ -293,66 +295,117 @@ class FloatingTextDisplay:
         )
         canvas.pack()
 
-        # 构建字体元组
-        font_tuple = ('Microsoft YaHei', self.font_size, 'bold')
-
-        # 绘制多行文字
-        line_height = self.font_size * 1.3
+        # 构建字体元组（整体稍微缩小，避免遮挡）
+        effective_font_size = max(10, int(self.font_size) - 2)
+        font_tuple = ('Microsoft YaHei', effective_font_size, 'bold')
+        line_height = effective_font_size * 1.35
         start_y = padding + line_height / 2
-        
-        for i, (text, color) in enumerate(self.text_lines):
-            # 计算文字在Canvas中的位置
-            text_x = window_width // 2
-            text_y = start_y + i * line_height
+        shadow_offset = max(1, effective_font_size // 30)
 
-            # 添加阴影
-            shadow_offset = max(1, self.font_size // 30)
-            canvas.create_text(
-                text_x + shadow_offset, text_y + shadow_offset,
-                text=text,
-                font=font_tuple,
-                fill='#000000',
-                anchor='center',
-                tags=f'watermark_shadow_{i}'
-            )
+        # 双列模式：左列=历史匹配记录；右列=本次OCR识别结果
+        is_two_columns = bool(self.text_lines and len(self.text_lines[0]) == 4)
+        if is_two_columns:
+            left_padding = 6
+            mid_gap = 28
+            left_col_width = int(getattr(self, "_left_col_width", 0))
+            left_x = left_padding
+            right_x = left_padding + left_col_width + mid_gap
 
-            # 绘制文字
-            canvas.create_text(
-                text_x, text_y,
-                text=text,
-                font=font_tuple,
-                fill=color,
-                anchor='center',
-                tags=f'watermark_text_{i}'
-            )
+            for i, (left_text, right_text, left_color, right_color) in enumerate(self.text_lines):
+                text_y = start_y + i * line_height
 
-            # 重新排列图层
-            canvas.tag_raise(f'watermark_text_{i}', f'watermark_shadow_{i}')
+                # 左列阴影与文字（左对齐）
+                canvas.create_text(
+                    left_x + shadow_offset, text_y + shadow_offset,
+                    text=left_text,
+                    font=font_tuple,
+                    fill='#000000',
+                    anchor='w',
+                    tags=f'watermark_left_shadow_{i}'
+                )
+                canvas.create_text(
+                    left_x, text_y,
+                    text=left_text,
+                    font=font_tuple,
+                    fill=left_color,
+                    anchor='w',
+                    tags=f'watermark_left_text_{i}'
+                )
+                canvas.tag_raise(f'watermark_left_text_{i}', f'watermark_left_shadow_{i}')
+
+                # 右列阴影与文字（左对齐）
+                canvas.create_text(
+                    right_x + shadow_offset, text_y + shadow_offset,
+                    text=right_text,
+                    font=font_tuple,
+                    fill='#000000',
+                    anchor='w',
+                    tags=f'watermark_right_shadow_{i}'
+                )
+                canvas.create_text(
+                    right_x, text_y,
+                    text=right_text,
+                    font=font_tuple,
+                    fill=right_color,
+                    anchor='w',
+                    tags=f'watermark_right_text_{i}'
+                )
+                canvas.tag_raise(f'watermark_right_text_{i}', f'watermark_right_shadow_{i}')
+        else:
+            # 兼容单列模式
+            for i, (text, color) in enumerate(self.text_lines):
+                text_x = window_width // 2
+                text_y = start_y + i * line_height
+                canvas.create_text(
+                    text_x + shadow_offset, text_y + shadow_offset,
+                    text=text,
+                    font=font_tuple,
+                    fill='#000000',
+                    anchor='center',
+                    tags=f'watermark_shadow_{i}'
+                )
+                canvas.create_text(
+                    text_x, text_y,
+                    text=text,
+                    font=font_tuple,
+                    fill=color,
+                    anchor='center',
+                    tags=f'watermark_text_{i}'
+                )
+                canvas.tag_raise(f'watermark_text_{i}', f'watermark_shadow_{i}')
 
 
     def _calculate_window_geometry(self, screen_width, screen_height):
         """计算窗口几何信息（位置和大小）"""
-        font = ('Microsoft YaHei', self.font_size, 'bold')
+        effective_font_size = max(10, int(self.font_size) - 2)
+        font = ('Microsoft YaHei', effective_font_size, 'bold')
+        line_height = int(effective_font_size * 1.35)
 
-        # 计算所有文字行的最大宽度和总高度
-        max_text_width = 0
-        total_text_height = 0
-        line_height = int(self.font_size * 1.3)
-
-        for text, _ in self.text_lines:
-            # 创建临时标签来测量文字尺寸
+        def _measure_text_width(text):
             temp_label = tk.Label(self.root, text=text, font=font)
             self.root.update_idletasks()
-
             try:
-                text_width = temp_label.winfo_reqwidth()
-            except:
-                text_width = len(text) * int(self.font_size * 0.6)
-
+                w = temp_label.winfo_reqwidth()
+            except Exception:
+                w = len(text) * int(effective_font_size * 0.6)
             temp_label.destroy()
+            return int(w)
 
-            max_text_width = max(max_text_width, text_width)
-            total_text_height += line_height
+        is_two_columns = bool(self.text_lines and len(self.text_lines[0]) == 4)
+        total_text_height = len(self.text_lines) * line_height
+
+        if is_two_columns:
+            left_col_width = 0
+            right_col_width = 0
+            for left_text, right_text, _, _ in self.text_lines:
+                left_col_width = max(left_col_width, _measure_text_width(left_text))
+                right_col_width = max(right_col_width, _measure_text_width(right_text))
+            self._left_col_width = int(left_col_width)
+            max_text_width = left_col_width + 28 + right_col_width
+        else:
+            max_text_width = 0
+            for text, _ in self.text_lines:
+                max_text_width = max(max_text_width, _measure_text_width(text))
 
         # 最小边距（用于计算窗口位置时保持一致）
         padding = 2
@@ -395,7 +448,16 @@ def _get_cached_matcher(txt_file: str) -> TextMatcher:
     return matcher
 
 
-def display_ocr_results(ocr_results, matched_keywords, duration=3, position="center", font_size=20, parent_root=None, matcher=None):
+def display_ocr_results(
+    ocr_results,
+    matched_keywords,
+    duration=3,
+    position="center",
+    font_size=20,
+    parent_root=None,
+    matcher=None,
+    session_matched_records=None
+):
     """
     显示OCR识别结果，用颜色区分匹配状态。某行包含任一匹配关键词即标为匹配（红色）。
     
@@ -411,8 +473,8 @@ def display_ocr_results(ocr_results, matched_keywords, duration=3, position="cen
     if not ocr_results:
         return
     
-    # 生成带颜色的文字行列表
-    text_lines = []
+    # 右列：当前OCR识别结果
+    right_column_lines = []
     for result in ocr_results:
         text = result.get('text', '')
         if not text:
@@ -422,7 +484,26 @@ def display_ocr_results(ocr_results, matched_keywords, duration=3, position="cen
         is_matched = any(keyword in text for keyword in matched_keywords)
         # 匹配的用红色，未匹配的用绿色
         color = '#ff3333' if is_matched else '#00ff00'
-        text_lines.append((text, color))
+        right_column_lines.append((text, color))
+
+    if not right_column_lines:
+        return
+
+    # 左列：本次开始扫描后累计匹配成功（OCR结果 + 关键词）
+    left_column_lines = []
+    if session_matched_records:
+        for ocr_text, keyword in session_matched_records:
+            left_column_lines.append((f"{ocr_text}  ->  {keyword}", '#ff3333'))
+    else:
+        left_column_lines.append(("本次扫描暂无匹配", '#aaaaaa'))
+
+    # 对齐成双列表格（两列都左对齐）
+    total_rows = max(len(left_column_lines), len(right_column_lines))
+    text_lines = []
+    for i in range(total_rows):
+        left_text, left_color = left_column_lines[i] if i < len(left_column_lines) else ("", '#aaaaaa')
+        right_text, right_color = right_column_lines[i] if i < len(right_column_lines) else ("", '#aaaaaa')
+        text_lines.append((left_text, right_text, left_color, right_color))
     
     # 创建并显示浮动文字
     display = FloatingTextDisplay(text_lines, duration, position, font_size, parent_root)

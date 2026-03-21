@@ -22,6 +22,7 @@ from src.config.config import config
 from src.config.config_editor import ConfigEditor
 from src.config.gui_state import GUIStateManager
 from src.utils.gui_logger import GUILoggerHandler
+from src.utils.logger import logger
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
 from src.utils.text_matcher import display_ocr_results, _get_cached_matcher
@@ -63,6 +64,8 @@ class MainGUI:
         self.scan_count = 0
         self.last_scan_time = None
         self.memory_label = None
+        self.session_matched_records = []
+        self.session_matched_record_set = set()
 
         # 内存监控配置（从配置文件读取）
         self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms', 5000)
@@ -291,7 +294,7 @@ class MainGUI:
         self.display_font_size_scale = ttk.Scale(
             row2,
             from_=12,
-            to=60,
+            to=22,
             orient=tk.HORIZONTAL,
             variable=self.display_font_size_var,
             length=150,
@@ -302,6 +305,7 @@ class MainGUI:
         self.display_font_size_entry = ttk.Entry(row2, width=5, textvariable=self.display_font_size_var)
         self.display_font_size_entry.pack(side=tk.LEFT, padx=5)
         ttk.Label(row2, text="像素").pack(side=tk.LEFT, padx=(0, 10))
+        self.display_font_size_var.trace('w', self.on_font_size_change)
         
         ttk.Label(row2, text="显示位置:").pack(side=tk.LEFT, padx=(0, 5))
         
@@ -483,10 +487,22 @@ class MainGUI:
         try:
             # 设置步长为1
             value = round(float(value))
+            value = max(12, min(22, value))
             self.display_font_size_var.set(value)
         except (ValueError, TypeError):
             pass
         except:
+            pass
+
+    def on_font_size_change(self, *args):
+        """字体大小输入框改变事件"""
+        try:
+            value = int(self.display_font_size_var.get())
+            value = max(12, min(22, value))
+            if self.display_font_size_var.get() != value:
+                self.display_font_size_var.set(value)
+            self.display_font_size_scale.set(value)
+        except Exception:
             pass
     
     def on_confidence_change(self, *args):
@@ -587,6 +603,9 @@ class MainGUI:
         try:
             # 保存当前配置
             self.save_settings()
+            # 新一轮扫描开始，清空本次会话的匹配成功记录
+            self.session_matched_records = []
+            self.session_matched_record_set.clear()
             
             # 禁用开始按钮，显示初始化状态
             self.start_btn.config(state=tk.DISABLED)
@@ -1052,17 +1071,36 @@ class MainGUI:
                         ocr_results = result['ocr_results']
                         matches = result.get('matches', [])
                         self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
+
+                        # 累计“本次开始扫描后”匹配成功记录：OCR文本 + 关键词
+                        if matches:
+                            for item in ocr_results:
+                                text = item.get('text', '')
+                                if not text:
+                                    continue
+                                for kw in matches:
+                                    if kw and kw in text:
+                                        pair = (text, kw)
+                                        if pair not in self.session_matched_record_set:
+                                            self.session_matched_records.append(pair)
+                                            self.session_matched_record_set.add(pair)
+                            # 限制历史条目数量，避免浮窗过高
+                            if len(self.session_matched_records) > 30:
+                                self.session_matched_records = self.session_matched_records[-30:]
+                                self.session_matched_record_set = set(self.session_matched_records)
                         
                         # 在主线程中显示（传入 matcher 以按 75% 规则高亮匹配行）
                         banlist_path = self.banlist_path_var.get()
                         matcher = _get_cached_matcher(banlist_path) if banlist_path else None
-                        self.root.after(0, lambda ocr=ocr_results, m=matches, mat=matcher: display_ocr_results(
+                        session_records_snapshot = list(self.session_matched_records)
+                        self.root.after(0, lambda ocr=ocr_results, m=matches, mat=matcher, records=session_records_snapshot: display_ocr_results(
                             ocr, m,
                             duration=self.scan_service.display_duration,
                             position=self.scan_service.display_position,
                             font_size=self.scan_service.display_font_size,
                             parent_root=self.root,
-                            matcher=mat
+                            matcher=mat,
+                            session_matched_records=records
                         ))
                         
                 elif 'error' in result:
