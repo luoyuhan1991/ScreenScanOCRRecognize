@@ -6,6 +6,7 @@
 import os
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 
 from .logger import logger
 
@@ -17,6 +18,18 @@ except Exception:
 
 # 匹配阈值：关键词中至少该比例字符（按顺序）在 OCR 文本中出现则算匹配
 MATCH_RATIO_THRESHOLD = 0.75
+
+
+def keyword_in_text(ocr_text: str, keyword: str) -> bool:
+    """
+    判断 OCR 文本是否包含关键词（子串）。
+    对字母忽略大小写（使用 casefold，兼容更多 Unicode 大小写）；空关键词视为不匹配。
+    """
+    if not keyword:
+        return False
+    if not ocr_text:
+        return False
+    return keyword.casefold() in ocr_text.casefold()
 
 
 class TextMatcher:
@@ -107,6 +120,8 @@ class TextMatcher:
             return 1.0
         if not ocr_text:
             return 0.0
+        keyword = keyword.casefold()
+        ocr_text = ocr_text.casefold()
         pos = 0
         matched = 0
         for c in keyword:
@@ -124,7 +139,8 @@ class TextMatcher:
 
     def match(self, ocr_results):
         """
-        匹配OCR结果中的关键词。只要 OCR 某条结果里包含该关键词（子串包含）即算匹配。
+        匹配OCR结果中的关键词。只要 OCR 某条结果里包含该关键词（子串包含）即算匹配；
+        字母忽略大小写（见 keyword_in_text）。
         
         Args:
             ocr_results (list): OCR识别结果列表，每个元素是包含'text'键的字典
@@ -143,10 +159,10 @@ class TextMatcher:
             if isinstance(result, dict) and 'text' in result:
                 ocr_texts.append(result['text'])
         
-        # 只要关键词在任意一条 OCR 结果中出现即算匹配
+        # 只要关键词在任意一条 OCR 结果中出现即算匹配（字母忽略大小写）
         for keyword in self.keywords:
             for ocr_text in ocr_texts:
-                if keyword in ocr_text:
+                if keyword_in_text(ocr_text, keyword):
                     matched_keywords.append(keyword)
                     logger.info(f"匹配成功: '{keyword}' (OCR: '{ocr_text}')")
                     break
@@ -295,12 +311,13 @@ class FloatingTextDisplay:
         )
         canvas.pack()
 
-        # 构建字体元组（整体稍微缩小，避免遮挡）
-        effective_font_size = max(10, int(self.font_size) - 2)
-        font_tuple = ('Microsoft YaHei', effective_font_size, 'bold')
-        line_height = effective_font_size * 1.35
-        start_y = padding + line_height / 2
-        shadow_offset = max(1, effective_font_size // 30)
+        # 使用与几何计算一致的排版参数，避免文字底部被裁切
+        effective_font_size = getattr(self, "_effective_font_size", max(10, int(self.font_size) - 2))
+        font_tuple = getattr(self, "_font_tuple", ('Microsoft YaHei', effective_font_size, 'bold'))
+        line_height = float(getattr(self, "_line_height", int(effective_font_size * 1.35)))
+        vertical_safety = int(getattr(self, "_vertical_safety", 2))
+        shadow_offset = int(getattr(self, "_shadow_offset", max(1, effective_font_size // 30)))
+        start_y = padding + vertical_safety + line_height / 2
 
         # 双列模式：左列=历史匹配记录；右列=本次OCR识别结果
         is_two_columns = bool(self.text_lines and len(self.text_lines[0]) == 4)
@@ -379,7 +396,16 @@ class FloatingTextDisplay:
         """计算窗口几何信息（位置和大小）"""
         effective_font_size = max(10, int(self.font_size) - 2)
         font = ('Microsoft YaHei', effective_font_size, 'bold')
-        line_height = int(effective_font_size * 1.35)
+
+        try:
+            font_obj = tkfont.Font(root=self.root, family='Microsoft YaHei', size=effective_font_size, weight='bold')
+            base_line_height = int(font_obj.metrics("linespace"))
+        except Exception:
+            base_line_height = int(effective_font_size * 1.45)
+
+        line_height = max(int(base_line_height * 1.15), int(effective_font_size * 1.5))
+        shadow_offset = max(1, effective_font_size // 30)
+        vertical_safety = shadow_offset + max(2, int(effective_font_size * 0.25))
 
         def _measure_text_width(text):
             temp_label = tk.Label(self.root, text=text, font=font)
@@ -392,7 +418,7 @@ class FloatingTextDisplay:
             return int(w)
 
         is_two_columns = bool(self.text_lines and len(self.text_lines[0]) == 4)
-        total_text_height = len(self.text_lines) * line_height
+        total_text_height = len(self.text_lines) * line_height + vertical_safety * 2
 
         if is_two_columns:
             left_col_width = 0
@@ -406,6 +432,16 @@ class FloatingTextDisplay:
             max_text_width = 0
             for text, _ in self.text_lines:
                 max_text_width = max(max_text_width, _measure_text_width(text))
+
+        # 预留阴影像素，避免右侧阴影被裁切
+        max_text_width += shadow_offset
+
+        # 缓存排版参数，确保绘制与几何计算完全一致
+        self._effective_font_size = effective_font_size
+        self._font_tuple = font
+        self._line_height = line_height
+        self._shadow_offset = shadow_offset
+        self._vertical_safety = vertical_safety
 
         # 最小边距（用于计算窗口位置时保持一致）
         padding = 2
@@ -459,7 +495,8 @@ def display_ocr_results(
     session_matched_records=None
 ):
     """
-    显示OCR识别结果，用颜色区分匹配状态。某行包含任一匹配关键词即标为匹配（红色）。
+    显示OCR识别结果，用颜色区分匹配状态。某行包含任一匹配关键词即标为匹配（红色）；
+    高亮判断与匹配逻辑一致，字母忽略大小写。
     
     Args:
         ocr_results (list): OCR识别结果列表，每个元素包含 text, confidence, bbox
@@ -480,8 +517,10 @@ def display_ocr_results(
         if not text:
             continue
         
-        # 只要该行 OCR 文本中包含任一匹配关键词即算匹配（子串包含）
-        is_matched = any(keyword in text for keyword in matched_keywords)
+        # 只要该行 OCR 文本中包含任一匹配关键词即算匹配（子串包含，字母忽略大小写）
+        is_matched = any(
+            keyword_in_text(text, keyword) for keyword in matched_keywords
+        )
         # 匹配的用红色，未匹配的用绿色
         color = '#ff3333' if is_matched else '#00ff00'
         right_column_lines.append((text, color))

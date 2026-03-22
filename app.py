@@ -26,7 +26,7 @@ from src.utils.gui_logger import GUILoggerHandler
 from src.utils.logger import logger
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
-from src.utils.text_matcher import display_ocr_results, _get_cached_matcher
+from src.utils.text_matcher import display_ocr_results, _get_cached_matcher, keyword_in_text
 from src.utils.global_hotkey import register_scan_hotkeys
 from src.utils.tray_icon import setup_tray
 
@@ -1104,7 +1104,7 @@ class MainGUI:
                                 if not text:
                                     continue
                                 for kw in matches:
-                                    if kw and kw in text:
+                                    if kw and keyword_in_text(text, kw):
                                         pair = (text, kw)
                                         if pair not in self.session_matched_record_set:
                                             self.session_matched_records.append(pair)
