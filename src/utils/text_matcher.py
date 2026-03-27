@@ -45,21 +45,44 @@ class TextMatcher:
         """
         self.txt_file = txt_file
         self.keywords = []
+        self.keyword_left_hints = {}
         self._last_mtime = None
         self.match_ratio_threshold = match_ratio_threshold if match_ratio_threshold is not None else MATCH_RATIO_THRESHOLD
         self.keywords = self._load_keywords()
     
+    @staticmethod
+    def _parse_keyword_line(line: str):
+        """
+        解析关键词行格式：匹配关键词[:左侧提示]
+        返回: (match_keyword, left_hint)
+        """
+        raw = (line or "").strip()
+        if not raw:
+            return "", ""
+
+        if ":" not in raw:
+            return raw, ""
+
+        match_keyword, left_hint = raw.split(":", 1)
+        return match_keyword.strip(), left_hint.strip()
+
     def _load_keywords(self):
         """加载关键词列表"""
         keywords = []
+        keyword_left_hints = {}
         if os.path.exists(self.txt_file):
             try:
                 self._last_mtime = os.path.getmtime(self.txt_file)
                 with open(self.txt_file, 'r', encoding='utf-8') as f:
                     for line in f:
                         line = line.strip()
-                        if line:
-                            keywords.append(line)
+                        if not line:
+                            continue
+                        match_keyword, left_hint = self._parse_keyword_line(line)
+                        if not match_keyword:
+                            continue
+                        keywords.append(match_keyword)
+                        keyword_left_hints[match_keyword] = left_hint
                 logger.info(f"已加载 {len(keywords)} 个关键词")
             except Exception as e:
                 logger.error(f"加载关键词文件失败: {e}", exc_info=True)
@@ -68,7 +91,7 @@ class TextMatcher:
             # 创建默认关键词文件
             self._create_default_keywords_file()
             self._last_mtime = None
-        
+        self.keyword_left_hints = keyword_left_hints
         return keywords
     
     def _create_default_keywords_file(self):
@@ -103,6 +126,10 @@ class TextMatcher:
         
         if self._last_mtime is None or current_mtime != self._last_mtime:
             self.reload_keywords()
+
+    def get_left_hint(self, keyword: str) -> str:
+        """获取关键词对应的左侧提示（可能为空）"""
+        return self.keyword_left_hints.get(keyword, "")
 
     def _match_ratio(self, keyword, ocr_text):
         """
@@ -528,7 +555,7 @@ def display_ocr_results(
     if not right_column_lines:
         return
 
-    # 左列：本次开始扫描后累计匹配成功（OCR结果 + 关键词）
+    # 左列：本次开始扫描后累计匹配成功（左侧提示/或OCR结果 + 关键词）
     left_column_lines = []
     if session_matched_records:
         for ocr_text, keyword in session_matched_records:

@@ -1095,6 +1095,8 @@ class MainGUI:
                     if 'ocr_results' in result and result['ocr_results']:
                         ocr_results = result['ocr_results']
                         matches = result.get('matches', [])
+                        banlist_path = self.banlist_path_var.get()
+                        matcher = _get_cached_matcher(banlist_path) if banlist_path else None
                         self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
 
                         # 累计“本次开始扫描后”匹配成功记录：OCR文本 + 关键词
@@ -1105,7 +1107,9 @@ class MainGUI:
                                     continue
                                 for kw in matches:
                                     if kw and keyword_in_text(text, kw):
-                                        pair = (text, kw)
+                                        left_hint = matcher.get_left_hint(kw) if matcher else ""
+                                        left_text = left_hint if left_hint else text
+                                        pair = (left_text, kw)
                                         if pair not in self.session_matched_record_set:
                                             self.session_matched_records.append(pair)
                                             self.session_matched_record_set.add(pair)
@@ -1115,8 +1119,6 @@ class MainGUI:
                                 self.session_matched_record_set = set(self.session_matched_records)
                         
                         # 在主线程中显示（传入 matcher 以按 75% 规则高亮匹配行）
-                        banlist_path = self.banlist_path_var.get()
-                        matcher = _get_cached_matcher(banlist_path) if banlist_path else None
                         session_records_snapshot = list(self.session_matched_records)
                         self.root.after(0, lambda ocr=ocr_results, m=matches, mat=matcher, records=session_records_snapshot: display_ocr_results(
                             ocr, m,
