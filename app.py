@@ -65,8 +65,8 @@ class MainGUI:
         self.scan_count = 0
         self.last_scan_time = None
         self.memory_label = None
-        self.session_matched_records = []
-        self.session_matched_record_set = set()
+        # 本次扫描会话内：每个关键词只保留最近一次匹配对应的提示（无配置提示时为 OCR 文本）
+        self.session_keyword_latest_hint = {}
 
         # 内存监控配置（从配置文件读取）
         self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms', 5000)
@@ -629,8 +629,7 @@ class MainGUI:
             # 保存当前配置
             self.save_settings()
             # 新一轮扫描开始，清空本次会话的匹配成功记录
-            self.session_matched_records = []
-            self.session_matched_record_set.clear()
+            self.session_keyword_latest_hint.clear()
             
             # 禁用开始按钮，显示初始化状态
             self.start_btn.config(state=tk.DISABLED)
@@ -1099,7 +1098,7 @@ class MainGUI:
                         matcher = _get_cached_matcher(banlist_path) if banlist_path else None
                         self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
 
-                        # 累计“本次开始扫描后”匹配成功记录：OCR文本 + 关键词
+                        # 每个关键词仅保留历史最新一条：覆盖写入最新提示（无配置提示时用 OCR 文本）
                         if matches:
                             for item in ocr_results:
                                 text = item.get('text', '')
@@ -1108,18 +1107,11 @@ class MainGUI:
                                 for kw in matches:
                                     if kw and keyword_in_text(text, kw):
                                         left_hint = matcher.get_left_hint(kw) if matcher else ""
-                                        left_text = left_hint if left_hint else text
-                                        pair = (left_text, kw)
-                                        if pair not in self.session_matched_record_set:
-                                            self.session_matched_records.append(pair)
-                                            self.session_matched_record_set.add(pair)
-                            # 限制历史条目数量，避免浮窗过高
-                            if len(self.session_matched_records) > 30:
-                                self.session_matched_records = self.session_matched_records[-30:]
-                                self.session_matched_record_set = set(self.session_matched_records)
+                                        hint_text = left_hint if left_hint else text
+                                        self.session_keyword_latest_hint[kw] = hint_text
                         
                         # 在主线程中显示（传入 matcher 以按 75% 规则高亮匹配行）
-                        session_records_snapshot = list(self.session_matched_records)
+                        session_records_snapshot = dict(self.session_keyword_latest_hint)
                         self.root.after(0, lambda ocr=ocr_results, m=matches, mat=matcher, records=session_records_snapshot: display_ocr_results(
                             ocr, m,
                             duration=self.scan_service.display_duration,

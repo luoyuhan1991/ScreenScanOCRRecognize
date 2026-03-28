@@ -53,18 +53,25 @@ class TextMatcher:
     @staticmethod
     def _parse_keyword_line(line: str):
         """
-        解析关键词行格式：匹配关键词[:左侧提示]
+        解析关键词行格式（优先空白分隔）：
+        - 第一段为匹配关键词，其后整段为提示词；中间可用任意空白（空格/制表符等）。
+        - 若整行无第二段，但含英文冒号「:」，则按「关键词:提示词」兼容旧格式（仅分割第一个冒号）。
         返回: (match_keyword, left_hint)
         """
         raw = (line or "").strip()
         if not raw:
             return "", ""
 
-        if ":" not in raw:
-            return raw, ""
+        parts = raw.split(None, 1)
+        match_keyword = parts[0]
+        if len(parts) > 1:
+            left_hint = parts[1].strip().lstrip(":").strip()
+            return match_keyword, left_hint
 
-        match_keyword, left_hint = raw.split(":", 1)
-        return match_keyword.strip(), left_hint.strip()
+        if ":" in match_keyword:
+            k, h = match_keyword.split(":", 1)
+            return k.strip(), h.strip()
+        return match_keyword, ""
 
     def _load_keywords(self):
         """加载关键词列表"""
@@ -211,6 +218,7 @@ class FloatingTextDisplay:
             text_lines (list): 要显示的文字行列表。
                 - 单列模式：每行是 (text, color) 元组
                 - 双列模式：每行是 (left_text, right_text, left_color, right_color) 元组
+                - 左双列+右 OCR：每行是 (左关键词, 左提示, 右OCR文本, c_kw, c_hint, c_ocr) 共 6 元组
             duration (int): 显示时长（秒），默认为3
             position (str): 显示位置，"center"（屏幕中央）、"top"（顶部）、"bottom"（底部）
             font_size (int): 字体大小，默认为20
@@ -346,9 +354,44 @@ class FloatingTextDisplay:
         shadow_offset = int(getattr(self, "_shadow_offset", max(1, effective_font_size // 30)))
         start_y = padding + vertical_safety + line_height / 2
 
-        # 双列模式：左列=历史匹配记录；右列=本次OCR识别结果
+        # 左区双列对齐 + 右列 OCR：每行 6 元组
+        is_left_split = bool(self.text_lines and len(self.text_lines[0]) == 6)
+        # 双列模式：左列=历史匹配记录；右列=本次OCR识别结果（4 元组）
         is_two_columns = bool(self.text_lines and len(self.text_lines[0]) == 4)
-        if is_two_columns:
+
+        def _paint_west_col(cx, x, y, text, color, i, tag_prefix):
+            cx.create_text(
+                x + shadow_offset, y + shadow_offset,
+                text=text,
+                font=font_tuple,
+                fill='#000000',
+                anchor='w',
+                tags=f'{tag_prefix}_shadow_{i}'
+            )
+            cx.create_text(
+                x, y,
+                text=text,
+                font=font_tuple,
+                fill=color,
+                anchor='w',
+                tags=f'{tag_prefix}_text_{i}'
+            )
+            cx.tag_raise(f'{tag_prefix}_text_{i}', f'{tag_prefix}_shadow_{i}')
+
+        if is_left_split:
+            left_padding = 6
+            kw_hint_gap = int(getattr(self, "_kw_hint_gap", 12))
+            mid_gap = int(getattr(self, "_mid_gap_ocr", 28))
+            kw_x = left_padding
+            hint_x = int(getattr(self, "_hint_col_x", left_padding))
+            ocr_x = int(getattr(self, "_ocr_col_x", left_padding))
+
+            for i, (kw_text, hint_text, ocr_text, c_kw, c_hint, c_ocr) in enumerate(self.text_lines):
+                text_y = start_y + i * line_height
+                _paint_west_col(canvas, kw_x, text_y, kw_text, c_kw, i, 'wmk_kw')
+                _paint_west_col(canvas, hint_x, text_y, hint_text, c_hint, i, 'wmk_hint')
+                _paint_west_col(canvas, ocr_x, text_y, ocr_text, c_ocr, i, 'wmk_ocr')
+        elif is_two_columns:
             left_padding = 6
             mid_gap = 28
             left_col_width = int(getattr(self, "_left_col_width", 0))
@@ -444,10 +487,28 @@ class FloatingTextDisplay:
             temp_label.destroy()
             return int(w)
 
+        is_left_split = bool(self.text_lines and len(self.text_lines[0]) == 6)
         is_two_columns = bool(self.text_lines and len(self.text_lines[0]) == 4)
         total_text_height = len(self.text_lines) * line_height + vertical_safety * 2
 
-        if is_two_columns:
+        left_padding = 6
+        if is_left_split:
+            kw_hint_gap = 12
+            mid_gap_ocr = 28
+            max_kw_w = 0
+            max_hint_w = 0
+            max_ocr_w = 0
+            for kw_t, hint_t, ocr_t, _, _, _ in self.text_lines:
+                max_kw_w = max(max_kw_w, _measure_text_width(kw_t))
+                max_hint_w = max(max_hint_w, _measure_text_width(hint_t))
+                max_ocr_w = max(max_ocr_w, _measure_text_width(ocr_t))
+            self._left_kw_col_width = int(max_kw_w)
+            self._kw_hint_gap = kw_hint_gap
+            self._mid_gap_ocr = mid_gap_ocr
+            self._hint_col_x = left_padding + max_kw_w + kw_hint_gap
+            self._ocr_col_x = left_padding + max_kw_w + kw_hint_gap + max_hint_w + mid_gap_ocr
+            max_text_width = left_padding + max_kw_w + kw_hint_gap + max_hint_w + mid_gap_ocr + max_ocr_w
+        elif is_two_columns:
             left_col_width = 0
             right_col_width = 0
             for left_text, right_text, _, _ in self.text_lines:
@@ -533,6 +594,9 @@ def display_ocr_results(
         font_size (int): 字体大小
         parent_root: 可选的父窗口
         matcher (TextMatcher): 可选，保留参数兼容
+        session_matched_records: 可选，左区历史；可为 dict（关键词 -> 最新提示词），
+            或 (关键词, 提示词) 的列表。无配置提示词时由调用方用 OCR 文本作为提示；
+            浮窗左区为「关键词」「提示」两列对齐，右侧仍为当前 OCR 行。
     """
     if not ocr_results:
         return
@@ -555,21 +619,28 @@ def display_ocr_results(
     if not right_column_lines:
         return
 
-    # 左列：本次开始扫描后累计匹配成功（左侧提示/或OCR结果 + 关键词）
-    left_column_lines = []
-    if session_matched_records:
-        for ocr_text, keyword in session_matched_records:
-            left_column_lines.append((f"{ocr_text}  ->  {keyword}", '#ff3333'))
-    else:
-        left_column_lines.append(("本次扫描暂无匹配", '#aaaaaa'))
+    def _session_pairs(records):
+        if not records:
+            return []
+        if isinstance(records, dict):
+            return sorted(records.items(), key=lambda kv: kv[0].casefold())
+        return list(records)
 
-    # 对齐成双列表格（两列都左对齐）
-    total_rows = max(len(left_column_lines), len(right_column_lines))
+    left_rows = _session_pairs(session_matched_records)
+    if not left_rows:
+        left_rows = [("本次扫描暂无匹配", "", '#aaaaaa', '#aaaaaa')]
+    else:
+        left_rows = [(kw, hint, '#ff3333', '#ff3333') for kw, hint in left_rows]
+
+    total_rows = max(len(left_rows), len(right_column_lines))
     text_lines = []
     for i in range(total_rows):
-        left_text, left_color = left_column_lines[i] if i < len(left_column_lines) else ("", '#aaaaaa')
+        if i < len(left_rows):
+            kw_t, hint_t, c_kw, c_hint = left_rows[i]
+        else:
+            kw_t, hint_t, c_kw, c_hint = "", "", '#aaaaaa', '#aaaaaa'
         right_text, right_color = right_column_lines[i] if i < len(right_column_lines) else ("", '#aaaaaa')
-        text_lines.append((left_text, right_text, left_color, right_color))
+        text_lines.append((kw_t, hint_t, right_text, c_kw, c_hint, right_color))
     
     # 创建并显示浮动文字
     display = FloatingTextDisplay(text_lines, duration, position, font_size, parent_root)
