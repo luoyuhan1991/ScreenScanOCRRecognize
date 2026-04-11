@@ -492,18 +492,18 @@ class MainGUI:
     def on_interval_scale_change(self, value):
         """扫描间隔滑动条改变事件"""
         try:
-            # 设置步长为1
-            value = round(float(value))
-            self.scan_interval_var.set(value)
+            v = round(float(value) * 2) / 2
+            v = max(1.0, min(15.0, v))
+            self.scan_interval_var.set(v)
         except:
             pass
 
     def on_duration_scale_change(self, value):
         """显示时长滑动条改变事件"""
         try:
-            # 设置步长为1
-            value = round(float(value))
-            self.display_duration_var.set(value)
+            v = round(float(value) * 2) / 2
+            v = max(1.0, min(10.0, v))
+            self.display_duration_var.set(v)
         except (ValueError, TypeError):
             pass
     
