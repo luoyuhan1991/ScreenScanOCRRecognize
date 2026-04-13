@@ -113,15 +113,12 @@ class Overlay:
                 daemon=True,
             ).start()
 
-        has_current_matches = bool(matches)
+        if not self._session_matches:
+            return
 
-        if has_current_matches:
-            # 有新匹配 — 重绘并重置计时器
-            self._redraw(ocr_results, matches)
-            self._reset_hide_timer()
-        elif self._session_matches and self._visible:
-            # 当次无匹配但有历史记录且正在显示 — 重置计时器保持显示
-            self._reset_hide_timer()
+        # 有历史匹配记录 — 每次扫描都显示，display_duration 后自动隐藏
+        self._redraw(ocr_results, matches)
+        self._reset_hide_timer()
 
     def _redraw(self, ocr_results, matches):
         """重绘浮窗内容"""
