@@ -157,6 +157,7 @@ class ScanService:
     def set_roi(self, roi):
         """设置ROI区域"""
         self.roi = roi
+        self._prev_frame_gray = None  # 重置帧差状态
         
     def scan_once(self) -> Dict[str, Any]:
         """
@@ -207,8 +208,8 @@ class ScanService:
                             and isinstance(screenshot, np.ndarray)
                             and self._is_frame_similar(screenshot)):
                         # 帧无变化，复用上一次的 OCR 结果和匹配
-                        result['ocr_results'] = self._prev_ocr_results
-                        result['matches'] = self._prev_matches
+                        result['ocr_results'] = list(self._prev_ocr_results)
+                        result['matches'] = list(self._prev_matches)
                         result['success'] = True
                         result['diff_skipped'] = True
                         logger.info("帧无变化，跳过 OCR，复用上次结果")
@@ -256,11 +257,12 @@ class ScanService:
 
                         result['success'] = True
 
-                    # 按配置间隔清理旧输出文件
-                    self.output_count += 1
-                    if self.output_count >= self.cleanup_interval:
-                        self.output_count = 0
-                        self._cleanup_old_outputs()
+                    # 按配置间隔清理旧输出文件（仅在文件保存开启时执行）
+                    if (self.save_screenshot or self.save_ocr_result):
+                        self.output_count += 1
+                        if self.output_count >= self.cleanup_interval:
+                            self.output_count = 0
+                            self._cleanup_old_outputs()
 
             finally:
                 # 显式释放截图对象，减少内存占用

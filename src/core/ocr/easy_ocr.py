@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
 
+import cv2
 import easyocr
 import numpy as np
 from PIL import Image
@@ -127,6 +128,9 @@ def recognize_text(image, languages=None,
         # 将输入统一为 numpy 数组
         if isinstance(image, np.ndarray):
             img_array = image
+            # EasyOCR 期望 RGB，scan_screen 现在返回 BGR
+            if len(img_array.shape) == 3 and img_array.shape[2] == 3:
+                img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
             # 如果指定了ROI区域，通过数组切片裁剪
             if roi is not None:
                 x1, y1, x2, y2 = roi
