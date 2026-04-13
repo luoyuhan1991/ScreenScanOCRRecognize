@@ -16,6 +16,7 @@ class Overlay:
         self._visible = False
         self._session_matches = {}  # {keyword: hint}
         self._setup_done = False
+        self._hide_timer = None
 
     def setup(self):
         """创建窗口（只调用一次）"""
@@ -76,23 +77,19 @@ class Overlay:
                 self._session_matches[kw] = m['hint']
                 new_matches.append(kw)
 
-        # 新匹配时播放音效
+        # 新匹配时播放柔和双音提示
         if new_matches and config.get('matching.enable_sound', True):
-            threading.Thread(
-                target=lambda: winsound.Beep(1000, 200), daemon=True
-            ).start()
+            def _play():
+                winsound.Beep(600, 120)
+                winsound.Beep(800, 150)
+            threading.Thread(target=_play, daemon=True).start()
 
-        if not ocr_results:
-            self._hide()
+        if not ocr_results or not matches:
             return
 
-        # 在主线程中更新 UI
-        if self.parent_root:
-            self.parent_root.after(
-                0, lambda: self._redraw(ocr_results, matches)
-            )
-        else:
-            self._redraw(ocr_results, matches)
+        # 有匹配 — 重绘并重置自动隐藏计时器
+        self._redraw(ocr_results, matches)
+        self._reset_hide_timer()
 
     def _redraw(self, ocr_results, matches):
         """重绘浮窗内容"""
@@ -236,7 +233,26 @@ class Overlay:
             self._window.deiconify()
             self._visible = True
 
+    def _reset_hide_timer(self):
+        """重置自动隐藏计时器"""
+        if self._hide_timer is not None:
+            try:
+                self._window.after_cancel(self._hide_timer)
+            except Exception:
+                pass
+            self._hide_timer = None
+        duration = config.get('matching.display_duration', 3.0)
+        self._hide_timer = self._window.after(
+            int(duration * 1000), self._hide
+        )
+
     def _hide(self):
+        if self._hide_timer is not None:
+            try:
+                self._window.after_cancel(self._hide_timer)
+            except Exception:
+                pass
+            self._hide_timer = None
         if self._visible and self._window:
             self._window.withdraw()
             self._visible = False

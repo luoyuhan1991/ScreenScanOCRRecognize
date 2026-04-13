@@ -736,9 +736,9 @@ class MainGUI:
         self._append_log("扫描已停止", "INFO")
 
     def _scan_loop(self):
-        interval = self._var_interval.get()
         try:
             while not self.stop_event.is_set():
+                interval = self._var_interval.get()
                 self.scan_count += 1
                 start = time.time()
                 self.last_scan_time = datetime.now().strftime('%H:%M:%S')
