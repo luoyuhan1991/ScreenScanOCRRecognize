@@ -5,28 +5,35 @@ from ..config.config import config
 from ..utils.logger import logger
 
 _ocr_instance = None
+_ocr_init_config = None  # (lang, gpu_enabled) 初始化时的配置
 
 
 def _get_ocr():
-    global _ocr_instance
-    if _ocr_instance is None:
-        from paddleocr import PaddleOCR, __version__ as paddle_version
-        major = int(paddle_version.split('.')[0])
-        lang = config.get('ocr.language', 'ch')
-        use_gpu = config.get('gpu.enabled', True)
-        device = 'gpu' if use_gpu else 'cpu'
+    global _ocr_instance, _ocr_init_config
+    lang = config.get('ocr.language', 'ch')
+    use_gpu = config.get('gpu.enabled', True)
+    current_config = (lang, use_gpu)
 
-        logger.info(f"初始化 PaddleOCR: lang={lang}, device={device}")
-        if major >= 3:
-            _ocr_instance = PaddleOCR(
-                lang=lang, device=device, enable_mkldnn=False
-            )
-        else:
-            _ocr_instance = PaddleOCR(
-                lang=lang, use_gpu=use_gpu,
-                use_angle_cls=True, enable_mkldnn=False
-            )
-        logger.info("PaddleOCR 初始化完成")
+    if _ocr_instance is not None and _ocr_init_config == current_config:
+        return _ocr_instance
+
+    # 配置变更或首次初始化
+    from paddleocr import PaddleOCR, __version__ as paddle_version
+    major = int(paddle_version.split('.')[0])
+    device = 'gpu' if use_gpu else 'cpu'
+
+    logger.info(f"初始化 PaddleOCR: lang={lang}, device={device}")
+    if major >= 3:
+        _ocr_instance = PaddleOCR(
+            lang=lang, device=device, enable_mkldnn=False
+        )
+    else:
+        _ocr_instance = PaddleOCR(
+            lang=lang, use_gpu=use_gpu,
+            use_angle_cls=True, enable_mkldnn=False
+        )
+    _ocr_init_config = current_config
+    logger.info("PaddleOCR 初始化完成")
     return _ocr_instance
 
 
@@ -97,8 +104,9 @@ class OCRStage:
         return texts
 
     def release(self):
-        global _ocr_instance
+        global _ocr_instance, _ocr_init_config
         _ocr_instance = None
+        _ocr_init_config = None
         self._ocr = None
         import gc
         gc.collect()

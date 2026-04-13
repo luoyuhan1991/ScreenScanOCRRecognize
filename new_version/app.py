@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from src.config.config import config
 from src.pipeline.pipeline import ScanPipeline
 from src.overlay.overlay import Overlay
-from src.utils.logger import logger
+from src.utils.logger import logger, configure_from_config
 from src.utils.hotkey import HotkeyManager
 
 
@@ -244,6 +244,7 @@ class MainGUI:
         # ---------- 配置 ----------
         config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
         config.load(config_path)
+        configure_from_config(config)
 
         # ---------- Pipeline & Overlay ----------
         self.pipeline = ScanPipeline()
@@ -657,20 +658,30 @@ class MainGUI:
             if self._var_remember_roi.get() and saved:
                 self.roi = tuple(saved)
                 self._append_log(f"使用已保存 ROI: {self.roi}", "INFO")
+                self._start_scanning()
             else:
                 self.root.iconify()
-                time.sleep(0.3)
-                self.roi = select_roi_interactive(parent=self.root)
-                self.root.deiconify()
-                if self.roi:
-                    self._append_log(f"ROI 已选择: {self.roi}", "INFO")
-                    config.set('scan.roi', list(self.roi))
-                    config.save()
-                else:
-                    self._append_log("ROI 选择取消，使用全屏", "WARNING")
+                self.root.after(300, self._do_roi_select)
+                return
         else:
             self.roi = None
 
+        self._start_scanning()
+
+    def _do_roi_select(self):
+        """延迟执行 ROI 交互选择（避免阻塞主线程）"""
+        self.roi = select_roi_interactive(parent=self.root)
+        self.root.deiconify()
+        if self.roi:
+            self._append_log(f"ROI 已选择: {self.roi}", "INFO")
+            config.set('scan.roi', list(self.roi))
+            config.save()
+        else:
+            self._append_log("ROI 选择取消，使用全屏", "WARNING")
+        self._start_scanning()
+
+    def _start_scanning(self):
+        """设置 ROI、Overlay 并启动扫描线程"""
         self.pipeline.set_roi(self.roi)
 
         # 设置 Overlay
@@ -961,8 +972,8 @@ class MainGUI:
 
     def _register_hotkeys(self):
         try:
-            self._hotkey_mgr.register('ctrl+alt+1', self.on_start, "开始扫描")
-            self._hotkey_mgr.register('ctrl+alt+2', self.on_stop, "停止扫描")
+            self._hotkey_mgr.register('ctrl+alt+1', lambda: self.root.after(0, self.on_start), "开始扫描")
+            self._hotkey_mgr.register('ctrl+alt+2', lambda: self.root.after(0, self.on_stop), "停止扫描")
             self._append_log("热键: Ctrl+Alt+1 开始, Ctrl+Alt+2 停止", "INFO")
         except Exception as e:
             self._append_log(f"热键注册失败: {e}", "WARNING")

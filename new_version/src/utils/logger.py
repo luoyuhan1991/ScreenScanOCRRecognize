@@ -16,3 +16,12 @@ def setup_logger(name='screen_scan', level=logging.INFO):
 
 
 logger = setup_logger()
+
+
+def configure_from_config(cfg):
+    """根据配置调整日志级别"""
+    level_str = cfg.get('logging.level', 'INFO')
+    level = getattr(logging, level_str.upper(), logging.INFO)
+    logger.setLevel(level)
+    for handler in logger.handlers:
+        handler.setLevel(level)

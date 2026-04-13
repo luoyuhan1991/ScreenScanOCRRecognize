@@ -31,6 +31,7 @@ class ScanPipeline:
 
     def set_roi(self, roi):
         self._roi = roi
+        self.diff_gate.reset()
 
     def scan_once(self):
         """执行一次扫描"""
@@ -39,10 +40,14 @@ class ScanPipeline:
         frame = self.capture.grab(roi=self._roi)
 
         if self.diff_gate.should_skip(frame):
-            self._last_result = ScanResult(
-                skipped=True, duration=time.time() - start
+            # 复用上次结果，仅更新 skipped 和 duration
+            result = ScanResult(
+                ocr_results=self._last_result.ocr_results,
+                matches=self._last_result.matches,
+                skipped=True,
+                duration=time.time() - start
             )
-            return self._last_result
+            return result
 
         ocr_results = self.ocr.recognize(frame)
         matches = self.matcher.match(ocr_results)

@@ -32,9 +32,8 @@ class Overlay:
             self._window.attributes('-toolwindow', True)
         except Exception:
             pass
-        self._window.attributes('-transparentcolor', 'black')
-        self._window.config(bg='black')
-        self._window.attributes('-alpha', 0.7)
+        self._window.attributes('-transparentcolor', '#010101')
+        self._window.config(bg='#010101')
 
         # 鼠标穿透 (Windows)
         try:
@@ -52,7 +51,7 @@ class Overlay:
             pass
 
         self._canvas = tk.Canvas(
-            self._window, bg='black', highlightthickness=0
+            self._window, bg='#010101', highlightthickness=0
         )
         self._canvas.pack(fill='both', expand=True)
 
@@ -104,6 +103,7 @@ class Overlay:
         effective_size = max(10, font_size - 2)
         font_tuple = ('Microsoft YaHei', effective_size, 'bold')
 
+        font_obj = None
         try:
             font_obj = tkfont.Font(
                 root=self._window, family='Microsoft YaHei',
@@ -148,11 +148,9 @@ class Overlay:
         # 测量列宽
         def measure(text):
             try:
-                lbl = tk.Label(self._window, text=text, font=font_tuple)
-                self._window.update_idletasks()
-                w = lbl.winfo_reqwidth()
-                lbl.destroy()
-                return w
+                if font_obj is not None:
+                    return font_obj.measure(text)
+                return len(text) * int(effective_size * 0.6)
             except Exception:
                 return len(text) * int(effective_size * 0.6)
 

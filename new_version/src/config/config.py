@@ -32,11 +32,9 @@ class Config:
         keys = dotted_key.split('.')
         val = self._data
         for k in keys:
-            if isinstance(val, dict):
-                val = val.get(k)
+            if isinstance(val, dict) and k in val:
+                val = val[k]
             else:
-                return default
-            if val is None:
                 return default
         return val
 
