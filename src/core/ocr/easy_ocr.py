@@ -124,24 +124,30 @@ def recognize_text(image, languages=None,
         if isinstance(image, str):
             image = Image.open(image)
         
-        # 如果指定了ROI区域，则裁剪图片
-        if roi is not None:
-            x1, y1, x2, y2 = roi
-            image = image.crop((x1, y1, x2, y2))
-        
-        # 将PIL图像转换为numpy数组
-        img_array = np.array(image)
-        
+        # 将输入统一为 numpy 数组
+        if isinstance(image, np.ndarray):
+            img_array = image
+            # 如果指定了ROI区域，通过数组切片裁剪
+            if roi is not None:
+                x1, y1, x2, y2 = roi
+                img_array = img_array[y1:y2, x1:x2]
+        else:
+            # PIL Image
+            if roi is not None:
+                x1, y1, x2, y2 = roi
+                image = image.crop((x1, y1, x2, y2))
+            img_array = np.array(image)
+
         # 从配置中获取OCR参数
         default_canvas_size = config.get('ocr.easyocr.canvas_size', 1920)
         default_mag_ratio = config.get('ocr.easyocr.mag_ratio', 1.5)
         dynamic_params = config.get('ocr.easyocr.dynamic_params', True)
-        
+
         # 根据图片尺寸动态调整OCR参数
         # 对于大图，使用较小的canvas_size和mag_ratio以提高速度
         # 对于小图，使用较大的mag_ratio以提高识别准确率
         if dynamic_params:
-            width, height = image.size
+            height, width = img_array.shape[:2]
             if width > 1920 or height > 1080:
                 # 超高清图片：降低参数以提高处理速度
                 canvas_size = min(default_canvas_size, 1280)

@@ -8,13 +8,15 @@ scan:
   - 1880
   - 843
   remember_roi: true
+  enable_diff_skip: true
+  diff_threshold: 5.0
 ocr:
   default_engine: paddle
   languages:
   - ch
   - en
   min_confidence: 0.3
-  save_processed_image: true
+  save_processed_image: false
   easyocr:
     canvas_size: 1920
     mag_ratio: 1.5
@@ -28,20 +30,22 @@ gpu:
 files:
   output_dir: output
   banlist_file: C:/Users/Administrator/Desktop/banlist.txt
-  save_screenshot: true
-  save_ocr_result: true
+  save_screenshot: false
+  save_ocr_result: false
   folder_mode: minute
   max_folders: 10
 cleanup:
   enabled: true
   max_age_hours: 1
   interval_minutes: 10
+  scan_interval: 10
 matching:
   enabled: true
   display_duration: 3.0
   position: center
   match_ratio_threshold: 0.85
   font_size: 18
+  enable_sound: true
 logging:
   level: INFO
   file: logs/app.log

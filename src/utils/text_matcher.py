@@ -45,6 +45,7 @@ class TextMatcher:
         """
         self.txt_file = txt_file
         self.keywords = []
+        self.keywords_casefolded = []
         self.keyword_left_hints = {}
         self._last_mtime = None
         self.match_ratio_threshold = match_ratio_threshold if match_ratio_threshold is not None else MATCH_RATIO_THRESHOLD
@@ -99,6 +100,7 @@ class TextMatcher:
             self._create_default_keywords_file()
             self._last_mtime = None
         self.keyword_left_hints = keyword_left_hints
+        self.keywords_casefolded = [kw.casefold() for kw in keywords]
         return keywords
     
     def _create_default_keywords_file(self):
@@ -193,10 +195,13 @@ class TextMatcher:
             if isinstance(result, dict) and 'text' in result:
                 ocr_texts.append(result['text'])
         
+        # 预计算所有 OCR 文本的 casefolded 版本
+        ocr_texts_cf = [t.casefold() for t in ocr_texts]
+
         # 只要关键词在任意一条 OCR 结果中出现即算匹配（字母忽略大小写）
-        for keyword in self.keywords:
-            for ocr_text in ocr_texts:
-                if keyword_in_text(ocr_text, keyword):
+        for keyword, kw_cf in zip(self.keywords, self.keywords_casefolded):
+            for ocr_text, ocr_cf in zip(ocr_texts, ocr_texts_cf):
+                if kw_cf in ocr_cf:
                     matched_keywords.append(keyword)
                     logger.info(f"匹配成功: '{keyword}' (OCR: '{ocr_text}')")
                     break
@@ -208,7 +213,36 @@ class TextMatcher:
 
 
 class FloatingTextDisplay:
-    """遮罩式文字显示器（水印效果）"""
+    """遮罩式文字显示器（水印效果），支持持久化窗口复用"""
+
+    # 模块级单例，供 GUI 模式复用
+    _singleton = None
+    _singleton_lock = threading.Lock()
+
+    @classmethod
+    def get_singleton(cls, parent_root):
+        """获取或创建与 parent_root 绑定的单例浮窗"""
+        with cls._singleton_lock:
+            inst = cls._singleton
+            if inst is not None:
+                # 检查窗口是否还存活
+                try:
+                    if inst.root is not None and inst.root.winfo_exists():
+                        return inst
+                except Exception:
+                    pass
+                cls._singleton = None
+            inst = cls.__new__(cls)
+            inst.root = None
+            inst.canvas = None
+            inst._hide_after_id = None
+            inst.parent_root = parent_root
+            inst.text_lines = []
+            inst.duration = 3
+            inst.position = "center"
+            inst.font_size = 20
+            cls._singleton = inst
+            return inst
 
     def __init__(self, text_lines, duration=3, position="center", font_size=20, parent_root=None):
         """
@@ -230,6 +264,8 @@ class FloatingTextDisplay:
         self.font_size = font_size
         self.parent_root = parent_root
         self.root = None
+        self.canvas = None
+        self._hide_after_id = None
 
     def show(self):
         """显示遮罩文字（水印效果）"""
@@ -238,19 +274,54 @@ class FloatingTextDisplay:
             self.parent_root.after(0, self._show_in_main_thread)
         else:
             # 如果没有父窗口（命令行模式），在新线程中显示
-            # 注意：如果主线程没有运行mainloop，这里创建tk.Tk()是安全的
-            # 但如果主线程有mainloop，这里会报错。所以确保只在命令行模式下使用无parent_root的方式
             thread = threading.Thread(target=self._show_standalone, daemon=True)
             thread.start()
 
     def _show_in_main_thread(self):
-        """在主线程中显示（使用Toplevel）"""
+        """在主线程中显示（使用持久化 Toplevel 窗口）"""
         try:
-            self.root = tk.Toplevel(self.parent_root)
-            self._setup_window()
-            
-            # 定时关闭
-            self.root.after(int(self.duration * 1000), self._close)
+            # 获取单例实例
+            singleton = FloatingTextDisplay.get_singleton(self.parent_root)
+            # 更新显示参数
+            singleton.text_lines = self.text_lines
+            singleton.duration = self.duration
+            singleton.position = self.position
+            singleton.font_size = self.font_size
+
+            # 取消之前的定时隐藏
+            if singleton._hide_after_id is not None:
+                try:
+                    singleton.parent_root.after_cancel(singleton._hide_after_id)
+                except Exception:
+                    pass
+                singleton._hide_after_id = None
+
+            window_alive = False
+            if singleton.root is not None:
+                try:
+                    window_alive = singleton.root.winfo_exists()
+                except Exception:
+                    window_alive = False
+
+            if not window_alive:
+                # 首次创建窗口
+                singleton.root = tk.Toplevel(singleton.parent_root)
+                singleton.canvas = None
+                singleton._setup_window_attrs()
+
+            # 重绘内容（清空 canvas 并重新绘制）
+            singleton._redraw_content()
+
+            # 显示窗口
+            try:
+                singleton.root.deiconify()
+            except Exception:
+                pass
+
+            # 定时隐藏
+            singleton._hide_after_id = singleton.parent_root.after(
+                int(singleton.duration * 1000), singleton._hide
+            )
         except Exception as e:
             logger.error(f"显示水印文字失败: {e}")
 
@@ -258,14 +329,25 @@ class FloatingTextDisplay:
         """独立显示（创建新的Tk实例）"""
         try:
             self.root = tk.Tk()
-            self._setup_window()
-            
+            self.canvas = None
+            self._setup_window_attrs()
+            self._redraw_content()
+
             # 定时关闭
             self.root.after(int(self.duration * 1000), self._close_standalone)
-            
+
             self.root.mainloop()
         except Exception as e:
             logger.error(f"显示独立水印文字失败: {e}")
+
+    def _hide(self):
+        """隐藏窗口（不销毁，供下次复用）"""
+        self._hide_after_id = None
+        if self.root:
+            try:
+                self.root.withdraw()
+            except:
+                pass
 
     def _close(self):
         """关闭窗口"""
@@ -275,20 +357,21 @@ class FloatingTextDisplay:
             except:
                 pass
             self.root = None
+            self.canvas = None
 
     def _close_standalone(self):
         """关闭独立窗口"""
         if self.root:
             try:
                 self.root.destroy()
-                # 退出mainloop
                 self.root.quit()
             except:
                 pass
             self.root = None
+            self.canvas = None
 
-    def _setup_window(self):
-        """设置窗口属性和内容"""
+    def _setup_window_attrs(self):
+        """设置窗口属性（仅在创建窗口时调用一次）"""
         self.root.overrideredirect(True)  # 无边框
         self.root.attributes('-topmost', True)  # 置顶
 
@@ -322,6 +405,8 @@ class FloatingTextDisplay:
         except:
             pass
 
+    def _redraw_content(self):
+        """重绘窗口内容（清空 canvas 并重新绘制文字）"""
         # 获取屏幕尺寸
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -335,17 +420,26 @@ class FloatingTextDisplay:
         window_height = text_height + padding * 2
         self.root.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
 
-        # 创建Canvas
-        canvas = tk.Canvas(
-            self.root,
-            width=window_width,
-            height=window_height,
-            bg='black',
-            highlightthickness=0,
-            takefocus=False
-        )
-        canvas.pack()
+        # 创建或复用 Canvas
+        if self.canvas is None:
+            self.canvas = tk.Canvas(
+                self.root,
+                width=window_width,
+                height=window_height,
+                bg='black',
+                highlightthickness=0,
+                takefocus=False
+            )
+            self.canvas.pack(fill='both', expand=True)
+        else:
+            self.canvas.delete('all')
+            self.canvas.config(width=window_width, height=window_height)
 
+        canvas = self.canvas
+        self._paint_text_on_canvas(canvas, window_width, padding)
+
+    def _paint_text_on_canvas(self, canvas, window_width, padding):
+        """在 canvas 上绘制文字内容"""
         # 使用与几何计算一致的排版参数，避免文字底部被裁切
         effective_font_size = getattr(self, "_effective_font_size", max(10, int(self.font_size) - 2))
         font_tuple = getattr(self, "_font_tuple", ('Microsoft YaHei', effective_font_size, 'bold'))
@@ -461,7 +555,6 @@ class FloatingTextDisplay:
                 )
                 canvas.tag_raise(f'watermark_text_{i}', f'watermark_shadow_{i}')
 
-
     def _calculate_window_geometry(self, screen_width, screen_height):
         """计算窗口几何信息（位置和大小）"""
         effective_font_size = max(10, int(self.font_size) - 2)
@@ -559,6 +652,16 @@ class FloatingTextDisplay:
 _matcher_cache = {}
 _cache_lock = threading.Lock()
 
+# UX2: 跟踪已播放过音效的关键词（会话级）
+_alerted_keywords = set()
+_alerted_keywords_lock = threading.Lock()
+
+
+def reset_alerted_keywords():
+    """重置音效提示记录（在新一轮扫描开始时调用）"""
+    with _alerted_keywords_lock:
+        _alerted_keywords.clear()
+
 
 def _get_cached_matcher(txt_file: str) -> TextMatcher:
     """获取（或创建）缓存的关键词匹配器"""
@@ -642,6 +745,25 @@ def display_ocr_results(
         right_text, right_color = right_column_lines[i] if i < len(right_column_lines) else ("", '#aaaaaa')
         text_lines.append((kw_t, hint_t, right_text, c_kw, c_hint, right_color))
     
+    # UX2: 新匹配关键词音效提示
+    if matched_keywords:
+        enable_sound = True
+        if config is not None:
+            enable_sound = config.get('matching.enable_sound', True)
+        if enable_sound:
+            with _alerted_keywords_lock:
+                new_keywords = [kw for kw in matched_keywords if kw not in _alerted_keywords]
+                if new_keywords:
+                    _alerted_keywords.update(new_keywords)
+                    # 在后台线程播放提示音，避免阻塞
+                    def _beep():
+                        try:
+                            import winsound
+                            winsound.Beep(1000, 200)
+                        except Exception:
+                            pass
+                    threading.Thread(target=_beep, daemon=True).start()
+
     # 创建并显示浮动文字
     display = FloatingTextDisplay(text_lines, duration, position, font_size, parent_root)
     display.show()

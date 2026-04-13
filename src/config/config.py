@@ -18,6 +18,7 @@ class Config:
     
     _instance: Optional['Config'] = None
     _config: Dict[str, Any] = {}
+    _dirty: bool = False
     
     def __new__(cls):
         if cls._instance is None:
@@ -142,6 +143,7 @@ class Config:
                 config[key] = {}
             config = config[key]
         config[keys[-1]] = value
+        self._dirty = True
     
     def save(self, config_file: Optional[str] = None):
         """
@@ -174,9 +176,18 @@ class Config:
             warnings.warn(f"保存配置文件失败: {e}")
             return False
     
+    def is_dirty(self):
+        """检查配置是否有未同步的修改"""
+        return self._dirty
+
+    def clear_dirty(self):
+        """清除 dirty 标记"""
+        self._dirty = False
+
     def reload(self):
         """重新加载配置文件"""
         self._load_config()
+        self._dirty = False
 
 
 # 全局配置实例

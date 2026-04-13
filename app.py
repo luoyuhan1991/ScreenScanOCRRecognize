@@ -26,7 +26,7 @@ from src.utils.gui_logger import GUILoggerHandler
 from src.utils.logger import logger
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
-from src.utils.text_matcher import display_ocr_results, _get_cached_matcher, keyword_in_text
+from src.utils.text_matcher import display_ocr_results, _get_cached_matcher, keyword_in_text, reset_alerted_keywords
 from src.utils.global_hotkey import register_scan_hotkeys
 from src.utils.tray_icon import setup_tray
 
@@ -630,6 +630,7 @@ class MainGUI:
             self.save_settings()
             # 新一轮扫描开始，清空本次会话的匹配成功记录
             self.session_keyword_latest_hint.clear()
+            reset_alerted_keywords()
             
             # 禁用开始按钮，显示初始化状态
             self.start_btn.config(state=tk.DISABLED)
@@ -1028,9 +1029,9 @@ class MainGUI:
                         break
                 logger.debug(f"日志队列清理：移除 {cleanup_count} 条旧日志")
 
-            # 批量处理日志（一次最多处理 10 条，提升性能）
+            # drain 模式：尽量取完队列，上限 100 条防止卡 UI
             processed_count = 0
-            max_batch_size = 10
+            max_batch_size = 100
 
             while processed_count < max_batch_size:
                 try:
