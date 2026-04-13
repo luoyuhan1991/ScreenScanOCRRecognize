@@ -689,7 +689,6 @@ class MainGUI:
     def _do_roi_select(self):
         """延迟执行 ROI 交互选择（避免阻塞主线程）"""
         self.roi = select_roi_interactive(parent=self.root)
-        self.root.deiconify()
         if self.roi:
             self._append_log(f"ROI 已选择: {self.roi}", "INFO")
             config.set('scan.roi', list(self.roi))
