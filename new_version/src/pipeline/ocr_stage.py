@@ -24,8 +24,12 @@ def _get_ocr():
 
     logger.info(f"初始化 PaddleOCR: lang={lang}, device={device}")
     if major >= 3:
+        # 屏幕截图始终正向，禁用文档方向/矫正模型以避免 PP-LCNet padding bug 并提速
         _ocr_instance = PaddleOCR(
-            lang=lang, device=device, enable_mkldnn=False
+            lang=lang, device=device, enable_mkldnn=False,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
         )
     else:
         _ocr_instance = PaddleOCR(

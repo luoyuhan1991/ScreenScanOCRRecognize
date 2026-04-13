@@ -219,10 +219,27 @@ def _get_memory_mb():
                 ("PeakPagefileUsage", ctypes.c_size_t),
             ]
 
+        # 64 位 Python 必须正确声明 HANDLE 类型，否则伪句柄 -1 会被截断
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+
         pmc = PROCESS_MEMORY_COUNTERS()
         pmc.cb = ctypes.sizeof(pmc)
-        handle = ctypes.windll.kernel32.GetCurrentProcess()
-        if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(pmc), pmc.cb):
+        handle = kernel32.GetCurrentProcess()
+
+        # Windows 7+ 可直接用 kernel32.K32GetProcessMemoryInfo
+        K32 = getattr(kernel32, 'K32GetProcessMemoryInfo', None)
+        if K32 is not None:
+            K32.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
+            K32.restype = wintypes.BOOL
+            if K32(handle, ctypes.byref(pmc), pmc.cb):
+                return pmc.WorkingSetSize / (1024 * 1024)
+
+        # 回退到 psapi.dll
+        psapi = ctypes.windll.psapi
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+        if psapi.GetProcessMemoryInfo(handle, ctypes.byref(pmc), pmc.cb):
             return pmc.WorkingSetSize / (1024 * 1024)
     except Exception:
         pass
