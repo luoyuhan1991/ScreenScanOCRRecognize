@@ -676,6 +676,7 @@ class MainGUI:
                 self.roi = tuple(saved)
                 self._append_log(f"使用已保存 ROI: {self.roi}", "INFO")
                 self._start_scanning()
+                return
             else:
                 self.root.iconify()
                 self.root.after(300, self._do_roi_select)
