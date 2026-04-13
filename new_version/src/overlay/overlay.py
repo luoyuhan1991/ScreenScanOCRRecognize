@@ -1,9 +1,38 @@
+import io
+import math
+import struct
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
+import wave
 import winsound
 from ..config.config import config
 from ..utils.logger import logger
+
+
+def _build_chord_wav():
+    """生成柔和 C 大三和弦 WAV (C5+E5+G5, 淡入淡出)"""
+    sample_rate = 22050
+    duration = 0.35
+    n_samples = int(sample_rate * duration)
+    freqs = [523.25, 659.25, 783.99]  # C5, E5, G5
+    samples = []
+    for i in range(n_samples):
+        t = i / sample_rate
+        # 淡入淡出包络
+        fade = min(t / 0.05, 1.0) * min((duration - t) / 0.08, 1.0)
+        val = sum(math.sin(2 * math.pi * f * t) for f in freqs) / len(freqs)
+        samples.append(int(val * fade * 16000))
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f'<{n_samples}h', *samples))
+    return buf.getvalue()
+
+
+_CHORD_WAV = _build_chord_wav()
 
 
 class Overlay:
@@ -77,12 +106,12 @@ class Overlay:
                 self._session_matches[kw] = m['hint']
                 new_matches.append(kw)
 
-        # 新匹配时播放柔和双音提示
+        # 新匹配时播放柔和和弦提示
         if new_matches and config.get('matching.enable_sound', True):
-            def _play():
-                winsound.Beep(600, 120)
-                winsound.Beep(800, 150)
-            threading.Thread(target=_play, daemon=True).start()
+            threading.Thread(
+                target=lambda: winsound.PlaySound(_CHORD_WAV, winsound.SND_MEMORY),
+                daemon=True,
+            ).start()
 
         if not ocr_results or not matches:
             return
