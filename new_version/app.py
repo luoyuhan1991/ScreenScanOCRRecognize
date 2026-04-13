@@ -729,6 +729,7 @@ class MainGUI:
         self.is_running = False
         self.stop_event.set()
         self._hide_roi_border()
+        self.overlay._hide()
         self._btn_start.config(state=tk.NORMAL)
         self._btn_stop.config(state=tk.DISABLED)
         self._update_status("已停止")
@@ -783,9 +784,15 @@ class MainGUI:
             self._append_log(f"扫描异常: {e}", "ERROR")
         finally:
             self.is_running = False
-            self.root.after(0, lambda: self._update_status("已停止"))
-            self.root.after(0, lambda: self._btn_start.config(state=tk.NORMAL))
-            self.root.after(0, lambda: self._btn_stop.config(state=tk.DISABLED))
+            self.root.after(0, self._on_scan_thread_exit)
+
+    def _on_scan_thread_exit(self):
+        """扫描线程结束后统一恢复 UI 状态"""
+        self._hide_roi_border()
+        self.overlay._hide()
+        self._btn_start.config(state=tk.NORMAL)
+        self._btn_stop.config(state=tk.DISABLED)
+        self._update_status("已停止")
 
     # -----------------------------------------------------------------------
     # 杂项 UI 操作
