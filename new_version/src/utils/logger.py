@@ -12,6 +12,7 @@ def setup_logger(name='screen_scan', level=logging.INFO):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(level)
+        logger.propagate = False  # 不向 root logger 传播，避免 GUI 日志重复
     return logger
 
 

@@ -6,7 +6,9 @@ from ..utils.logger import logger
 
 class CaptureStage:
     def __init__(self):
-        self.sct = mss.mss()
+        # mss 使用线程本地的 Windows 设备上下文，不能跨线程使用
+        # 延迟到 grab() 中按需创建，确保在调用线程初始化
+        self.sct = None
 
     def grab(self, roi=None):
         """
@@ -16,6 +18,9 @@ class CaptureStage:
         Returns:
             numpy BGR 数组
         """
+        if self.sct is None:
+            self.sct = mss.mss()
+
         if roi is not None:
             x1, y1, x2, y2 = roi
             padding = config.get('scan.roi_padding', 10)
@@ -39,4 +44,6 @@ class CaptureStage:
         return frame
 
     def close(self):
-        self.sct.close()
+        if self.sct is not None:
+            self.sct.close()
+            self.sct = None

@@ -938,9 +938,9 @@ class MainGUI:
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 
-        root_logger = logging.getLogger()
-        root_logger.addHandler(handler)
-        root_logger.setLevel(logging.INFO)
+        # 添加到 screen_scan logger 而非 root logger，避免日志重复
+        from src.utils.logger import logger as app_logger
+        app_logger.addHandler(handler)
 
     def _append_log(self, message, level='INFO'):
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
