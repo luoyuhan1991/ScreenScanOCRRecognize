@@ -113,10 +113,7 @@ class Overlay:
                 daemon=True,
             ).start()
 
-        if not self._session_matches:
-            return
-
-        # 有历史匹配记录 — 每次扫描都显示，display_duration 后自动隐藏
+        # 每次扫描都显示，display_duration 后自动隐藏
         self._redraw(ocr_results, matches)
         self._reset_hide_timer()
 
@@ -166,10 +163,10 @@ class Overlay:
                 for kw, hint in left_rows
             ]
 
+        if not right_rows:
+            right_rows = [('暂无识别结果', '#aaaaaa')]
+
         total_rows = max(len(left_rows_fmt), len(right_rows))
-        if total_rows == 0:
-            self._hide()
-            return
 
         # 测量列宽
         def measure(text):
