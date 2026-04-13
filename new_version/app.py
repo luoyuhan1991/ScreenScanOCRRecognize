@@ -763,11 +763,10 @@ class MainGUI:
                             f"  >>> {m['keyword']} | {m['hint']}", "WARNING"
                         )
 
-                # 更新 Overlay（调度到主线程）
-                if not result.skipped:
-                    ocr = result.ocr_results
-                    matches = result.matches
-                    self.root.after(0, lambda o=ocr, m=matches: self.overlay.update(o, m))
+                # 更新 Overlay（调度到主线程）— 跳过时复用上次结果，仍需刷新
+                ocr = result.ocr_results
+                matches = result.matches
+                self.root.after(0, lambda o=ocr, m=matches: self.overlay.update(o, m))
 
                 # 更新统计（主线程）
                 self.root.after(0, self._update_stats)
