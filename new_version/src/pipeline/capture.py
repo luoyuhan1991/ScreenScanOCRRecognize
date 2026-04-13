@@ -1,3 +1,5 @@
+import threading
+
 import mss
 import numpy as np
 from ..config.config import config
@@ -7,8 +9,8 @@ from ..utils.logger import logger
 class CaptureStage:
     def __init__(self):
         # mss 使用线程本地的 Windows 设备上下文，不能跨线程使用
-        # 延迟到 grab() 中按需创建，确保在调用线程初始化
         self.sct = None
+        self._owner_thread = None
 
     def grab(self, roi=None):
         """
@@ -18,8 +20,16 @@ class CaptureStage:
         Returns:
             numpy BGR 数组
         """
-        if self.sct is None:
+        tid = threading.current_thread().ident
+        if self.sct is None or self._owner_thread != tid:
+            # 线程变更（如停止后重新开始），需要重建实例
+            if self.sct is not None:
+                try:
+                    self.sct.close()
+                except Exception:
+                    pass
             self.sct = mss.mss()
+            self._owner_thread = tid
 
         if roi is not None:
             x1, y1, x2, y2 = roi
