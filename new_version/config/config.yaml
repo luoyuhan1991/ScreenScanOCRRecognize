@@ -1,24 +1,24 @@
-scan:
-  interval_seconds: 2.0
-  roi: null                     # [x1, y1, x2, y2] 或 null 表示全屏
-  roi_padding: 10
-  roi_presets: {}               # 命名预设 {"game_lobby": [1170, 256, 1880, 843]}
-  diff_threshold: 5.0           # 帧差均方差阈值，低于此值跳过OCR
-
-ocr:
-  language: ch
-  min_confidence: 0.3
-  enable_image_invert: false
-
 gpu:
   enabled: true
-
+logging:
+  level: INFO
 matching:
   banlist_file: docs/banlist.txt
   display_duration: 3.0
-  position: center              # center/top/bottom
-  font_size: 18
   enable_sound: true
-
-logging:
-  level: INFO
+  font_size: 16
+  position: center
+ocr:
+  enable_image_invert: false
+  language: ch
+  min_confidence: 0.3
+scan:
+  diff_threshold: 5.0
+  interval_seconds: 5.0
+  roi:
+  - 1640
+  - 279
+  - 1874
+  - 753
+  roi_padding: 10
+  roi_presets: {}
