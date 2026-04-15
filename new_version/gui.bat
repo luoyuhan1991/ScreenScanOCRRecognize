@@ -21,4 +21,3 @@ timeout /t 1 /nobreak >nul
 del "%vbs%" 2>nul
 
 endlocal
-pause

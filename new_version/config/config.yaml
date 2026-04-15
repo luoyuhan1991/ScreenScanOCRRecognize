@@ -22,4 +22,9 @@ scan:
   - 1874
   - 753
   roi_padding: 10
-  roi_presets: {}
+  roi_presets:
+    默认:
+    - 1640
+    - 279
+    - 1874
+    - 753

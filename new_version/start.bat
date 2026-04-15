@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 setlocal
 cd /d %~dp0
 
@@ -20,9 +19,9 @@ rem 安装依赖（如果需要）
 rem 创建临时VBScript来隐藏cmd窗口
 set "vbs=%temp%\start_launcher_%random%.vbs"
 (
-echo Set objShell = CreateObject^("WScript.Shell"^)
+echo Set objShell = CreateObject^(^"WScript.Shell"^)
 echo objShell.CurrentDirectory = "%cd%"
-echo strCommand = "cmd /c ""%VENV_PATH%\activate.bat"" && python app.py"
+echo strCommand = "cmd /c %VENV_PATH%\activate.bat && python app.py"
 echo objShell.Run strCommand, 0, False
 ) > "%vbs%"
 
