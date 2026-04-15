@@ -75,9 +75,38 @@ class MatchStage:
             logger.info("关键词文件已变更，重新加载")
             self.load(self._file_path)
 
+    @staticmethod
+    def _match_ratio(keyword_cf, text_cf):
+        """
+        计算关键词在文本中的比例匹配分数。
+        按顺序查找关键词中每个字符在文本中出现的比例。
+        用于容忍 OCR 误识别（如 "张三" OCR 为 "张.三" 仍能匹配）。
+
+        Args:
+            keyword_cf: casefold 后的关键词
+            text_cf: casefold 后的 OCR 文本
+        Returns:
+            float: 0.0~1.0
+        """
+        if not keyword_cf:
+            return 1.0
+        if not text_cf:
+            return 0.0
+        pos = 0
+        matched = 0
+        for c in keyword_cf:
+            i = text_cf.find(c, pos)
+            if i != -1:
+                matched += 1
+                pos = i + 1
+        return matched / len(keyword_cf)
+
     def match(self, ocr_results):
         """
-        匹配 OCR 结果中的关键词
+        匹配 OCR 结果中的关键词。
+        优先使用 Aho-Corasick 精确子串匹配；
+        未命中时回退到比例匹配（容忍 OCR 误识别）。
+
         Args:
             ocr_results: list of dict with 'text' key
         Returns:
@@ -85,27 +114,53 @@ class MatchStage:
         """
         self._reload_if_changed()
 
-        if not self._automaton or not ocr_results:
+        if not self._keywords or not ocr_results:
             return []
 
         matches = []
         seen_keywords = set()
 
+        # 提取并预处理 OCR 文本
+        ocr_items = []
         for result in ocr_results:
             text = result.get('text', '')
-            if not text:
-                continue
-            text_lower = text.casefold()
+            if text:
+                ocr_items.append((text, text.casefold()))
 
-            for _, info in self._automaton.iter(text_lower):
+        if not ocr_items:
+            return []
+
+        # 第一轮：Aho-Corasick 精确子串匹配
+        if self._automaton:
+            for text, text_lower in ocr_items:
+                for _, info in self._automaton.iter(text_lower):
+                    kw = info['original']
+                    if kw not in seen_keywords:
+                        seen_keywords.add(kw)
+                        matches.append({
+                            'keyword': kw,
+                            'hint': info['hint'],
+                            'ocr_text': text
+                        })
+
+        # 第二轮：比例匹配（仅对第一轮未命中的关键词）
+        ratio_threshold = float(config.get('matching.match_ratio_threshold', 0.75))
+        if ratio_threshold < 1.0:
+            for kw_lower, info in self._keywords.items():
                 kw = info['original']
-                if kw not in seen_keywords:
-                    seen_keywords.add(kw)
-                    matches.append({
-                        'keyword': kw,
-                        'hint': info['hint'],
-                        'ocr_text': text
-                    })
+                if kw in seen_keywords:
+                    continue
+                for text, text_lower in ocr_items:
+                    ratio = self._match_ratio(kw_lower, text_lower)
+                    if ratio >= ratio_threshold:
+                        seen_keywords.add(kw)
+                        matches.append({
+                            'keyword': kw,
+                            'hint': info['hint'],
+                            'ocr_text': text
+                        })
+                        logger.info(f"比例匹配: '{kw}' (比例={ratio:.0%}, OCR: '{text}')")
+                        break
 
         if matches:
             logger.info(f"匹配到 {len(matches)} 个关键词")

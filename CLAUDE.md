@@ -155,4 +155,4 @@ GUI 窗口状态单独保存在 `config/gui_state.json`（`GUIStateManager`）�
 
 ## new_version 实验版本
 
-`new_version/` 目录包含实验性的 pipeline 架构重构版本，将扫描流程拆分为独立阶段：`capture.py` → `diff_gate.py` → `ocr_stage.py` → `match_stage.py`，由 `pipeline.py` 编排。另有 `overlay/` 模块处理弹窗显示。当前主版本仍为根目录的 `app.py`/`cli.py`。
+`new_version/` 目录包含 pipeline 架构重构版本，将扫描流程拆分为独立阶段：`capture.py` → `diff_gate.py` → `ocr_stage.py` → `match_stage.py`，由 `pipeline.py` 编排。另有 `overlay/` 模块处理弹窗显示。关键差异：仅 PaddleOCR 单引擎；匹配采用双层策略（Aho-Corasick 精确匹配 + 比例匹配回退，阈值可通过 GUI 调节）；零文件 I/O；C 大三和弦音效。当前主版本仍为根目录的 `app.py`/`cli.py`。

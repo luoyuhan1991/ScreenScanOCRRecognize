@@ -140,6 +140,7 @@ matching:
   display_duration: 3.0
   enable_sound: true
   font_size: 18
+  match_ratio_threshold: 0.75
 ```
 
 相比主版本去掉了：双引擎支持、文件 I/O 配置、三级 GPU 配置、performance/cleanup 分组。
@@ -149,13 +150,13 @@ matching:
 | 特性 | 主版本 | new_version |
 |------|--------|-------------|
 | OCR 引擎 | PaddleOCR + EasyOCR | 仅 PaddleOCR |
-| 匹配算法 | 子串 + 比例匹配 O(K*N) | Aho-Corasick O(T) |
+| 匹配算法 | 子串 + 比例匹配 O(K*N) | Aho-Corasick + 比例匹配回退 |
 | 文件 I/O | 可选保存截图/结果 | 无文件 I/O |
 | 截图 | mss (PIL fallback) | 仅 mss |
 | 浮窗音效 | winsound.Beep | C 大三和弦 WAV |
 | GPU 配置 | force_cpu/force_gpu/auto | 单开关 |
 | 配置编辑器 | 内置 YAML 编辑器 | 无 |
-| 热键 | Ctrl+Alt+1/2 | 无 |
+| 热键 | Ctrl+Alt+1/2 | Ctrl+Alt+1/2 |
 | 依赖 | pillow, easyocr 等 | 精简（+pyahocorasick） |
 
 ---
@@ -168,7 +169,7 @@ matching:
 | 画面无变化时 | 仍做全量 OCR | 跳过 OCR (~5ms) | 跳过 OCR (~2ms) |
 | 内存占用 | 800-1200MB | ~相同 | 600-900MB |
 | 磁盘 I/O | 3 次写/周期 | 0（默认关闭） | 0 |
-| 匹配复杂度 | O(K*N) | O(K*N) | O(T) |
+| 匹配复杂度 | O(K*N) | O(K*N) | O(T) 精确 + O(K*N) 回退 |
 | 浮窗 | 创建/销毁闪烁 | 单例复用 | 单例复用 |
 
 ---

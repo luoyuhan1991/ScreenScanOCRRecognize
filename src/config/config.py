@@ -40,7 +40,7 @@ class Config:
                 'default_engine': 'paddle',
                 'languages': ['ch', 'en'],
                 'min_confidence': 0.15,
-                'save_processed_image': True,
+                'save_processed_image': False,
                 'easyocr': {
                     'canvas_size': 1920,
                     'mag_ratio': 1.5,
@@ -55,8 +55,8 @@ class Config:
             'files': {
                 'output_dir': 'output',
                 'banlist_file': 'docs/banlist.txt',
-                'save_screenshot': True,
-                'save_ocr_result': True
+                'save_screenshot': False,
+                'save_ocr_result': False
             },
             'cleanup': {
                 'enabled': True,

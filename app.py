@@ -1029,11 +1029,10 @@ class MainGUI:
                         break
                 logger.debug(f"日志队列清理：移除 {cleanup_count} 条旧日志")
 
-            # drain 模式：尽量取完队列，上限 100 条防止卡 UI
+            # drain 模式：一次取完队列所有待处理日志
             processed_count = 0
-            max_batch_size = 100
 
-            while processed_count < max_batch_size:
+            while True:
                 try:
                     log_message, level = self.log_queue.get_nowait()
                     self.log_text.insert(tk.END, log_message, level)

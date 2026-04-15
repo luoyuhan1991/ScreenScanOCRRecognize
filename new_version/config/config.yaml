@@ -7,6 +7,7 @@ matching:
   display_duration: 3.0
   enable_sound: true
   font_size: 16
+  match_ratio_threshold: 0.75
   position: center
 ocr:
   enable_image_invert: false
