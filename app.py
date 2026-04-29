@@ -864,8 +864,11 @@ class MainGUI:
         
         # 保存GUI状态
         self.state_manager.save_state()
-        
+
         self.root.destroy()
+        # 兜底：keyboard 全局钩子等非 daemon 线程不会随 mainloop 退出，强制结束进程
+        import os
+        os._exit(0)
     
     def _show_roi_border(self):
         """显示ROI区域红色边框（使用实际截图区域）"""

@@ -1053,6 +1053,9 @@ class MainGUI:
         self._hotkey_mgr.unregister_all()
         self.pipeline.release()
         self.root.destroy()
+        # 兜底：keyboard 全局钩子等非 daemon 线程不会随 mainloop 退出，强制结束进程
+        import os
+        os._exit(0)
 
 
 # ---------------------------------------------------------------------------
