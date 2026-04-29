@@ -3,11 +3,11 @@ gpu:
 logging:
   level: INFO
 matching:
-  banlist_file: docs/banlist.txt
+  banlist_file: C:/Users/Administrator/Desktop/banlist.txt
   display_duration: 3.0
   enable_sound: true
   font_size: 16
-  match_ratio_threshold: 0.75
+  match_ratio_threshold: 0.85
   position: center
 ocr:
   enable_image_invert: false
