@@ -19,7 +19,7 @@ DEFAULT_CONFIG = {
     'scan': {
         'interval_seconds': 5.0,
         'roi_padding': 10,
-        'enable_roi': False,
+        'enable_roi': True,
         'remember_roi': True,
         'enable_diff_skip': True,
         'diff_threshold': 5.0,
