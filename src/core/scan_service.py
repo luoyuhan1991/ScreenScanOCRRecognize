@@ -17,7 +17,7 @@ from .ocr.ocr_adapter import OCRConfig
 from ..config.config import config
 from ..utils.logger import logger
 from ..utils.scan_screen import scan_screen
-from ..utils.text_matcher import _get_cached_matcher
+from shared.matcher import get_cached_matcher
 
 
 class ScanService:
@@ -247,7 +247,7 @@ class ScanService:
                             # 4. 关键词匹配
                             if self.enable_matching and ocr_list:
                                 # 使用缓存的匹配器进行匹配
-                                matcher = _get_cached_matcher(self.banlist_file)
+                                matcher = get_cached_matcher(self.banlist_file, logger=logger)
                                 matches = matcher.match(ocr_list)
                                 result['matches'] = matches
 

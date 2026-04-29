@@ -8,5 +8,3 @@ scan:
   - 256
   - 1880
   - 843
-matching:
-  match_ratio_threshold: 0.85

@@ -7,6 +7,7 @@ numpy>=2.2.0                # 数值计算库，用于图像数组处理
 opencv-python>=4.10.0       # OpenCV库，用于图像预处理和增强
 pyyaml>=6.0                 # YAML配置文件解析
 mss>=9.0.0                  # 高性能屏幕截图库（替代PIL.ImageGrab）
+pyahocorasick>=2.0.0        # Aho-Corasick 多模式子串匹配（shared.matcher）
 
 # OCR引擎（二选一或同时安装）
 easyocr>=1.7.0              # EasyOCR引擎（基于PyTorch）

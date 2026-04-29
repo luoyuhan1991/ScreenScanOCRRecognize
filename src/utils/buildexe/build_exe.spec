@@ -64,8 +64,11 @@ hiddenimports = [
     'src.utils',
     'src.utils.logger',
     'src.utils.scan_screen',
-    'src.utils.text_matcher',
     'src.utils.cleanup_old_files',
+    'shared',
+    'shared.matcher',
+    'shared.overlay',
+    'ahocorasick',
 ]
 
 # 收集PaddleOCR和EasyOCR的数据文件和子模块

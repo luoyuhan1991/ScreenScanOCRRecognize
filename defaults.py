@@ -71,7 +71,6 @@ DEFAULT_CONFIG = {
         'enabled': True,
         'display_duration': 3.0,
         'position': 'center',
-        'match_ratio_threshold': 0.75,
         'font_size': 18,
         'enable_sound': True,
     },

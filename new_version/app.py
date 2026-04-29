@@ -18,9 +18,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from src.config.config import config, DEFAULT_BANLIST_FILE
 from src.pipeline.pipeline import ScanPipeline
-from src.overlay.overlay import Overlay
 from src.utils.logger import logger, configure_from_config
 from src.utils.hotkey import HotkeyManager
+from shared.overlay import Overlay
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ class MainGUI:
 
         # ---------- Pipeline & Overlay ----------
         self.pipeline = ScanPipeline()
-        self.overlay = Overlay(parent_root=self.root)
+        self.overlay = Overlay(parent_root=self.root, config=config, logger=logger)
 
         # ---------- 状态 ----------
         self.is_running = False
@@ -473,17 +473,6 @@ class MainGUI:
         self._var_sound = tk.BooleanVar(value=True)
         ttk.Checkbutton(row2, text="音效提醒", variable=self._var_sound).pack(side=tk.LEFT, padx=5)
 
-        row3 = ttk.Frame(fr)
-        row3.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row3, text="匹配比例:").pack(side=tk.LEFT, padx=(0, 4))
-        self._var_match_ratio = tk.DoubleVar(value=0.75)
-        ttk.Scale(row3, from_=0.5, to=1.0, orient=tk.HORIZONTAL,
-                  variable=self._var_match_ratio, length=150,
-                  command=self._on_ratio_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row3, width=5, textvariable=self._var_match_ratio).pack(side=tk.LEFT, padx=2)
-        ttk.Label(row3, text="(50%~100%，达到该比例即算匹配，1.0=仅精确匹配)").pack(side=tk.LEFT, padx=(0, 4))
-
     # ----- 日志区 -----
 
     def _create_log_area(self, parent):
@@ -558,7 +547,6 @@ class MainGUI:
         self._var_duration.set(config.get('matching.display_duration'))
         self._var_fontsize.set(config.get('matching.font_size'))
         self._var_sound.set(config.get('matching.enable_sound'))
-        self._var_match_ratio.set(config.get('matching.match_ratio_threshold'))
 
         pos_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
         self._var_position.set(pos_map.get(config.get('matching.position'), '居中'))
@@ -579,7 +567,6 @@ class MainGUI:
         config.set('matching.display_duration', self._var_duration.get())
         config.set('matching.font_size', self._var_fontsize.get())
         config.set('matching.enable_sound', self._var_sound.get())
-        config.set('matching.match_ratio_threshold', round(self._var_match_ratio.get(), 2))
 
         pos_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
         config.set('matching.position', pos_map.get(self._var_position.get(), 'center'))
@@ -655,13 +642,6 @@ class MainGUI:
     def _on_fs_scale(self, val):
         try:
             self._var_fontsize.set(max(10, min(36, round(float(val)))))
-        except (ValueError, TypeError):
-            pass
-
-    def _on_ratio_scale(self, val):
-        try:
-            v = round(float(val), 2)
-            self._var_match_ratio.set(max(0.5, min(1.0, v)))
         except (ValueError, TypeError):
             pass
 
@@ -752,7 +732,7 @@ class MainGUI:
         self.is_running = False
         self.stop_event.set()
         self._hide_roi_border()
-        self.overlay._hide()
+        self.overlay.hide()
         self._btn_start.config(state=tk.NORMAL)
         self._btn_stop.config(state=tk.DISABLED)
         self._update_status("已停止")
@@ -811,7 +791,7 @@ class MainGUI:
     def _on_scan_thread_exit(self):
         """扫描线程结束后统一恢复 UI 状态"""
         self._hide_roi_border()
-        self.overlay._hide()
+        self.overlay.hide()
         self._btn_start.config(state=tk.NORMAL)
         self._btn_stop.config(state=tk.DISABLED)
         self._update_status("已停止")

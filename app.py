@@ -26,9 +26,9 @@ from src.utils.gui_logger import GUILoggerHandler
 from src.utils.logger import logger
 from src.core.scan_service import ScanService
 from src.utils.scan_screen import select_roi_interactive
-from src.utils.text_matcher import display_ocr_results, _get_cached_matcher, keyword_in_text, reset_alerted_keywords
 from src.utils.global_hotkey import register_scan_hotkeys
 from src.utils.tray_icon import setup_tray
+from shared.overlay import Overlay
 
 
 class MainGUI:
@@ -65,8 +65,9 @@ class MainGUI:
         self.scan_count = 0
         self.last_scan_time = None
         self.memory_label = None
-        # 本次扫描会话内：每个关键词只保留最近一次匹配对应的提示（无配置提示时为 OCR 文本）
-        self.session_keyword_latest_hint = {}
+
+        # 浮窗（左列累计匹配 + 右列本次 OCR），由 shared.overlay.Overlay 维护会话状态
+        self.overlay = Overlay(parent_root=self.root, config=config, logger=logger)
 
         # 内存监控配置（从配置文件读取）
         self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms')
@@ -339,47 +340,6 @@ class MainGUI:
         position_combo['values'] = ('居中', '顶部', '底部')
         position_combo.pack(side=tk.LEFT, padx=5)
         
-        # 第三行：匹配比例（关键词中该比例字符按顺序出现在 OCR 文本中即算匹配）
-        row3 = ttk.Frame(frame)
-        row3.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(row3, text="匹配比例:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.match_ratio_var = tk.DoubleVar(value=0.75)
-        self.match_ratio_scale = ttk.Scale(
-            row3,
-            from_=0.5,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            variable=self.match_ratio_var,
-            length=150,
-            command=self._on_match_ratio_scale_change
-        )
-        self.match_ratio_scale.pack(side=tk.LEFT, padx=5)
-        
-        self.match_ratio_entry = ttk.Entry(row3, width=5, textvariable=self.match_ratio_var)
-        self.match_ratio_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Label(row3, text="(50%~100%，达到该比例即算匹配)").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.match_ratio_var.trace('w', self._on_match_ratio_change)
-    
-    def _on_match_ratio_scale_change(self, value):
-        """匹配比例滑动条变化时同步到输入框"""
-        try:
-            v = round(float(value), 2)
-            self.match_ratio_var.set(v)
-        except (ValueError, TypeError):
-            pass
-    
-    def _on_match_ratio_change(self, *args):
-        """匹配比例输入框变化时限制范围并同步滑动条"""
-        try:
-            v = float(self.match_ratio_var.get())
-            v = max(0.5, min(1.0, v))
-            self.match_ratio_var.set(round(v, 2))
-        except (ValueError, TypeError):
-            pass
-    
     def create_log_widgets(self, parent):
         """创建日志显示控件"""
         frame = ttk.LabelFrame(parent, text="运行日志", padding="5")
@@ -578,7 +538,6 @@ class MainGUI:
             banlist_path = config.get('files.banlist_file')
         self.banlist_path_var.set(banlist_path)
         self.display_duration_var.set(config.get('matching.display_duration'))
-        self.match_ratio_var.set(round(config.get('matching.match_ratio_threshold'), 2))
         position = config.get('matching.position')
         position_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
         self.display_position_var.set(position_map.get(position, '居中'))
@@ -609,7 +568,6 @@ class MainGUI:
         config.set('files.banlist_file', banlist_path)
         self.state_manager.set_last_banlist_path(banlist_path)
         config.set('matching.display_duration', self.display_duration_var.get())
-        config.set('matching.match_ratio_threshold', round(float(self.match_ratio_var.get()), 2))
         position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
         config.set('matching.position', position_map.get(self.display_position_var.get(), 'center'))
         config.set('matching.font_size', self.display_font_size_var.get())
@@ -628,9 +586,8 @@ class MainGUI:
         try:
             # 保存当前配置
             self.save_settings()
-            # 新一轮扫描开始，清空本次会话的匹配成功记录
-            self.session_keyword_latest_hint.clear()
-            reset_alerted_keywords()
+            # 新一轮扫描开始，清空浮窗的累计匹配记录
+            self.overlay.clear_session()
             
             # 禁用开始按钮，显示初始化状态
             self.start_btn.config(state=tk.DISABLED)
@@ -742,10 +699,16 @@ class MainGUI:
         
         self.is_running = False
         self.stop_event.set()
-        
+
         # 隐藏ROI区域边框
         self._hide_roi_border()
-        
+
+        # 隐藏浮窗
+        try:
+            self.overlay.hide()
+        except Exception:
+            pass
+
         # 更新UI
         self.start_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
@@ -1108,39 +1071,17 @@ class MainGUI:
                     self.append_log(f"扫描完成，耗时 {result['duration']:.2f}秒", "INFO")
                     if 'screenshot_path' in result and result['screenshot_path']:
                         self.append_log(f"截图已保存: {os.path.basename(result['screenshot_path'])}", "DEBUG")
-                    
-                    # 如果有OCR结果，显示所有识别结果（用颜色区分匹配状态）
-                    if 'ocr_results' in result and result['ocr_results']:
-                        ocr_results = result['ocr_results']
-                        matches = result.get('matches', [])
-                        banlist_path = self.banlist_path_var.get()
-                        matcher = _get_cached_matcher(banlist_path) if banlist_path else None
-                        self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
 
-                        # 每个关键词仅保留历史最新一条：覆盖写入最新提示（无配置提示时用 OCR 文本）
-                        if matches:
-                            for item in ocr_results:
-                                text = item.get('text', '')
-                                if not text:
-                                    continue
-                                for kw in matches:
-                                    if kw and keyword_in_text(text, kw):
-                                        left_hint = matcher.get_left_hint(kw) if matcher else ""
-                                        hint_text = left_hint if left_hint else text
-                                        self.session_keyword_latest_hint[kw] = hint_text
-                        
-                        # 在主线程中显示（传入 matcher 以按 75% 规则高亮匹配行）
-                        session_records_snapshot = dict(self.session_keyword_latest_hint)
-                        self.root.after(0, lambda ocr=ocr_results, m=matches, mat=matcher, records=session_records_snapshot: display_ocr_results(
-                            ocr, m,
-                            duration=self.scan_service.display_duration,
-                            position=self.scan_service.display_position,
-                            font_size=self.scan_service.display_font_size,
-                            parent_root=self.root,
-                            matcher=mat,
-                            session_matched_records=records
-                        ))
-                        
+                    ocr_results = result.get('ocr_results', [])
+                    matches = result.get('matches', [])
+                    if ocr_results:
+                        self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
+                    for m in matches:
+                        self.append_log(f"  >>> {m['keyword']} | {m['hint']}", "WARNING")
+
+                    # 浮窗每次扫描都刷新（包括无匹配场景），由 Overlay 内部去重音效
+                    self.root.after(0, lambda ocr=ocr_results, m=matches: self.overlay.update(ocr, m))
+
                 elif 'error' in result:
                     self.append_log(f"扫描出错: {result['error']}", "ERROR")
                 

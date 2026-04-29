@@ -12,7 +12,6 @@ from src.config.config import config
 from src.core.scan_service import ScanService
 from src.utils.logger import logger
 from src.utils.scan_screen import select_roi_interactive
-from src.utils.text_matcher import display_matches
 
 
 def parse_command_line_args():
@@ -174,14 +173,8 @@ def main():
             if result['success']:
                 logger.info(f"扫描完成，耗时 {result['duration']:.2f}秒")
                 if 'matches' in result and result['matches']:
-                    logger.info(f"匹配到关键词: {result['matches']}")
-                    # 显示匹配结果
-                    display_matches(
-                        result['matches'],
-                        duration=scan_service.display_duration,
-                        position=scan_service.display_position,
-                        font_size=scan_service.display_font_size
-                    )
+                    for m in result['matches']:
+                        logger.info(f"  >>> 匹配: {m['keyword']} | {m['hint']}")
             elif 'error' in result:
                 logger.error(f"扫描出错: {result['error']}")
             

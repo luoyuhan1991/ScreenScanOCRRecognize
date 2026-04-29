@@ -1,10 +1,11 @@
+import os
 import time
-from ..config.config import config
+from ..config.config import config, DEFAULT_BANLIST_FILE
 from ..utils.logger import logger
 from .capture import CaptureStage
 from .diff_gate import DiffGate
 from .ocr_stage import OCRStage
-from .match_stage import MatchStage
+from shared.matcher import SubstringMatcher
 
 
 class ScanResult:
@@ -20,14 +21,18 @@ class ScanPipeline:
         self.capture = CaptureStage()
         self.diff_gate = DiffGate()
         self.ocr = OCRStage()
-        self.matcher = MatchStage()
+        self.matcher = SubstringMatcher(logger=logger)
         self._last_result = ScanResult()
         self._roi = None
 
     def init(self):
         """初始化 OCR 模型和关键词"""
         self.ocr.init()
-        self.matcher.load()
+        banlist_file = config.get('files.banlist_file', DEFAULT_BANLIST_FILE)
+        if not os.path.isabs(banlist_file):
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+            banlist_file = os.path.join(base_dir, banlist_file)
+        self.matcher.load(banlist_file)
 
     def set_roi(self, roi):
         self._roi = roi
