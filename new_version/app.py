@@ -1037,24 +1037,45 @@ class MainGUI:
         self._on_close()
 
     def _on_close(self):
-        if self.is_running:
-            if messagebox.askyesno("确认", "扫描正在运行，确定退出?"):
-                self.on_stop()
-                time.sleep(0.3)
-            else:
-                return
-
-        self._hide_roi_border()
-        self.overlay.destroy()
-
-        if getattr(self, '_tray', None):
-            self._tray.stop()
-
-        self._hotkey_mgr.unregister_all()
-        self.pipeline.release()
-        self.root.destroy()
-        # 兜底：keyboard 全局钩子等非 daemon 线程不会随 mainloop 退出，强制结束进程
+        """清理 + 看门狗兜底：跑完所有清理就主动退出；任一步挂死则 3 秒后强杀"""
         import os
+        import threading
+
+        # 看门狗：无论清理走到哪一步，3 秒后强制结束进程
+        watchdog = threading.Timer(3.0, lambda: os._exit(0))
+        watchdog.daemon = True
+        watchdog.start()
+
+        # 立刻隐藏窗口，给用户即时反馈
+        try:
+            self.root.withdraw()
+        except Exception:
+            pass
+
+        # 依次清理，每个独立 try/except——单步抛错不影响后续
+        # 但若某步真"挂死"（不抛错也不返回），主线程会卡在那里，由 watchdog 兜底
+        try:
+            self._hide_roi_border()
+        except Exception:
+            pass
+        try:
+            self.overlay.destroy()
+        except Exception:
+            pass
+        try:
+            if getattr(self, '_tray', None):
+                self._tray.stop()
+        except Exception:
+            pass
+        try:
+            self._hotkey_mgr.unregister_all()
+        except Exception:
+            pass
+        try:
+            self.pipeline.release()
+        except Exception:
+            pass
+
         os._exit(0)
 
 
