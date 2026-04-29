@@ -17,7 +17,7 @@ class DiffGate:
         Returns:
             bool
         """
-        threshold = config.get('scan.diff_threshold', 5.0)
+        threshold = config.get('scan.diff_threshold')
 
         # 缩放为灰度缩略图
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)

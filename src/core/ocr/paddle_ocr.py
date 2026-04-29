@@ -143,8 +143,8 @@ def recognize_and_print(image, languages=None, save_dir="output",
     # 图像预处理：根据配置决定是否进行取反处理
     # 取反处理用于将黑底白字转换为白底黑字，提高识别准确率
     # 但会增加 10-20ms 的处理时间，对于白底黑字场景可以关闭以提升速度
-    enable_invert = config.get('ocr.enable_image_invert', False)
-    auto_detect_invert = config.get('ocr.auto_detect_invert', False)
+    enable_invert = config.get('ocr.enable_image_invert')
+    auto_detect_invert = config.get('ocr.auto_detect_invert')
 
     # 自动检测是否需要取反（基于图像亮度）
     if auto_detect_invert and not enable_invert:
@@ -170,7 +170,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
 
     # 保存处理后的图像（根据配置决定是否保存）
     # 如果 save_result 为 False，则不保存处理后的图像
-    save_processed_image = config.get('ocr.save_processed_image', True)
+    save_processed_image = config.get('ocr.save_processed_image')
     if save_processed_image and save_result:
         if timestamp is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

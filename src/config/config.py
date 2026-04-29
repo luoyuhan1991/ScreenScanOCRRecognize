@@ -3,8 +3,15 @@
 支持从YAML配置文件读取配置，并提供默认配置
 """
 
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+# 项目根（用于 import 顶层 defaults.py）
+_PROJECT_ROOT = str(Path(__file__).resolve().parents[2])
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG  # noqa: E402
 
 try:
     import yaml
@@ -27,57 +34,10 @@ class Config:
         return cls._instance
     
     def _load_config(self):
-        """加载配置文件"""
-        # 默认配置
-        default_config = {
-            'scan': {
-                'interval_seconds': 5,
-                'roi_padding': 10,
-                'enable_roi': False,
-                'saved_roi': None
-            },
-            'ocr': {
-                'default_engine': 'paddle',
-                'languages': ['ch', 'en'],
-                'min_confidence': 0.15,
-                'save_processed_image': False,
-                'easyocr': {
-                    'canvas_size': 1920,
-                    'mag_ratio': 1.5,
-                    'dynamic_params': True
-                }
-            },
-            'gpu': {
-                'auto_detect': False,
-                'force_cpu': False,
-                'force_gpu': True
-            },
-            'files': {
-                'output_dir': 'output',
-                'banlist_file': 'docs/banlist.txt',
-                'save_screenshot': False,
-                'save_ocr_result': False
-            },
-            'cleanup': {
-                'enabled': True,
-                'max_age_hours': 1,
-                'interval_minutes': 10
-            },
-            'matching': {
-                'enabled': True,
-                'display_duration': 3,
-                'position': 'center',
-                'match_ratio_threshold': 0.75
-            },
-            'logging': {
-                'level': 'INFO',
-                'file': 'logs/app.log',
-                'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                'max_bytes': 10485760,
-                'backup_count': 5
-            }
-        }
-        
+        """加载配置：defaults.DEFAULT_CONFIG 兜底，config/config.yaml 覆盖"""
+        import copy
+        default_config = copy.deepcopy(DEFAULT_CONFIG)
+
         # 加载配置文件（从config/config.yaml）
         config_file = Path('config/config.yaml')
         

@@ -1,5 +1,26 @@
+import copy
 import os
+import sys
 import yaml
+
+# 项目根（new_version 与外层共用 defaults.py，确保整个项目只有一份常量）
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG  # noqa: E402
+
+
+def _deep_merge(default, override):
+    """递归合并：override 覆盖 default；default 中存在但 override 无的 key 保留默认值"""
+    if not isinstance(override, dict):
+        return override
+    result = copy.deepcopy(default) if isinstance(default, dict) else {}
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
 
 
 class Config:
@@ -13,20 +34,24 @@ class Config:
         return cls._instance
 
     def load(self, path=None):
+        """加载配置：DEFAULT_CONFIG 兜底，yaml 覆盖（与旧版 Config 行为一致）"""
         if path is None:
-            # 查找 config/config.yaml，相对于 new_version/ 根目录
-            path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'config', 'config.yaml'
-            )
+            path = os.path.join(_PROJECT_ROOT, 'config', 'config.yaml')
+
+        # 1. 从 defaults 起步
+        self._data = copy.deepcopy(DEFAULT_CONFIG)
+
+        # 2. yaml 覆盖
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
-                self._data = yaml.safe_load(f) or {}
+                file_data = yaml.safe_load(f) or {}
+                self._data = _deep_merge(self._data, file_data)
+
         self._path = path
         self._loaded = True
 
     def get(self, dotted_key, default=None):
-        """点号路径访问: config.get('scan.interval_seconds', 2.0)"""
+        """点号路径访问: config.get('scan.interval_seconds')；defaults 已合并，通常无需传 default"""
         if not self._loaded:
             self.load()
         keys = dotted_key.split('.')

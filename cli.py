@@ -48,9 +48,9 @@ def parse_command_line_args():
 def main():
     """主函数 - 按配置的间隔扫描屏幕并进行OCR识别"""
     # 从配置读取参数
-    output_dir = config.get('files.output_dir', 'output')
-    scan_interval = config.get('scan.interval_seconds', 5)
-    roi_padding = config.get('scan.roi_padding', 10)
+    output_dir = config.get('files.output_dir')
+    scan_interval = config.get('scan.interval_seconds')
+    roi_padding = config.get('scan.roi_padding')
     
     # 创建输出目录
     if not os.path.exists(output_dir):
@@ -75,14 +75,14 @@ def main():
         roi_choice = '2'
         gpu_choice = None
         lang_choice = None
-        ocr_choice = '1' if config.get('ocr.default_engine', 'paddle') == 'paddle' else '2'
-        match_choice = '1' if config.get('matching.enabled', True) else '0'
+        ocr_choice = '1' if config.get('ocr.default_engine') == 'paddle' else '2'
+        match_choice = '1' if config.get('matching.enabled') else '0'
         banlist_file = None  # 稍后统一从配置读取
         logger.info("\n[使用默认配置]")
     
     # 统一设置banlist文件（命令行参数优先，否则使用配置）
     if banlist_file is None:
-        banlist_file = config.get('files.banlist_file', 'docs/banlist.txt')
+        banlist_file = config.get('files.banlist_file')
     
     roi = None
     if roi_choice == '2':
@@ -112,7 +112,7 @@ def main():
         logger.info(f"语言选项: 英文")
     else:
         # 使用配置文件的语言设置
-        languages_config = config.get('ocr.languages', ['ch', 'en'])
+        languages_config = config.get('ocr.languages')
         logger.info(f"语言选项: 使用配置文件 {languages_config}")
     
     # GPU配置 - 处理命令行GPU选项（如果提供）

@@ -33,7 +33,7 @@ class CaptureStage:
 
         if roi is not None:
             x1, y1, x2, y2 = roi
-            padding = config.get('scan.roi_padding', 10)
+            padding = config.get('scan.roi_padding')
             monitor_info = self.sct.monitors[1]
             sw, sh = monitor_info['width'], monitor_info['height']
             x1 = max(0, x1 - padding)

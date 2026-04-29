@@ -107,7 +107,7 @@ class Overlay:
                 new_matches.append(kw)
 
         # 新匹配时播放柔和和弦提示
-        if new_matches and config.get('matching.enable_sound', True):
+        if new_matches and config.get('matching.enable_sound'):
             threading.Thread(
                 target=lambda: winsound.PlaySound(_CHORD_WAV, winsound.SND_MEMORY),
                 daemon=True,
@@ -122,7 +122,7 @@ class Overlay:
         if not self._window or not self._canvas:
             return
 
-        font_size = config.get('matching.font_size', 18)
+        font_size = config.get('matching.font_size')
         effective_size = max(10, font_size - 2)
         font_tuple = ('Microsoft YaHei', effective_size, 'bold')
 
@@ -199,7 +199,7 @@ class Overlay:
         # 窗口位置
         screen_w = self._window.winfo_screenwidth()
         screen_h = self._window.winfo_screenheight()
-        position = config.get('matching.position', 'center')
+        position = config.get('matching.position')
 
         if position == 'top':
             wx = (screen_w - total_width) // 2
@@ -267,7 +267,7 @@ class Overlay:
             except Exception:
                 pass
             self._hide_timer = None
-        duration = config.get('matching.display_duration', 3.0)
+        duration = config.get('matching.display_duration')
         self._hide_timer = self._window.after(
             int(duration * 1000), self._hide
         )

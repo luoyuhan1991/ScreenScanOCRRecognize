@@ -70,7 +70,7 @@ class OCRConfig:
         
         # 处理语言参数（统一转换为列表格式）
         if languages is None:
-            languages = config.get('ocr.languages', ['ch', 'en'])
+            languages = config.get('ocr.languages')
         
         if isinstance(languages, str):
             self.languages = [languages]
@@ -102,9 +102,9 @@ class OCRConfig:
             return bool(use_gpu)
         
         # 从配置读取GPU设置
-        force_cpu = config.get('gpu.force_cpu', False)
-        force_gpu = config.get('gpu.force_gpu', True)
-        auto_detect = config.get('gpu.auto_detect', False)
+        force_cpu = config.get('gpu.force_cpu')
+        force_gpu = config.get('gpu.force_gpu')
+        auto_detect = config.get('gpu.auto_detect')
         
         if force_cpu:
             return False

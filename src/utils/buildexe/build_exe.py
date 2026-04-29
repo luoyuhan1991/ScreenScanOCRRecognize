@@ -29,7 +29,7 @@ def build_exe():
         
         # 添加数据文件
         '--add-data=config/config.yaml;config',  # 配置文件
-        '--add-data=docs/banlist.txt;docs',  # 关键词文件
+        # banlist 默认指向桌面绝对路径，不再随 EXE 分发
         
         # 隐藏导入（PyInstaller可能无法自动检测的模块）
         '--hidden-import=tkinter',

@@ -28,7 +28,8 @@ class GUIStateManager:
                 'geometry': None
             },
             'ui': {
-                'last_banlist_path': 'docs/banlist.txt',
+                # last_banlist_path 留 None：未保存过时由 get_last_banlist_path() 回退到 config.files.banlist_file
+                'last_banlist_path': None,
                 'log_level_filter': 'INFO',
                 'log_max_lines': 1000
             }
@@ -111,8 +112,15 @@ class GUIStateManager:
         self.state['window']['geometry'] = f"{width}x{height}+{x}+{y}"
     
     def get_last_banlist_path(self) -> str:
-        """获取上次使用的banlist文件路径"""
-        return self.state.get('ui', {}).get('last_banlist_path', 'docs/banlist.txt')
+        """获取上次使用的banlist文件路径；未保存过时回退到配置文件的 files.banlist_file"""
+        path = self.state.get('ui', {}).get('last_banlist_path')
+        if path:
+            return path
+        try:
+            from .config import config
+            return config.get('files.banlist_file') or ''
+        except Exception:
+            return ''
     
     def set_last_banlist_path(self, path: str):
         """设置上次使用的banlist文件路径"""

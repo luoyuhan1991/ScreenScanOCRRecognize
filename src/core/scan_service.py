@@ -52,28 +52,28 @@ class ScanService:
             return
         self._config_initialized = True
         config.clear_dirty()
-        self.output_dir = config.get('files.output_dir', 'output')
-        self.scan_interval = config.get('scan.interval_seconds', 5)
-        self.roi_padding = config.get('scan.roi_padding', 10)
-        self.enable_matching = config.get('matching.enabled', True)
-        self.banlist_file = config.get('files.banlist_file', 'docs/banlist.txt')
-        self.display_duration = config.get('matching.display_duration', 3)
-        self.display_position = config.get('matching.position', 'center')
-        self.display_font_size = config.get('matching.font_size', 30)
+        self.output_dir = config.get('files.output_dir')
+        self.scan_interval = config.get('scan.interval_seconds')
+        self.roi_padding = config.get('scan.roi_padding')
+        self.enable_matching = config.get('matching.enabled')
+        self.banlist_file = config.get('files.banlist_file')
+        self.display_duration = config.get('matching.display_duration')
+        self.display_position = config.get('matching.position')
+        self.display_font_size = config.get('matching.font_size')
         
         # 新增配置：是否保存文件（默认开启以保持兼容性）
-        self.save_screenshot = config.get('files.save_screenshot', True)
-        self.save_ocr_result = config.get('files.save_ocr_result', True)
+        self.save_screenshot = config.get('files.save_screenshot')
+        self.save_ocr_result = config.get('files.save_ocr_result')
 
         # 内存管理配置
-        self.explicit_image_cleanup = config.get('performance.explicit_image_cleanup', True)
+        self.explicit_image_cleanup = config.get('performance.explicit_image_cleanup')
 
         # 帧差检测配置
-        self.enable_diff_skip = config.get('scan.enable_diff_skip', True)
-        self.diff_threshold = config.get('scan.diff_threshold', 5.0)
+        self.enable_diff_skip = config.get('scan.enable_diff_skip')
+        self.diff_threshold = config.get('scan.diff_threshold')
 
         # 清理间隔（每 N 次扫描清理一次旧输出文件）
-        self.cleanup_interval = config.get('cleanup.scan_interval', 10)
+        self.cleanup_interval = config.get('cleanup.scan_interval')
     
     def init_ocr(self, engine_choice: str = 'paddle', languages: List[str] = None, use_gpu: bool = None):
         """
@@ -85,7 +85,7 @@ class ScanService:
             use_gpu: 是否使用GPU
         """
         if languages is None:
-            languages = config.get('ocr.languages', ['ch', 'en'])
+            languages = config.get('ocr.languages')
         
         self.ocr_engine = engine_choice.lower()
         

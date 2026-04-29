@@ -16,7 +16,7 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.config.config import config
+from src.config.config import config, DEFAULT_BANLIST_FILE
 from src.pipeline.pipeline import ScanPipeline
 from src.overlay.overlay import Overlay
 from src.utils.logger import logger, configure_from_config
@@ -259,7 +259,11 @@ class MainGUI:
         self.root.geometry("860x680")
 
         # ---------- 配置 ----------
-        config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
+        # 共用项目根目录的 config/config.yaml（new_version 自己不再保留 config 目录）
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'config', 'config.yaml'
+        )
         config.load(config_path)
         configure_from_config(config)
 
@@ -434,7 +438,7 @@ class MainGUI:
         row1.pack(fill=tk.X, pady=2)
 
         ttk.Label(row1, text="关键词文件:").pack(side=tk.LEFT, padx=(0, 4))
-        self._var_banlist = tk.StringVar(value='docs/banlist.txt')
+        self._var_banlist = tk.StringVar(value=DEFAULT_BANLIST_FILE)
         ttk.Entry(row1, textvariable=self._var_banlist, width=30).pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
         ttk.Button(row1, text="浏览...", command=self._browse_banlist).pack(side=tk.LEFT, padx=2)
         ttk.Button(row1, text="编辑", command=self._edit_banlist).pack(side=tk.LEFT, padx=2)
@@ -542,22 +546,22 @@ class MainGUI:
     def _load_settings(self):
         self._var_enable_roi.set(config.get('scan.roi') is not None)
         self._var_remember_roi.set(True)
-        self._var_gpu.set(config.get('gpu.enabled', True))
-        self._var_interval.set(config.get('scan.interval_seconds', 2.0))
-        self._var_diff_threshold.set(config.get('scan.diff_threshold', 5.0))
+        self._var_gpu.set(config.get('gpu.enabled'))
+        self._var_interval.set(config.get('scan.interval_seconds'))
+        self._var_diff_threshold.set(config.get('scan.diff_threshold'))
 
-        self._var_lang.set(config.get('ocr.language', 'ch'))
-        self._var_confidence.set(config.get('ocr.min_confidence', 0.3))
-        self._var_invert.set(config.get('ocr.enable_image_invert', False))
+        self._var_lang.set(config.get('ocr.language'))
+        self._var_confidence.set(config.get('ocr.min_confidence'))
+        self._var_invert.set(config.get('ocr.enable_image_invert'))
 
-        self._var_banlist.set(config.get('matching.banlist_file', 'docs/banlist.txt'))
-        self._var_duration.set(config.get('matching.display_duration', 3.0))
-        self._var_fontsize.set(config.get('matching.font_size', 18))
-        self._var_sound.set(config.get('matching.enable_sound', True))
-        self._var_match_ratio.set(config.get('matching.match_ratio_threshold', 0.75))
+        self._var_banlist.set(config.get('files.banlist_file', DEFAULT_BANLIST_FILE))
+        self._var_duration.set(config.get('matching.display_duration'))
+        self._var_fontsize.set(config.get('matching.font_size'))
+        self._var_sound.set(config.get('matching.enable_sound'))
+        self._var_match_ratio.set(config.get('matching.match_ratio_threshold'))
 
         pos_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
-        self._var_position.set(pos_map.get(config.get('matching.position', 'center'), '居中'))
+        self._var_position.set(pos_map.get(config.get('matching.position'), '居中'))
 
         # ROI 预设下拉
         self._refresh_presets()
@@ -571,7 +575,7 @@ class MainGUI:
         config.set('ocr.min_confidence', round(self._var_confidence.get(), 2))
         config.set('ocr.enable_image_invert', self._var_invert.get())
 
-        config.set('matching.banlist_file', self._var_banlist.get())
+        config.set('files.banlist_file', self._var_banlist.get())
         config.set('matching.display_duration', self._var_duration.get())
         config.set('matching.font_size', self._var_fontsize.get())
         config.set('matching.enable_sound', self._var_sound.get())
@@ -587,7 +591,7 @@ class MainGUI:
     # -----------------------------------------------------------------------
 
     def _refresh_presets(self):
-        presets = config.get('scan.roi_presets', {}) or {}
+        presets = config.get('scan.roi_presets') or {}
         names = list(presets.keys())
         self._combo_preset['values'] = names
         if names:
@@ -595,7 +599,7 @@ class MainGUI:
 
     def _on_preset_selected(self, event=None):
         name = self._var_roi_preset.get()
-        presets = config.get('scan.roi_presets', {}) or {}
+        presets = config.get('scan.roi_presets') or {}
         roi = presets.get(name)
         if roi:
             self.roi = tuple(roi)
@@ -610,7 +614,7 @@ class MainGUI:
         name = simpledialog.askstring("保存预设", "请输入预设名称:", parent=self.root)
         if not name:
             return
-        presets = config.get('scan.roi_presets', {}) or {}
+        presets = config.get('scan.roi_presets') or {}
         presets[name] = list(self.roi)
         config.set('scan.roi_presets', presets)
         config.save()
@@ -833,9 +837,9 @@ class MainGUI:
             messagebox.showwarning("提示", "请先选择关键词文件")
             return
 
-        # 解析相对路径
+        # 解析相对路径（相对于项目根目录）
         if not os.path.isabs(path):
-            path = os.path.join(os.path.dirname(__file__), path)
+            path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), path)
 
         if not os.path.exists(path):
             if not messagebox.askyesno("确认", f"文件不存在:\n{path}\n是否创建?"):
@@ -888,7 +892,7 @@ class MainGUI:
     def _show_roi_border(self):
         try:
             roi = self.roi
-            padding = config.get('scan.roi_padding', 10)
+            padding = config.get('scan.roi_padding')
 
             import ctypes
             user32 = ctypes.windll.user32

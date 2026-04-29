@@ -30,14 +30,13 @@ def setup_logger(name: str = 'ScreenScanOCR', level: Optional[str] = None) -> lo
     
     # 设置日志级别
     if level is None:
-        level = config.get('logging.level', 'INFO')
+        level = config.get('logging.level')
     
     log_level = getattr(logging, level.upper(), logging.INFO)
     logger.setLevel(log_level)
     
     # 格式化器
-    log_format = config.get('logging.format', 
-                           '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_format = config.get('logging.format')
     formatter = logging.Formatter(log_format)
     
     # 控制台处理器
@@ -53,8 +52,8 @@ def setup_logger(name: str = 'ScreenScanOCR', level: Optional[str] = None) -> lo
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             
-            max_bytes = config.get('logging.max_bytes', 10485760)
-            backup_count = config.get('logging.backup_count', 5)
+            max_bytes = config.get('logging.max_bytes')
+            backup_count = config.get('logging.backup_count')
             
             file_handler = RotatingFileHandler(
                 log_file,

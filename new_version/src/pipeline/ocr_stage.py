@@ -10,8 +10,8 @@ _ocr_init_config = None  # (lang, gpu_enabled) 初始化时的配置
 
 def _get_ocr():
     global _ocr_instance, _ocr_init_config
-    lang = config.get('ocr.language', 'ch')
-    use_gpu = config.get('gpu.enabled', True)
+    lang = config.get('ocr.language')
+    use_gpu = config.get('gpu.enabled')
     current_config = (lang, use_gpu)
 
     if _ocr_instance is not None and _ocr_init_config == current_config:
@@ -61,7 +61,7 @@ class OCRStage:
             self._ocr = _get_ocr()
 
         # 可选图像反色
-        if config.get('ocr.enable_image_invert', False):
+        if config.get('ocr.enable_image_invert'):
             frame_bgr = cv2.bitwise_not(frame_bgr)
 
         start = time.time()
@@ -71,7 +71,7 @@ class OCRStage:
 
         # 提取结果
         texts = []
-        min_conf = config.get('ocr.min_confidence', 0.3)
+        min_conf = config.get('ocr.min_confidence')
 
         if result and len(result) > 0:
             ocr_result = result[0]

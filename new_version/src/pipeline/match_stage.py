@@ -1,6 +1,6 @@
 import os
 import ahocorasick
-from ..config.config import config
+from ..config.config import config, DEFAULT_BANLIST_FILE
 from ..utils.logger import logger
 
 
@@ -14,11 +14,11 @@ class MatchStage:
     def load(self, banlist_file=None):
         """加载关键词并构建自动机"""
         if banlist_file is None:
-            banlist_file = config.get('matching.banlist_file', 'docs/banlist.txt')
+            banlist_file = config.get('files.banlist_file', DEFAULT_BANLIST_FILE)
 
-        # 如果是相对路径，相对于 new_version 根目录解析
+        # 如果是相对路径，相对于项目根目录解析（new_version 共用外层）
         if not os.path.isabs(banlist_file):
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
             banlist_file = os.path.join(base_dir, banlist_file)
 
         self._file_path = os.path.abspath(banlist_file)
@@ -144,7 +144,7 @@ class MatchStage:
                         })
 
         # 第二轮：比例匹配（仅对第一轮未命中的关键词）
-        ratio_threshold = float(config.get('matching.match_ratio_threshold', 0.75))
+        ratio_threshold = float(config.get('matching.match_ratio_threshold'))
         if ratio_threshold < 1.0:
             for kw_lower, info in self._keywords.items():
                 kw = info['original']

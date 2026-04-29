@@ -58,9 +58,9 @@ class MainGUI:
         self.stop_event = threading.Event()
 
         # 日志队列配置（从配置文件读取）
-        max_log_queue_size = config.get('performance.max_log_queue_size', 1000)
+        max_log_queue_size = config.get('performance.max_log_queue_size')
         self.log_queue = queue.Queue(maxsize=max_log_queue_size)
-        self.log_queue_cleanup_threshold = config.get('performance.log_queue_cleanup_threshold', 800)
+        self.log_queue_cleanup_threshold = config.get('performance.log_queue_cleanup_threshold')
 
         self.scan_count = 0
         self.last_scan_time = None
@@ -69,7 +69,7 @@ class MainGUI:
         self.session_keyword_latest_hint = {}
 
         # 内存监控配置（从配置文件读取）
-        self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms', 5000)
+        self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms')
         self._memory_pid = os.getpid()
         
         # OCR相关
@@ -556,33 +556,33 @@ class MainGUI:
     def load_settings(self):
         """加载设置"""
         # 从config.yaml加载业务配置
-        self.enable_roi_var.set(config.get('scan.enable_roi', False))
-        self.remember_roi_var.set(config.get('scan.remember_roi', True))
-        self.enable_gpu_var.set(config.get('gpu.force_gpu', True))
-        self.scan_interval_var.set(config.get('scan.interval_seconds', 5))
+        self.enable_roi_var.set(config.get('scan.enable_roi'))
+        self.remember_roi_var.set(config.get('scan.remember_roi'))
+        self.enable_gpu_var.set(config.get('gpu.force_gpu'))
+        self.scan_interval_var.set(config.get('scan.interval_seconds'))
         
         # OCR配置
-        default_engine = config.get('ocr.default_engine', 'paddle')
+        default_engine = config.get('ocr.default_engine')
         self.ocr_engine_var.set(default_engine)
-        self.min_confidence_var.set(round(config.get('ocr.min_confidence', 0.15), 2))
+        self.min_confidence_var.set(round(config.get('ocr.min_confidence'), 2))
         
         # 读取保存文件配置（默认True）
-        save_screenshot = config.get('files.save_screenshot', True)
+        save_screenshot = config.get('files.save_screenshot')
         self.save_files_var.set(save_screenshot)
         
         # 文字匹配配置
-        self.enable_matching_var.set(config.get('matching.enabled', True))
+        self.enable_matching_var.set(config.get('matching.enabled'))
         # 优先使用GUI状态中的路径，否则使用配置文件
         banlist_path = self.state_manager.get_last_banlist_path()
         if not os.path.exists(banlist_path):
-            banlist_path = config.get('files.banlist_file', 'docs/banlist.txt')
+            banlist_path = config.get('files.banlist_file')
         self.banlist_path_var.set(banlist_path)
-        self.display_duration_var.set(config.get('matching.display_duration', 3))
-        self.match_ratio_var.set(round(config.get('matching.match_ratio_threshold', 0.75), 2))
-        position = config.get('matching.position', 'center')
+        self.display_duration_var.set(config.get('matching.display_duration'))
+        self.match_ratio_var.set(round(config.get('matching.match_ratio_threshold'), 2))
+        position = config.get('matching.position')
         position_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
         self.display_position_var.set(position_map.get(position, '居中'))
-        self.display_font_size_var.set(config.get('matching.font_size', 30))
+        self.display_font_size_var.set(config.get('matching.font_size'))
     
     def save_settings(self):
         """保存设置"""
@@ -638,7 +638,7 @@ class MainGUI:
             self.append_log("正在初始化OCR引擎...", "INFO")
             
             # 获取参数
-            languages = config.get('ocr.languages', ['ch', 'en'])
+            languages = config.get('ocr.languages')
             use_gpu = self.enable_gpu_var.get()
             engine_choice = self.ocr_engine_var.get()
             
@@ -1013,7 +1013,7 @@ class MainGUI:
         root_logger.addHandler(gui_handler)
         
         # 设置日志级别
-        log_level = config.get('logging.level', 'INFO')
+        log_level = config.get('logging.level')
         root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
     
     def append_log(self, message, level='INFO'):

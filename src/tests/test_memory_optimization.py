@@ -127,23 +127,23 @@ def test_memory_optimization():
     print("-" * 60)
 
     print("\n当前配置:")
-    print(f"  内存监控间隔: {config.get('performance.memory_monitor_interval_ms', 5000)} ms")
-    print(f"  日志队列大小: {config.get('performance.max_log_queue_size', 1000)}")
-    print(f"  清理阈值: {config.get('performance.log_queue_cleanup_threshold', 800)}")
-    print(f"  显式清理截图: {config.get('performance.explicit_image_cleanup', True)}")
+    print(f"  内存监控间隔: {config.get('performance.memory_monitor_interval_ms')} ms")
+    print(f"  日志队列大小: {config.get('performance.max_log_queue_size')}")
+    print(f"  清理阈值: {config.get('performance.log_queue_cleanup_threshold')}")
+    print(f"  显式清理截图: {config.get('performance.explicit_image_cleanup')}")
 
     # 计算优化效果
     print("\n优化效果估算:")
 
     # 内存监控优化
     old_interval = 2000  # 旧的间隔（毫秒）
-    new_interval = config.get('performance.memory_monitor_interval_ms', 5000)
+    new_interval = config.get('performance.memory_monitor_interval_ms')
     monitor_reduction = (old_interval - new_interval) / old_interval * 100
     print(f"  内存监控调用频率: {monitor_reduction:+.1f}%")
 
     # 日志队列优化
     old_queue_size = 2000
-    new_queue_size = config.get('performance.max_log_queue_size', 1000)
+    new_queue_size = config.get('performance.max_log_queue_size')
     queue_reduction = (old_queue_size - new_queue_size) / old_queue_size * 100
     print(f"  日志队列内存: {queue_reduction:+.1f}%")
 

@@ -35,14 +35,16 @@ def keyword_in_text(ocr_text: str, keyword: str) -> bool:
 class TextMatcher:
     """文字匹配器"""
     
-    def __init__(self, txt_file="docs/banlist.txt", match_ratio_threshold=None):
+    def __init__(self, txt_file=None, match_ratio_threshold=None):
         """
         初始化文字匹配器
-        
+
         Args:
-            txt_file (str): 关键词TXT文件路径，默认为 docs/banlist.txt
+            txt_file (str): 关键词TXT文件路径，缺省时从 config 的 files.banlist_file 读取
             match_ratio_threshold (float): 匹配比例阈值，默认 0.75，即 75% 以上文字匹配则算数
         """
+        if txt_file is None and config is not None:
+            txt_file = config.get('files.banlist_file')
         self.txt_file = txt_file
         self.keywords = []
         self.keywords_casefolded = []
@@ -749,7 +751,7 @@ def display_ocr_results(
     if matched_keywords:
         enable_sound = True
         if config is not None:
-            enable_sound = config.get('matching.enable_sound', True)
+            enable_sound = config.get('matching.enable_sound')
         if enable_sound:
             with _alerted_keywords_lock:
                 new_keywords = [kw for kw in matched_keywords if kw not in _alerted_keywords]
@@ -789,20 +791,22 @@ def display_matches(matched_keywords, duration=3, position="center", font_size=3
         display.show()
 
 
-def match_and_display(ocr_results, txt_file="docs/banlist.txt", duration=3, position="center", font_size=20):
+def match_and_display(ocr_results, txt_file=None, duration=3, position="center", font_size=20):
     """
     匹配关键词并显示（显示所有OCR结果，用颜色区分匹配状态）
-    
+
     Args:
         ocr_results (list): OCR识别结果列表
-        txt_file (str): 关键词TXT文件路径
+        txt_file (str): 关键词TXT文件路径，缺省时从 config 的 files.banlist_file 读取
         duration (int): 显示时长
         position (str): 显示位置
         font_size (int): 字体大小
-    
+
     Returns:
         list: 匹配到的关键词列表
     """
+    if txt_file is None and config is not None:
+        txt_file = config.get('files.banlist_file')
     # 使用缓存的匹配器（避免每次读取文件）
     matcher = _get_cached_matcher(txt_file)
     

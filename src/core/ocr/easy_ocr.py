@@ -143,9 +143,9 @@ def recognize_text(image, languages=None,
             img_array = np.array(image)
 
         # 从配置中获取OCR参数
-        default_canvas_size = config.get('ocr.easyocr.canvas_size', 1920)
-        default_mag_ratio = config.get('ocr.easyocr.mag_ratio', 1.5)
-        dynamic_params = config.get('ocr.easyocr.dynamic_params', True)
+        default_canvas_size = config.get('ocr.easyocr.canvas_size')
+        default_mag_ratio = config.get('ocr.easyocr.mag_ratio')
+        dynamic_params = config.get('ocr.easyocr.dynamic_params')
 
         # 根据图片尺寸动态调整OCR参数
         # 对于大图，使用较小的canvas_size和mag_ratio以提高速度
@@ -235,7 +235,7 @@ def recognize_and_print(image, languages=None, save_dir="output",
     Raises:
         Exception: 当保存结果文件时发生错误
     """
-    min_confidence = config.get('ocr.min_confidence', 0.3)
+    min_confidence = config.get('ocr.min_confidence')
     
     text_items, ocr_duration = recognize_text(image, languages, 
                          min_confidence=min_confidence, use_gpu=use_gpu, roi=roi)

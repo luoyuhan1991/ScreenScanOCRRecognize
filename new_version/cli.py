@@ -28,7 +28,7 @@ def main():
     pipeline.init()
     print("初始化完成，开始扫描...")
 
-    interval = config.get('scan.interval_seconds', 2.0)
+    interval = config.get('scan.interval_seconds')
     scan_count = 0
 
     try:
