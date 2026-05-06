@@ -3,10 +3,11 @@ import os
 import sys
 import yaml
 
-# 项目根：src/config/config.py 上溯 3 层 → 项目根目录
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+# 把项目根放到 sys.path，让 defaults.py 与 shared.* 能跨树 import；其它 entry point
+# 也直接 from src.config.config import PROJECT_ROOT 复用，避免到处手写 dirname 链。
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG  # noqa: E402
 
 
@@ -36,16 +37,15 @@ class Config:
     def load(self, path=None):
         """加载配置：DEFAULT_CONFIG 兜底，yaml 覆盖（与旧版 Config 行为一致）"""
         if path is None:
-            path = os.path.join(_PROJECT_ROOT, 'config', 'config.yaml')
+            path = os.path.join(PROJECT_ROOT, 'config', 'config.yaml')
 
-        # 1. 从 defaults 起步
         self._data = copy.deepcopy(DEFAULT_CONFIG)
-
-        # 2. yaml 覆盖
-        if os.path.exists(path):
+        try:
             with open(path, 'r', encoding='utf-8') as f:
                 file_data = yaml.safe_load(f) or {}
                 self._data = _deep_merge(self._data, file_data)
+        except FileNotFoundError:
+            pass
 
         self._path = path
         self._loaded = True

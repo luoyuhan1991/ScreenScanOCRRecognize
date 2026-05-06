@@ -11,9 +11,7 @@ from src.utils.logger import logger, configure_from_config
 
 
 def main():
-    # 加载配置
-    config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
-    config.load(config_path)
+    config.load()
     configure_from_config(config)
 
     # 创建管道

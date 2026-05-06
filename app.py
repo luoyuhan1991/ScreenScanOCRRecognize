@@ -16,7 +16,7 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.config.config import config, DEFAULT_BANLIST_FILE
+from src.config.config import config, DEFAULT_BANLIST_FILE, PROJECT_ROOT
 from src.pipeline.pipeline import ScanPipeline
 from src.utils.logger import logger, configure_from_config
 from src.utils.hotkey import HotkeyManager
@@ -259,12 +259,7 @@ class MainGUI:
         self.root.geometry("860x680")
 
         # ---------- 配置 ----------
-        # 项目根目录的 config/config.yaml
-        config_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            'config', 'config.yaml'
-        )
-        config.load(config_path)
+        config.load()
         configure_from_config(config)
 
         # ---------- Pipeline & Overlay ----------
@@ -817,9 +812,8 @@ class MainGUI:
             messagebox.showwarning("提示", "请先选择关键词文件")
             return
 
-        # 解析相对路径（相对于项目根目录）
         if not os.path.isabs(path):
-            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+            path = os.path.join(PROJECT_ROOT, path)
 
         if not os.path.exists(path):
             if not messagebox.askyesno("确认", f"文件不存在:\n{path}\n是否创建?"):
@@ -857,8 +851,7 @@ class MainGUI:
 
     def _reset_config(self):
         if messagebox.askyesno("确认", "重置所有配置为默认值?"):
-            config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
-            config.load(config_path)
+            config.load()
             self._load_settings()
             self._append_log("配置已重置", "INFO")
 

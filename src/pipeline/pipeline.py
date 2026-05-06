@@ -1,6 +1,6 @@
 import os
 import time
-from ..config.config import config, DEFAULT_BANLIST_FILE
+from ..config.config import config, DEFAULT_BANLIST_FILE, PROJECT_ROOT
 from ..utils.logger import logger
 from .capture import CaptureStage
 from .diff_gate import DiffGate
@@ -30,8 +30,7 @@ class ScanPipeline:
         self.ocr.init()
         banlist_file = config.get('files.banlist_file', DEFAULT_BANLIST_FILE)
         if not os.path.isabs(banlist_file):
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            banlist_file = os.path.join(base_dir, banlist_file)
+            banlist_file = os.path.join(PROJECT_ROOT, banlist_file)
         self.matcher.load(banlist_file)
 
     def set_roi(self, roi):
