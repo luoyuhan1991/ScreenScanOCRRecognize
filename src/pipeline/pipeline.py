@@ -30,7 +30,7 @@ class ScanPipeline:
         self.ocr.init()
         banlist_file = config.get('files.banlist_file', DEFAULT_BANLIST_FILE)
         if not os.path.isabs(banlist_file):
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             banlist_file = os.path.join(base_dir, banlist_file)
         self.matcher.load(banlist_file)
 

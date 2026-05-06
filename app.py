@@ -1,6 +1,6 @@
 """
-ScreenScanOCRRecognize - GUI主程序
-提供图形用户界面，支持参数配置、状态监控和日志显示
+ScreenScanOCRRecognize (new_version) - GUI 主程序
+tkinter 图形界面，包含扫描控制、参数配置、状态监控、日志显示和透明浮窗
 """
 
 import logging
@@ -11,801 +11,1016 @@ import threading
 import time
 import tkinter as tk
 from datetime import datetime
-from tkinter import ttk, filedialog, messagebox, scrolledtext
+from tkinter import ttk, filedialog, messagebox, scrolledtext, simpledialog
 
-try:
-    from src.utils.mem_monitor import get_working_set_mb
-except Exception:
-    get_working_set_mb = None
+# 添加项目路径
+sys.path.insert(0, os.path.dirname(__file__))
 
-# 导入项目模块
-from src.config.config import config
-from src.config.config_editor import ConfigEditor
-from src.config.gui_state import GUIStateManager
-from src.utils.gui_logger import GUILoggerHandler
-from src.utils.logger import logger
-from src.core.scan_service import ScanService
-from src.utils.scan_screen import select_roi_interactive
-from src.utils.global_hotkey import register_scan_hotkeys
-from src.utils.tray_icon import setup_tray
+from src.config.config import config, DEFAULT_BANLIST_FILE
+from src.pipeline.pipeline import ScanPipeline
+from src.utils.logger import logger, configure_from_config
+from src.utils.hotkey import HotkeyManager
 from shared.overlay import Overlay
 
 
+# ---------------------------------------------------------------------------
+# 托盘图标 (内联，避免额外文件)
+# ---------------------------------------------------------------------------
+
+def _make_tray_icon_image():
+    """生成 64x64 托盘图标"""
+    try:
+        from PIL import Image, ImageDraw
+        w, h = 64, 64
+        cx, cy = w // 2, h // 2
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        r_outer = min(cx, cy) - 2
+        draw.ellipse(
+            [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer],
+            fill=(20, 28, 36), outline=(0, 180, 120)
+        )
+        for i in range(1, 4):
+            r = r_outer * i // 4
+            draw.ellipse(
+                [cx - r, cy - r, cx + r, cy + r],
+                outline=(0, 200, 140), width=1
+            )
+        draw.line([cx, cy - r_outer, cx, cy + r_outer], fill=(0, 200, 140), width=1)
+        draw.line([cx - r_outer, cy, cx + r_outer, cy], fill=(0, 200, 140), width=1)
+        draw.pieslice(
+            [cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer],
+            start=0, end=90,
+            fill=(0, 180, 120, 100), outline=(0, 220, 160)
+        )
+        draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=(0, 255, 170))
+        return img
+    except Exception:
+        try:
+            from PIL import Image
+            return Image.new("RGBA", (64, 64), (0, 120, 80))
+        except Exception:
+            return None
+
+
+def _setup_tray(root, on_show, on_quit, tooltip="屏幕扫描OCR识别"):
+    """创建并启动系统托盘图标"""
+    try:
+        import pystray
+    except ImportError:
+        logger.warning("未安装 pystray，托盘图标不可用")
+        return None
+
+    def _run_on_main(fn):
+        try:
+            root.after(0, fn)
+        except Exception:
+            pass
+
+    image = _make_tray_icon_image()
+    if image is None:
+        return None
+
+    menu = pystray.Menu(
+        pystray.MenuItem("显示主窗口", lambda: _run_on_main(on_show), default=True),
+        pystray.MenuItem("退出", lambda: _run_on_main(on_quit)),
+    )
+    icon = pystray.Icon("screen_scan_ocr", image, tooltip, menu=menu)
+
+    def _run():
+        try:
+            icon.run()
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    class _Ctrl:
+        def stop(self):
+            try:
+                icon.stop()
+            except Exception:
+                pass
+
+    return _Ctrl()
+
+
+# ---------------------------------------------------------------------------
+# ROI 交互选择
+# ---------------------------------------------------------------------------
+
+def select_roi_interactive(parent=None):
+    """
+    截屏后显示半透明全屏窗口，让用户拖选 ROI 矩形。
+    Returns (x1, y1, x2, y2) 或 None
+    """
+    try:
+        from PIL import ImageGrab, ImageTk
+    except ImportError:
+        logger.error("PIL 未安装，无法交互选择 ROI")
+        return None
+
+    screenshot = ImageGrab.grab()
+    width, height = screenshot.size
+
+    if parent is not None:
+        win = tk.Toplevel(parent)
+        use_wait = True
+    else:
+        win = tk.Tk()
+        use_wait = False
+
+    win.title("选择ROI区域 (按住拖动, ESC取消)")
+    win.geometry(f"{width}x{height}")
+    win.attributes('-fullscreen', True)
+    win.attributes('-topmost', True)
+    win.attributes('-alpha', 0.5)
+
+    photo = ImageTk.PhotoImage(screenshot)
+    canvas = tk.Canvas(win, width=width, height=height, cursor='crosshair')
+    canvas.pack(fill='both', expand=True)
+    canvas.photo = photo  # prevent GC
+    canvas.create_image(0, 0, image=photo, anchor='nw')
+
+    data = {'start': None, 'end': None, 'rect': None, 'done': False}
+
+    def on_down(e):
+        data['start'] = (e.x, e.y)
+        data['end'] = None
+        data['done'] = False
+
+    def on_drag(e):
+        if data['start']:
+            data['end'] = (e.x, e.y)
+            if data['rect']:
+                canvas.delete(data['rect'])
+            x1, y1 = data['start']
+            data['rect'] = canvas.create_rectangle(
+                x1, y1, e.x, e.y, outline='red', width=2
+            )
+
+    def on_up(e):
+        if data['start']:
+            data['end'] = (e.x, e.y)
+            data['done'] = True
+            win.destroy()
+
+    def on_key(e):
+        if e.keysym == 'Escape':
+            data['done'] = False
+            win.destroy()
+
+    canvas.bind('<Button-1>', on_down)
+    canvas.bind('<B1-Motion>', on_drag)
+    canvas.bind('<ButtonRelease-1>', on_up)
+    win.bind('<Key>', on_key)
+    canvas.focus_set()
+
+    if use_wait:
+        win.wait_window()
+    else:
+        win.mainloop()
+
+    try:
+        screenshot.close()
+    except Exception:
+        pass
+
+    if data['done'] and data['start'] and data['end']:
+        x1, y1 = data['start']
+        x2, y2 = data['end']
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        return (x1, y1, x2, y2)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# 内存占用
+# ---------------------------------------------------------------------------
+
+def _get_memory_mb():
+    """返回当前进程 RSS (MB)，失败返回 None"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        # 64 位 Python 必须正确声明 HANDLE 类型，否则伪句柄 -1 会被截断
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+
+        pmc = PROCESS_MEMORY_COUNTERS()
+        pmc.cb = ctypes.sizeof(pmc)
+        handle = kernel32.GetCurrentProcess()
+
+        # Windows 7+ 可直接用 kernel32.K32GetProcessMemoryInfo
+        K32 = getattr(kernel32, 'K32GetProcessMemoryInfo', None)
+        if K32 is not None:
+            K32.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
+            K32.restype = wintypes.BOOL
+            if K32(handle, ctypes.byref(pmc), pmc.cb):
+                return pmc.WorkingSetSize / (1024 * 1024)
+
+        # 回退到 psapi.dll
+        psapi = ctypes.windll.psapi
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wintypes.DWORD]
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+        if psapi.GetProcessMemoryInfo(handle, ctypes.byref(pmc), pmc.cb):
+            return pmc.WorkingSetSize / (1024 * 1024)
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# MainGUI
+# ---------------------------------------------------------------------------
+
 class MainGUI:
-    """主GUI界面"""
-    
+    """主 GUI 界面"""
+
     def __init__(self, root):
-        """初始化界面"""
         self.root = root
         self.root.title("屏幕扫描OCR识别系统")
-        
-        # 扫描服务
-        self.scan_service = ScanService()
-        
-        # GUI状态管理器
-        self.state_manager = GUIStateManager()
-        
-        # 加载窗口状态
-        geometry = self.state_manager.get_window_geometry()
-        if geometry:
-            self.root.geometry(geometry)
-        else:
-            self.root.geometry("800x700")
-        
-        # 状态变量
+        self.root.geometry("860x680")
+
+        # ---------- 配置 ----------
+        # 项目根目录的 config/config.yaml
+        config_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'config', 'config.yaml'
+        )
+        config.load(config_path)
+        configure_from_config(config)
+
+        # ---------- Pipeline & Overlay ----------
+        self.pipeline = ScanPipeline()
+        self.overlay = Overlay(parent_root=self.root, config=config, logger=logger)
+
+        # ---------- 状态 ----------
         self.is_running = False
         self.scan_thread = None
         self.stop_event = threading.Event()
-
-        # 日志队列配置（从配置文件读取）
-        max_log_queue_size = config.get('performance.max_log_queue_size')
-        self.log_queue = queue.Queue(maxsize=max_log_queue_size)
-        self.log_queue_cleanup_threshold = config.get('performance.log_queue_cleanup_threshold')
-
         self.scan_count = 0
         self.last_scan_time = None
-        self.memory_label = None
-
-        # 浮窗（左列累计匹配 + 右列本次 OCR），由 shared.overlay.Overlay 维护会话状态
-        self.overlay = Overlay(parent_root=self.root, config=config, logger=logger)
-
-        # 内存监控配置（从配置文件读取）
-        self._memory_interval_ms = config.get('performance.memory_monitor_interval_ms')
-        self._memory_pid = os.getpid()
-        
-        # OCR相关
         self.roi = None
-        
-        # ROI可视化窗口
-        self.roi_window = None
-        self.roi_canvas = None
-        
-        # 创建界面
-        self.create_widgets()
-        
-        # 加载设置
-        self.load_settings()
-        
-        # 设置GUI日志处理器
-        self.setup_gui_logger()
-        
-        # 启动日志处理
-        self.process_log_queue()
-        
-        # 绑定窗口事件
-        self.root.bind('<Configure>', self.on_window_configure)
-        
-        # 托盘图标：关闭/最小化时缩到托盘，从托盘可显示主窗口或退出
-        self._tray = setup_tray(
+
+        # ROI 可视化边框窗口
+        self._roi_border_win = None
+
+        # ---------- 日志队列 ----------
+        self.log_queue = queue.Queue(maxsize=1000)
+
+        # ---------- 构建 UI ----------
+        self._create_widgets()
+        self._load_settings()
+
+        # ---------- 日志 ----------
+        self._setup_gui_logger()
+        self._drain_log_queue()
+
+        # ---------- 托盘 ----------
+        self._tray = _setup_tray(
             self.root,
-            on_show=self._tray_show_main,
+            on_show=self._tray_show,
             on_quit=self._tray_quit,
-            tooltip="屏幕扫描OCR识别",
+            tooltip="屏幕扫描OCR识别"
         )
         if self._tray:
             self.root.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
-            self.append_log("已启用任务栏托盘图标：点击关闭将缩到托盘，右键托盘图标可退出", "INFO")
+            self._append_log("托盘图标已启用：关闭窗口将缩到托盘，右键托盘可退出", "INFO")
         else:
-            self.root.protocol("WM_DELETE_WINDOW", self.on_window_close)
-        
-        # 全局热键：待主循环就绪后再注册底层键盘钩子（避免与托盘等初始化顺序冲突）
-        self._hotkey_manager = None
-        self.root.after_idle(self._setup_scan_hotkeys)
-        
-        # 初始化窗口标题（显示状态）
-        self.update_window_title("已停止")
-        
-        # 启动内存监控显示
+            self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # ---------- 热键 ----------
+        self._hotkey_mgr = HotkeyManager()
+        self.root.after_idle(self._register_hotkeys)
+
+        # ---------- 内存显示 ----------
         self._schedule_memory_update()
-    
-    def _setup_scan_hotkeys(self):
-        """注册 Ctrl+Alt+1/2；仅在 keyboard 钩子真正成功时提示已启用。"""
-        try:
-            if not self.root.winfo_exists():
-                return
-        except Exception:
-            return
-        self._hotkey_manager = register_scan_hotkeys(self.root, self.on_start, self.on_stop)
-        if self._hotkey_manager and self._hotkey_manager.is_registered():
-            self.append_log(
-                "系统热键: Ctrl+Alt+1 开始扫描, Ctrl+Alt+2 停止扫描（小键盘或主键盘数字键均可）",
-                "INFO",
-            )
-        elif self._hotkey_manager is not None:
-            self.append_log(
-                "全局热键未生效：请查看上方警告；可尝试以管理员身份运行，"
-                "或检查杀毒软件是否拦截键盘钩子，并确认已执行 pip install keyboard。",
-                "WARNING",
-            )
-        elif sys.platform == "win32":
-            self.append_log(
-                "全局热键不可用：未安装或无法加载 keyboard 库，请执行 pip install keyboard。",
-                "WARNING",
-            )
-    
-    def create_widgets(self):
-        """创建所有控件"""
-        # 主容器
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 状态栏
-        self.create_status_bar(main_frame)
-        
-        # 扫描配置
-        self.create_scan_config_widgets(main_frame)
-        
-        # OCR配置
-        self.create_ocr_config_widgets(main_frame)
-        
-        # 文字匹配配置
-        self.create_matching_config_widgets(main_frame)
-        
-        # 日志显示
-        self.create_log_widgets(main_frame)
-        
-        # 按钮区域
-        self.create_button_widgets(main_frame)
-    
-    def create_status_bar(self, parent):
-        """创建状态栏"""
-        status_frame = ttk.LabelFrame(parent, text="状态", padding="5")
-        status_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # 状态标签
-        self.status_label = ttk.Label(status_frame, text="状态: ● 已停止", font=("Microsoft YaHei", 10))
-        self.status_label.pack(side=tk.LEFT, padx=5)
-        
-        # 扫描次数
-        self.scan_count_label = ttk.Label(status_frame, text="扫描次数: 0", font=("Microsoft YaHei", 10))
-        self.scan_count_label.pack(side=tk.LEFT, padx=5)
-        
-        # 最后扫描时间
-        self.last_scan_label = ttk.Label(status_frame, text="最后扫描: 无", font=("Microsoft YaHei", 10))
-        self.last_scan_label.pack(side=tk.LEFT, padx=5)
-        
-        # 内存占用
-        self.memory_label = ttk.Label(status_frame, text="内存: -- MB", font=("Microsoft YaHei", 10))
-        self.memory_label.pack(side=tk.LEFT, padx=5)
-    
-    def create_scan_config_widgets(self, parent):
-        """创建扫描配置控件"""
-        frame = ttk.LabelFrame(parent, text="扫描配置", padding="5")
-        frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # 第一行：ROI、GPU、扫描间隔
-        row1 = ttk.Frame(frame)
-        row1.pack(fill=tk.X, pady=2)
-        
-        self.enable_roi_var = tk.BooleanVar()
-        roi_check = ttk.Checkbutton(row1, text="启用ROI区域选择", variable=self.enable_roi_var)
-        roi_check.pack(side=tk.LEFT, padx=5)
-        
-        self.remember_roi_var = tk.BooleanVar()
-        remember_roi_check = ttk.Checkbutton(row1, text="记住ROI区域", variable=self.remember_roi_var)
-        remember_roi_check.pack(side=tk.LEFT, padx=5)
-        
-        self.enable_gpu_var = tk.BooleanVar()
-        gpu_check = ttk.Checkbutton(row1, text="启用GPU加速", variable=self.enable_gpu_var)
-        gpu_check.pack(side=tk.LEFT, padx=5)
-        
-        ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-        
-        ttk.Label(row1, text="扫描间隔:").pack(side=tk.LEFT, padx=(0, 5))
-        self.scan_interval_var = tk.DoubleVar()
-        self.scan_interval_scale = ttk.Scale(row1, from_=1, to=15, orient=tk.HORIZONTAL, variable=self.scan_interval_var, length=200, command=self.on_interval_scale_change)
-        self.scan_interval_scale.pack(side=tk.LEFT, padx=5)
-        self.scan_interval_entry = ttk.Entry(row1, width=5, textvariable=self.scan_interval_var)
-        self.scan_interval_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Label(row1, text="秒").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.scan_interval_var.trace('w', self.on_interval_change)
-        self.scan_interval_scale.configure(command=self.on_interval_scale_change)
-    
-    def create_ocr_config_widgets(self, parent):
-        """创建OCR配置控件"""
-        frame = ttk.LabelFrame(parent, text="OCR配置", padding="5")
-        frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # 第一行：OCR引擎、最小置信度、保存结果
-        row1 = ttk.Frame(frame)
-        row1.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(row1, text="OCR引擎:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.ocr_engine_var = tk.StringVar()
-        paddle_radio = ttk.Radiobutton(row1, text="PaddleOCR", variable=self.ocr_engine_var, value="paddle")
-        paddle_radio.pack(side=tk.LEFT, padx=5)
-        
-        easy_radio = ttk.Radiobutton(row1, text="EasyOCR", variable=self.ocr_engine_var, value="easy")
-        easy_radio.pack(side=tk.LEFT, padx=5)
-        
-        ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-        
-        ttk.Label(row1, text="最小置信度:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.min_confidence_var = tk.DoubleVar()
-        self.min_confidence_scale = ttk.Scale(
-            row1,
-            from_=0.0,
-            to=1.0,
-            orient=tk.HORIZONTAL,
-            variable=self.min_confidence_var,
-            length=150
-        )
-        self.min_confidence_scale.pack(side=tk.LEFT, padx=5)
-        
-        self.min_confidence_entry = ttk.Entry(row1, width=5, textvariable=self.min_confidence_var)
-        self.min_confidence_entry.pack(side=tk.LEFT, padx=5)
-        
-        ttk.Separator(row1, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-        
-        self.save_files_var = tk.BooleanVar()
-        save_files_check = ttk.Checkbutton(row1, text="保存截图和识别结果", variable=self.save_files_var)
-        save_files_check.pack(side=tk.LEFT, padx=5)
-        
-        self.min_confidence_var.trace('w', self.on_confidence_change)
-        self.min_confidence_scale.configure(command=self.on_confidence_scale_change)
-    
-    def create_matching_config_widgets(self, parent):
-        """创建文字匹配控件"""
-        frame = ttk.LabelFrame(parent, text="文字匹配", padding="5")
-        frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # 第一行：启用文字匹配和关键词文件
-        row1 = ttk.Frame(frame)
-        row1.pack(fill=tk.X, pady=2)
-        
-        self.enable_matching_var = tk.BooleanVar()
-        matching_check = ttk.Checkbutton(row1, text="启用文字匹配", variable=self.enable_matching_var)
-        matching_check.pack(side=tk.LEFT, padx=5)
-        
-        ttk.Label(row1, text="关键词文件:").pack(side=tk.LEFT, padx=(10, 5))
-        
-        self.banlist_path_var = tk.StringVar()
-        banlist_entry = ttk.Entry(row1, textvariable=self.banlist_path_var, width=30)
-        banlist_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        
-        browse_btn = ttk.Button(row1, text="浏览...", command=self.on_browse_banlist)
-        browse_btn.pack(side=tk.LEFT, padx=5)
-        
-        edit_btn = ttk.Button(row1, text="编辑", command=self.on_edit_banlist)
-        edit_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 第二行：显示时长、字体大小和显示位置
-        row2 = ttk.Frame(frame)
+
+        # ---------- 窗口标题 ----------
+        self._update_title("已停止")
+
+    # -----------------------------------------------------------------------
+    # UI 构建
+    # -----------------------------------------------------------------------
+
+    def _create_widgets(self):
+        main = ttk.Frame(self.root, padding="10")
+        main.pack(fill=tk.BOTH, expand=True)
+
+        self._create_status_bar(main)
+        self._create_scan_config(main)
+        self._create_ocr_config(main)
+        self._create_match_config(main)
+        self._create_log_area(main)
+        self._create_buttons(main)
+
+    # ----- 状态栏 -----
+
+    def _create_status_bar(self, parent):
+        fr = ttk.LabelFrame(parent, text="状态", padding="5")
+        fr.pack(fill=tk.X, pady=(0, 5))
+
+        self._lbl_status = ttk.Label(fr, text="状态: 已停止", font=("Microsoft YaHei", 10))
+        self._lbl_status.pack(side=tk.LEFT, padx=5)
+
+        self._lbl_count = ttk.Label(fr, text="扫描: 0", font=("Microsoft YaHei", 10))
+        self._lbl_count.pack(side=tk.LEFT, padx=5)
+
+        self._lbl_last = ttk.Label(fr, text="最后: --", font=("Microsoft YaHei", 10))
+        self._lbl_last.pack(side=tk.LEFT, padx=5)
+
+        self._lbl_mem = ttk.Label(fr, text="内存: -- MB", font=("Microsoft YaHei", 10))
+        self._lbl_mem.pack(side=tk.LEFT, padx=5)
+
+    # ----- 扫描配置 -----
+
+    def _create_scan_config(self, parent):
+        fr = ttk.LabelFrame(parent, text="扫描配置", padding="5")
+        fr.pack(fill=tk.X, pady=(0, 5))
+
+        row = ttk.Frame(fr)
+        row.pack(fill=tk.X, pady=2)
+
+        # ROI
+        self._var_enable_roi = tk.BooleanVar()
+        ttk.Checkbutton(row, text="启用ROI", variable=self._var_enable_roi).pack(side=tk.LEFT, padx=5)
+
+        self._var_remember_roi = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row, text="记住ROI", variable=self._var_remember_roi).pack(side=tk.LEFT, padx=5)
+
+        # ROI 预设
+        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+        ttk.Label(row, text="ROI预设:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_roi_preset = tk.StringVar()
+        self._combo_preset = ttk.Combobox(row, textvariable=self._var_roi_preset, width=14, state='readonly')
+        self._combo_preset.pack(side=tk.LEFT, padx=2)
+        self._combo_preset.bind('<<ComboboxSelected>>', self._on_preset_selected)
+        ttk.Button(row, text="保存当前", command=self._save_roi_preset).pack(side=tk.LEFT, padx=2)
+
+        # GPU
+        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+        self._var_gpu = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row, text="GPU加速", variable=self._var_gpu).pack(side=tk.LEFT, padx=5)
+
+        # 扫描间隔
+        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+        ttk.Label(row, text="间隔:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_interval = tk.DoubleVar(value=2.0)
+        ttk.Scale(row, from_=0.5, to=15, orient=tk.HORIZONTAL,
+                  variable=self._var_interval, length=160,
+                  command=self._on_interval_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row, width=5, textvariable=self._var_interval).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row, text="秒").pack(side=tk.LEFT, padx=(0, 5))
+
+        # 帧差阈值
+        row2 = ttk.Frame(fr)
         row2.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(row2, text="显示时长:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.display_duration_var = tk.DoubleVar()
-        self.display_duration_scale = ttk.Scale(
-            row2,
-            from_=1,
-            to=10,
-            orient=tk.HORIZONTAL,
-            variable=self.display_duration_var,
-            length=150,
-            command=self.on_duration_scale_change
-        )
-        self.display_duration_scale.pack(side=tk.LEFT, padx=5)
-        
-        self.display_duration_entry = ttk.Entry(row2, width=5, textvariable=self.display_duration_var)
-        self.display_duration_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 10))
-        
-        ttk.Label(row2, text="字体大小:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.display_font_size_var = tk.IntVar(value=30)
-        self.display_font_size_scale = ttk.Scale(
-            row2,
-            from_=12,
-            to=22,
-            orient=tk.HORIZONTAL,
-            variable=self.display_font_size_var,
-            length=150,
-            command=self.on_font_size_scale_change
-        )
-        self.display_font_size_scale.pack(side=tk.LEFT, padx=5)
-        
-        self.display_font_size_entry = ttk.Entry(row2, width=5, textvariable=self.display_font_size_var)
-        self.display_font_size_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Label(row2, text="像素").pack(side=tk.LEFT, padx=(0, 10))
-        self.display_font_size_var.trace('w', self.on_font_size_change)
-        
-        ttk.Label(row2, text="显示位置:").pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.display_position_var = tk.StringVar()
-        position_combo = ttk.Combobox(row2, textvariable=self.display_position_var, width=12, state="readonly")
-        position_combo['values'] = ('居中', '顶部', '底部')
-        position_combo.pack(side=tk.LEFT, padx=5)
-        
-    def create_log_widgets(self, parent):
-        """创建日志显示控件"""
-        frame = ttk.LabelFrame(parent, text="运行日志", padding="5")
-        frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
-        
-        # 日志文本框（使用ScrolledText，减少高度）
-        self.log_text = scrolledtext.ScrolledText(
-            frame,
-            height=6,
-            wrap=tk.WORD,
+        ttk.Label(row2, text="帧差阈值:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_diff_threshold = tk.DoubleVar(value=5.0)
+        ttk.Scale(row2, from_=0, to=50, orient=tk.HORIZONTAL,
+                  variable=self._var_diff_threshold, length=160,
+                  command=self._on_diff_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row2, width=5, textvariable=self._var_diff_threshold).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row2, text="(0=每次都OCR)").pack(side=tk.LEFT, padx=(0, 5))
+
+    # ----- OCR 配置 -----
+
+    def _create_ocr_config(self, parent):
+        fr = ttk.LabelFrame(parent, text="OCR配置", padding="5")
+        fr.pack(fill=tk.X, pady=(0, 5))
+
+        row = ttk.Frame(fr)
+        row.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row, text="语言:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_lang = tk.StringVar(value='ch')
+        ttk.Combobox(row, textvariable=self._var_lang, width=8, state='readonly',
+                     values=('ch', 'en', 'japan', 'korean')).pack(side=tk.LEFT, padx=2)
+
+        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+
+        ttk.Label(row, text="最小置信度:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_confidence = tk.DoubleVar(value=0.3)
+        ttk.Scale(row, from_=0, to=1, orient=tk.HORIZONTAL,
+                  variable=self._var_confidence, length=140,
+                  command=self._on_conf_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row, width=5, textvariable=self._var_confidence).pack(side=tk.LEFT, padx=2)
+
+        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+
+        self._var_invert = tk.BooleanVar()
+        ttk.Checkbutton(row, text="图像反色", variable=self._var_invert).pack(side=tk.LEFT, padx=5)
+
+    # ----- 匹配配置 -----
+
+    def _create_match_config(self, parent):
+        fr = ttk.LabelFrame(parent, text="关键词匹配", padding="5")
+        fr.pack(fill=tk.X, pady=(0, 5))
+
+        row1 = ttk.Frame(fr)
+        row1.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row1, text="关键词文件:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_banlist = tk.StringVar(value=DEFAULT_BANLIST_FILE)
+        ttk.Entry(row1, textvariable=self._var_banlist, width=30).pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
+        ttk.Button(row1, text="浏览...", command=self._browse_banlist).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row1, text="编辑", command=self._edit_banlist).pack(side=tk.LEFT, padx=2)
+
+        row2 = ttk.Frame(fr)
+        row2.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row2, text="显示时长:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_duration = tk.DoubleVar(value=3.0)
+        ttk.Scale(row2, from_=1, to=10, orient=tk.HORIZONTAL,
+                  variable=self._var_duration, length=120,
+                  command=self._on_dur_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row2, width=5, textvariable=self._var_duration).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 8))
+
+        ttk.Label(row2, text="字号:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_fontsize = tk.IntVar(value=18)
+        ttk.Scale(row2, from_=10, to=36, orient=tk.HORIZONTAL,
+                  variable=self._var_fontsize, length=120,
+                  command=self._on_fs_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row2, width=4, textvariable=self._var_fontsize).pack(side=tk.LEFT, padx=2)
+
+        ttk.Separator(row2, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+
+        ttk.Label(row2, text="位置:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_position = tk.StringVar(value='居中')
+        ttk.Combobox(row2, textvariable=self._var_position, width=6, state='readonly',
+                     values=('居中', '顶部', '底部')).pack(side=tk.LEFT, padx=2)
+
+        ttk.Separator(row2, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+
+        self._var_sound = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row2, text="音效提醒", variable=self._var_sound).pack(side=tk.LEFT, padx=5)
+
+    # ----- 日志区 -----
+
+    def _create_log_area(self, parent):
+        fr = ttk.LabelFrame(parent, text="运行日志", padding="5")
+        fr.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+
+        self._log_text = scrolledtext.ScrolledText(
+            fr, height=8, wrap=tk.WORD,
             font=("Consolas", 9),
-            bg="#1e1e1e",
-            fg="#d4d4d4",
+            bg="#1e1e1e", fg="#d4d4d4",
             insertbackground="#d4d4d4"
         )
-        self.log_text.pack(fill=tk.BOTH, expand=True)
-        
-        # 配置日志文本颜色标签
-        self.log_text.tag_config("INFO", foreground="#4ec9b0")
-        self.log_text.tag_config("WARNING", foreground="#dcdcaa")
-        self.log_text.tag_config("ERROR", foreground="#f48771")
-        self.log_text.tag_config("DEBUG", foreground="#569cd6")
-        
-        # 创建悬浮的清空日志按钮（放在日志文本框内部右上角）
-        # 使用普通Button以便更好地控制样式
-        self.clear_log_btn = tk.Button(
-            frame,
-            text="🗑",
-            command=self.on_clear_log,
-            bg="#1e1e1e",  # 与日志背景色相同，实现"透明"效果
-            fg="#d4d4d4",
-            activebackground="#3c3c3c",  # 鼠标悬停时的背景色
-            activeforeground="#d4d4d4",
-            relief=tk.FLAT,  # 无边框
-            borderwidth=0,
-            cursor="hand2",
-            font=("Microsoft YaHei", 10),
-            padx=5,
-            pady=2
+        self._log_text.pack(fill=tk.BOTH, expand=True)
+        self._log_text.tag_config("INFO", foreground="#4ec9b0")
+        self._log_text.tag_config("WARNING", foreground="#dcdcaa")
+        self._log_text.tag_config("ERROR", foreground="#f48771")
+        self._log_text.tag_config("DEBUG", foreground="#569cd6")
+
+        # 清空按钮
+        clear_btn = tk.Button(
+            fr, text="X", command=self._clear_log,
+            bg="#1e1e1e", fg="#d4d4d4",
+            activebackground="#3c3c3c", activeforeground="#d4d4d4",
+            relief=tk.FLAT, borderwidth=0, cursor="hand2",
+            font=("Consolas", 9), padx=4, pady=1
         )
-        
-        # 使用place定位在右上角
-        def update_clear_btn_position(event=None):
-            """更新清空按钮位置"""
+
+        def _reposition_clear(event=None):
             try:
-                # 获取日志文本框的位置和大小
-                log_x = self.log_text.winfo_x()
-                log_y = self.log_text.winfo_y()
-                log_width = self.log_text.winfo_width()
-                log_height = self.log_text.winfo_height()
-                
-                # 按钮大小
-                btn_width = 30
-                btn_height = 25
-                
-                # 计算按钮位置（右上角，留出一些边距）
-                btn_x = log_x + log_width - btn_width - 5
-                btn_y = log_y + 5
-                
-                # 使用place定位
-                self.clear_log_btn.place(x=btn_x, y=btn_y, width=btn_width, height=btn_height)
-            except:
+                lx = self._log_text.winfo_x()
+                ly = self._log_text.winfo_y()
+                lw = self._log_text.winfo_width()
+                clear_btn.place(x=lx + lw - 28, y=ly + 4, width=24, height=20)
+            except Exception:
                 pass
-        
-        # 绑定鼠标进入和离开事件，实现透明度效果
-        def on_enter(event):
-            """鼠标进入时，按钮变为不透明"""
-            self.clear_log_btn.config(bg="#3c3c3c", relief=tk.RAISED)
-        
-        def on_leave(event):
-            """鼠标离开时，按钮恢复透明"""
-            self.clear_log_btn.config(bg="#1e1e1e", relief=tk.FLAT)
-        
-        self.clear_log_btn.bind("<Enter>", on_enter)
-        self.clear_log_btn.bind("<Leave>", on_leave)
-        
-        # 绑定日志文本框和frame的大小变化事件，更新按钮位置
-        self.log_text.bind("<Configure>", update_clear_btn_position)
-        frame.bind("<Configure>", update_clear_btn_position)
-        
-        # 初始定位
-        frame.after(100, update_clear_btn_position)
-    
-    def create_button_widgets(self, parent):
-        """创建按钮控件"""
-        button_frame = ttk.Frame(parent)
-        button_frame.pack(fill=tk.X)
-        
-        self.start_btn = ttk.Button(button_frame, text="▶ 开始扫描", command=self.on_start)
-        self.start_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.stop_btn = ttk.Button(button_frame, text="⏹ 停止扫描", command=self.on_stop, state=tk.DISABLED)
-        self.stop_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.reset_btn = ttk.Button(button_frame, text="⚙ 重置配置", command=self.on_reset_config)
-        self.reset_btn.pack(side=tk.LEFT, padx=5)
-        
-        self.edit_config_btn = ttk.Button(button_frame, text="📝 编辑配置", command=self.on_edit_config)
-        self.edit_config_btn.pack(side=tk.LEFT, padx=5)
-    
-    def on_interval_change(self, *args):
-        """扫描间隔改变事件"""
-        try:
-            value = self.scan_interval_var.get()
-            if 1 <= value <= 60:
-                self.scan_interval_scale.set(value)
-        except:
-            pass
-    
-    def on_interval_scale_change(self, value):
-        """扫描间隔滑动条改变事件"""
-        try:
-            v = round(float(value) * 2) / 2
-            v = max(1.0, min(15.0, v))
-            self.scan_interval_var.set(v)
-        except:
-            pass
 
-    def on_duration_scale_change(self, value):
-        """显示时长滑动条改变事件"""
+        self._log_text.bind("<Configure>", _reposition_clear)
+        fr.after(200, _reposition_clear)
+
+    # ----- 按钮区 -----
+
+    def _create_buttons(self, parent):
+        fr = ttk.Frame(parent)
+        fr.pack(fill=tk.X)
+
+        self._btn_start = ttk.Button(fr, text="开始扫描", command=self.on_start)
+        self._btn_start.pack(side=tk.LEFT, padx=5)
+
+        self._btn_stop = ttk.Button(fr, text="停止扫描", command=self.on_stop, state=tk.DISABLED)
+        self._btn_stop.pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(fr, text="清除匹配记录", command=self._clear_session).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(fr, text="重置配置", command=self._reset_config).pack(side=tk.LEFT, padx=5)
+
+    # -----------------------------------------------------------------------
+    # 配置读写
+    # -----------------------------------------------------------------------
+
+    def _load_settings(self):
+        self._var_enable_roi.set(config.get('scan.roi') is not None)
+        self._var_remember_roi.set(True)
+        self._var_gpu.set(config.get('gpu.enabled'))
+        self._var_interval.set(config.get('scan.interval_seconds'))
+        self._var_diff_threshold.set(config.get('scan.diff_threshold'))
+
+        self._var_lang.set(config.get('ocr.language'))
+        self._var_confidence.set(config.get('ocr.min_confidence'))
+        self._var_invert.set(config.get('ocr.enable_image_invert'))
+
+        self._var_banlist.set(config.get('files.banlist_file', DEFAULT_BANLIST_FILE))
+        self._var_duration.set(config.get('matching.display_duration'))
+        self._var_fontsize.set(config.get('matching.font_size'))
+        self._var_sound.set(config.get('matching.enable_sound'))
+
+        pos_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
+        self._var_position.set(pos_map.get(config.get('matching.position'), '居中'))
+
+        # ROI 预设下拉
+        self._refresh_presets()
+
+    def _save_settings(self):
+        config.set('scan.interval_seconds', self._var_interval.get())
+        config.set('scan.diff_threshold', self._var_diff_threshold.get())
+        config.set('gpu.enabled', self._var_gpu.get())
+
+        config.set('ocr.language', self._var_lang.get())
+        config.set('ocr.min_confidence', round(self._var_confidence.get(), 2))
+        config.set('ocr.enable_image_invert', self._var_invert.get())
+
+        config.set('files.banlist_file', self._var_banlist.get())
+        config.set('matching.display_duration', self._var_duration.get())
+        config.set('matching.font_size', self._var_fontsize.get())
+        config.set('matching.enable_sound', self._var_sound.get())
+
+        pos_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
+        config.set('matching.position', pos_map.get(self._var_position.get(), 'center'))
+
+        config.save()
+
+    # -----------------------------------------------------------------------
+    # ROI 预设
+    # -----------------------------------------------------------------------
+
+    def _refresh_presets(self):
+        presets = config.get('scan.roi_presets') or {}
+        names = list(presets.keys())
+        self._combo_preset['values'] = names
+        if names:
+            self._combo_preset.current(0)
+
+    def _on_preset_selected(self, event=None):
+        name = self._var_roi_preset.get()
+        presets = config.get('scan.roi_presets') or {}
+        roi = presets.get(name)
+        if roi:
+            self.roi = tuple(roi)
+            config.set('scan.roi', list(roi))
+            config.save()
+            self._append_log(f"已应用ROI预设 '{name}': {roi}", "INFO")
+
+    def _save_roi_preset(self):
+        if self.roi is None:
+            messagebox.showwarning("提示", "当前没有可保存的ROI区域")
+            return
+        name = simpledialog.askstring("保存预设", "请输入预设名称:", parent=self.root)
+        if not name:
+            return
+        presets = config.get('scan.roi_presets') or {}
+        presets[name] = list(self.roi)
+        config.set('scan.roi_presets', presets)
+        config.save()
+        self._refresh_presets()
+        self._append_log(f"ROI预设 '{name}' 已保存: {list(self.roi)}", "INFO")
+
+    # -----------------------------------------------------------------------
+    # 控件事件回调
+    # -----------------------------------------------------------------------
+
+    def _on_interval_scale(self, val):
         try:
-            v = round(float(value) * 2) / 2
-            v = max(1.0, min(10.0, v))
-            self.display_duration_var.set(v)
+            v = round(float(val) * 2) / 2
+            self._var_interval.set(max(0.5, min(15.0, v)))
         except (ValueError, TypeError):
             pass
-    
-    def on_font_size_scale_change(self, value):
-        """字体大小滑动条改变事件"""
+
+    def _on_diff_scale(self, val):
         try:
-            # 设置步长为1
-            value = round(float(value))
-            value = max(12, min(22, value))
-            self.display_font_size_var.set(value)
+            self._var_diff_threshold.set(round(float(val), 1))
         except (ValueError, TypeError):
             pass
-        except:
+
+    def _on_conf_scale(self, val):
+        try:
+            v = round(float(val) / 0.05) * 0.05
+            self._var_confidence.set(round(v, 2))
+        except (ValueError, TypeError):
             pass
 
-    def on_font_size_change(self, *args):
-        """字体大小输入框改变事件"""
+    def _on_dur_scale(self, val):
         try:
-            value = int(self.display_font_size_var.get())
-            value = max(12, min(22, value))
-            if self.display_font_size_var.get() != value:
-                self.display_font_size_var.set(value)
-            self.display_font_size_scale.set(value)
-        except Exception:
+            v = round(float(val) * 2) / 2
+            self._var_duration.set(max(1.0, min(10.0, v)))
+        except (ValueError, TypeError):
             pass
-    
-    def on_confidence_change(self, *args):
-        """置信度改变事件"""
+
+    def _on_fs_scale(self, val):
         try:
-            value = self.min_confidence_var.get()
-            if 0.0 <= value <= 1.0:
-                self.min_confidence_scale.set(value)
-        except:
+            self._var_fontsize.set(max(10, min(36, round(float(val)))))
+        except (ValueError, TypeError):
             pass
-    
-    def on_confidence_scale_change(self, value):
-        """置信度滑动条改变事件"""
-        try:
-            val = float(value)
-            val = round(val / 0.05) * 0.05
-            # 消除浮点数运算误差，保留两位小数
-            val = round(val, 2)
-            
-            # 只有当值真正改变时才更新，避免循环触发
-            if abs(self.min_confidence_var.get() - val) > 1e-6:
-                self.min_confidence_var.set(val)
-        except:
-            pass
-    
-    def load_settings(self):
-        """加载设置"""
-        # 从config.yaml加载业务配置
-        self.enable_roi_var.set(config.get('scan.enable_roi'))
-        self.remember_roi_var.set(config.get('scan.remember_roi'))
-        self.enable_gpu_var.set(config.get('gpu.force_gpu'))
-        self.scan_interval_var.set(config.get('scan.interval_seconds'))
-        
-        # OCR配置
-        default_engine = config.get('ocr.default_engine')
-        self.ocr_engine_var.set(default_engine)
-        self.min_confidence_var.set(round(config.get('ocr.min_confidence'), 2))
-        
-        # 读取保存文件配置（默认True）
-        save_screenshot = config.get('files.save_screenshot')
-        self.save_files_var.set(save_screenshot)
-        
-        # 文字匹配配置
-        self.enable_matching_var.set(config.get('matching.enabled'))
-        # 优先使用GUI状态中的路径，否则使用配置文件
-        banlist_path = self.state_manager.get_last_banlist_path()
-        if not os.path.exists(banlist_path):
-            banlist_path = config.get('files.banlist_file')
-        self.banlist_path_var.set(banlist_path)
-        self.display_duration_var.set(config.get('matching.display_duration'))
-        position = config.get('matching.position')
-        position_map = {'center': '居中', 'top': '顶部', 'bottom': '底部'}
-        self.display_position_var.set(position_map.get(position, '居中'))
-        self.display_font_size_var.set(config.get('matching.font_size'))
-    
-    def save_settings(self):
-        """保存设置"""
-        # 保存业务配置到config.yaml
-        config.set('scan.enable_roi', self.enable_roi_var.get())
-        config.set('scan.remember_roi', self.remember_roi_var.get())
-        config.set('gpu.force_gpu', self.enable_gpu_var.get())
-        config.set('scan.interval_seconds', self.scan_interval_var.get())
-        
-        # OCR配置
-        config.set('ocr.default_engine', self.ocr_engine_var.get())
-        config.set('ocr.min_confidence', self.min_confidence_var.get())
-        
-        # 保存文件配置（控制所有文件保存）
-        save_files = self.save_files_var.get()
-        config.set('files.save_screenshot', save_files)
-        config.set('files.save_ocr_result', save_files)
-        # 同时也控制中间处理图片的保存
-        config.set('ocr.save_processed_image', save_files)
-        
-        # 文字匹配配置
-        config.set('matching.enabled', self.enable_matching_var.get())
-        banlist_path = self.banlist_path_var.get()
-        config.set('files.banlist_file', banlist_path)
-        self.state_manager.set_last_banlist_path(banlist_path)
-        config.set('matching.display_duration', self.display_duration_var.get())
-        position_map = {'居中': 'center', '顶部': 'top', '底部': 'bottom'}
-        config.set('matching.position', position_map.get(self.display_position_var.get(), 'center'))
-        config.set('matching.font_size', self.display_font_size_var.get())
-        
-        # 保存到文件
-        if config.save():
-            self.append_log("配置已保存", "INFO")
-        else:
-            self.append_log("配置保存失败", "WARNING")
-    
+
+    # -----------------------------------------------------------------------
+    # 扫描控制
+    # -----------------------------------------------------------------------
+
     def on_start(self):
-        """开始按钮事件"""
         if self.is_running:
             return
-        
+
+        self._save_settings()
+        self.overlay.clear_session()
+
+        self._btn_start.config(state=tk.DISABLED)
+        self._update_status("初始化中...")
+        self._append_log("正在初始化 OCR 引擎...", "INFO")
+
+        threading.Thread(target=self._init_and_start, daemon=True).start()
+
+    def _init_and_start(self):
         try:
-            # 保存当前配置
-            self.save_settings()
-            # 新一轮扫描开始，清空浮窗的累计匹配记录
-            self.overlay.clear_session()
-            
-            # 禁用开始按钮，显示初始化状态
-            self.start_btn.config(state=tk.DISABLED)
-            self.update_status("初始化中...")
-            self.append_log("正在初始化OCR引擎...", "INFO")
-            
-            # 获取参数
-            languages = config.get('ocr.languages')
-            use_gpu = self.enable_gpu_var.get()
-            engine_choice = self.ocr_engine_var.get()
-            
-            # 在后台线程中初始化OCR（避免阻塞GUI）
-            init_thread = threading.Thread(
-                target=self._init_ocr_in_thread,
-                args=(engine_choice, languages, use_gpu),
-                daemon=True
-            )
-            init_thread.start()
-            
+            self.pipeline.init()
+            self.root.after(0, self._after_init_ok)
         except Exception as e:
-            self.append_log(f"启动失败: {e}", "ERROR")
-            self.show_error(f"启动失败: {e}")
-            self.is_running = False
-            self.start_btn.config(state=tk.NORMAL)
-            self.update_status("已停止")
-    
-    def _init_ocr_in_thread(self, engine_choice, languages, use_gpu):
-        """在后台线程中初始化OCR"""
-        try:
-            # 初始化扫描服务
-            self.scan_service.init_ocr(
-                engine_choice=engine_choice,
-                languages=languages,
-                use_gpu=use_gpu
-            )
-            
-            # 在主线程中更新UI
-            self.root.after(0, self._on_ocr_init_complete)
-            
-        except Exception as e:
-            # 在主线程中显示错误
-            error_msg = str(e)
-            self.root.after(0, lambda msg=error_msg: self._on_ocr_init_failed(msg))
-    
-    def _on_ocr_init_complete(self):
-        """OCR初始化完成后的回调（在主线程中执行）"""
-        try:
-            self.append_log(f"OCR初始化完成", "INFO")
-            
-            if self.enable_roi_var.get():
-                remember_roi = self.remember_roi_var.get()
-                saved_roi = config.get('scan.saved_roi')
-                
-                if remember_roi and saved_roi:
-                    self.roi = tuple(saved_roi)
-                    self.append_log(f"使用保存的ROI区域: {self.roi}", "INFO")
-                else:
-                    self.root.iconify()
-                    time.sleep(0.5)
-                    self.append_log("请选择ROI区域...", "INFO")
-                    self.roi = select_roi_interactive(parent=self.root)
-                    if self.roi is None:
-                        self.append_log("ROI选择取消，使用全屏扫描", "WARNING")
-                    else:
-                        self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
-                        
-                        config.set('scan.saved_roi', list(self.roi))
-                        config.save()
-                        if remember_roi:
-                            self.append_log("ROI区域已保存", "INFO")
+            msg = str(e)
+            self.root.after(0, lambda: self._after_init_fail(msg))
+
+    def _after_init_ok(self):
+        self._append_log("OCR 初始化完成", "INFO")
+
+        # ROI
+        if self._var_enable_roi.get():
+            saved = config.get('scan.roi')
+            if self._var_remember_roi.get() and saved:
+                self.roi = tuple(saved)
+                self._append_log(f"使用已保存 ROI: {self.roi}", "INFO")
+                self._start_scanning()
+                return
             else:
-                self.roi = None
-            
-            self.scan_service.set_roi(self.roi)
-            
-            # 启动扫描线程
-            self.is_running = True
-            self.stop_event.clear()
-            self.scan_thread = threading.Thread(target=self._run_scan_loop, daemon=True)
-            self.scan_thread.start()
-            
-            # 更新UI
-            self.stop_btn.config(state=tk.NORMAL)
-            self.update_status("运行中")
-            self.append_log("扫描已启动", "INFO")
-            
-            # 显示ROI区域边框
-            self._show_roi_border()
-            
-        except Exception as e:
-            self.append_log(f"扫描失败: {e}", "ERROR")
-            self.show_error(f"扫描失败: {e}")
-            self.is_running = False
-            self.start_btn.config(state=tk.NORMAL)
-            self.update_status("已停止")
-    
-    def _on_ocr_init_failed(self, error_msg):
-        """OCR初始化失败后的回调（在主线程中执行）"""
-        self.append_log(f"OCR初始化失败: {error_msg}", "ERROR")
-        self.show_error(f"OCR初始化失败: {error_msg}")
-        self.is_running = False
-        self.start_btn.config(state=tk.NORMAL)
-        self.update_status("已停止")
-    
+                self.root.iconify()
+                self.root.after(300, self._do_roi_select)
+                return
+        else:
+            self.roi = None
+
+        self._start_scanning()
+
+    def _do_roi_select(self):
+        """延迟执行 ROI 交互选择（避免阻塞主线程）"""
+        self.roi = select_roi_interactive(parent=self.root)
+        if self.roi:
+            self._append_log(f"ROI 已选择: {self.roi}", "INFO")
+            config.set('scan.roi', list(self.roi))
+            config.save()
+        else:
+            self._append_log("ROI 选择取消，使用全屏", "WARNING")
+        self._start_scanning()
+
+    def _start_scanning(self):
+        """设置 ROI、Overlay 并启动扫描线程"""
+        self.pipeline.set_roi(self.roi)
+
+        # 设置 Overlay
+        self.overlay.setup()
+
+        # 启动扫描
+        self.is_running = True
+        self.stop_event.clear()
+        self.scan_thread = threading.Thread(target=self._scan_loop, daemon=True)
+        self.scan_thread.start()
+
+        self._btn_stop.config(state=tk.NORMAL)
+        self._update_status("运行中")
+        self._append_log("扫描已启动", "INFO")
+
+        self._show_roi_border()
+
+    def _after_init_fail(self, msg):
+        self._append_log(f"初始化失败: {msg}", "ERROR")
+        messagebox.showerror("错误", f"OCR 初始化失败:\n{msg}")
+        self._btn_start.config(state=tk.NORMAL)
+        self._update_status("已停止")
+
     def on_stop(self):
-        """停止按钮事件"""
         if not self.is_running:
             return
-        
         self.is_running = False
         self.stop_event.set()
-
-        # 隐藏ROI区域边框
         self._hide_roi_border()
+        self.overlay.hide()
+        self._btn_start.config(state=tk.NORMAL)
+        self._btn_stop.config(state=tk.DISABLED)
+        self._update_status("已停止")
+        self._append_log("扫描已停止", "INFO")
 
-        # 隐藏浮窗
+    def _scan_loop(self):
         try:
-            self.overlay.hide()
+            while not self.stop_event.is_set():
+                interval = self._var_interval.get()
+                self.scan_count += 1
+                start = time.time()
+                self.last_scan_time = datetime.now().strftime('%H:%M:%S')
+
+                result = self.pipeline.scan_once()
+
+                if result.skipped:
+                    status_txt = "跳过(无变化)"
+                else:
+                    status_txt = f"{len(result.ocr_results)}行"
+
+                self._append_log(
+                    f"[#{self.scan_count}] OCR: {status_txt}, "
+                    f"匹配: {len(result.matches)}, "
+                    f"耗时: {result.duration:.3f}s",
+                    "INFO"
+                )
+
+                if result.matches:
+                    for m in result.matches:
+                        self._append_log(
+                            f"  >>> {m['keyword']} | {m['hint']}", "WARNING"
+                        )
+
+                # 更新 Overlay（调度到主线程）— 跳过时复用上次结果，仍需刷新
+                ocr = result.ocr_results
+                matches = result.matches
+                self.root.after(0, lambda o=ocr, m=matches: self.overlay.update(o, m))
+
+                # 更新统计（主线程）
+                self.root.after(0, self._update_stats)
+
+                # 等待
+                elapsed = time.time() - start
+                wait = max(0, interval - elapsed)
+                waited = 0.0
+                while waited < wait and not self.stop_event.is_set():
+                    time.sleep(0.3)
+                    waited += 0.3
+
+        except Exception as e:
+            self._append_log(f"扫描异常: {e}", "ERROR")
+        finally:
+            self.is_running = False
+            self.root.after(0, self._on_scan_thread_exit)
+
+    def _on_scan_thread_exit(self):
+        """扫描线程结束后统一恢复 UI 状态"""
+        self._hide_roi_border()
+        self.overlay.hide()
+        self._btn_start.config(state=tk.NORMAL)
+        self._btn_stop.config(state=tk.DISABLED)
+        self._update_status("已停止")
+
+    # -----------------------------------------------------------------------
+    # 杂项 UI 操作
+    # -----------------------------------------------------------------------
+
+    def _browse_banlist(self):
+        cur = self._var_banlist.get()
+        init_dir = os.path.dirname(cur) if cur else "."
+        path = filedialog.askopenfilename(
+            title="选择关键词文件", initialdir=init_dir,
+            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        if path:
+            self._var_banlist.set(path)
+            self._save_settings()
+
+    def _edit_banlist(self):
+        path = self._var_banlist.get()
+        if not path:
+            messagebox.showwarning("提示", "请先选择关键词文件")
+            return
+
+        # 解析相对路径（相对于项目根目录）
+        if not os.path.isabs(path):
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+
+        if not os.path.exists(path):
+            if not messagebox.askyesno("确认", f"文件不存在:\n{path}\n是否创建?"):
+                return
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write("")
+
+        # 简单文本编辑窗口
+        win = tk.Toplevel(self.root)
+        win.title(f"编辑关键词 - {os.path.basename(path)}")
+        win.geometry("600x400")
+        win.attributes('-topmost', True)
+
+        txt = scrolledtext.ScrolledText(win, font=("Consolas", 11), wrap=tk.WORD)
+        txt.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        with open(path, 'r', encoding='utf-8') as f:
+            txt.insert('1.0', f.read())
+
+        def save_and_close():
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(txt.get('1.0', tk.END).rstrip('\n') + '\n')
+            self._append_log(f"关键词文件已保存: {path}", "INFO")
+            win.destroy()
+
+        btn_fr = ttk.Frame(win)
+        btn_fr.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(btn_fr, text="保存并关闭", command=save_and_close).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_fr, text="取消", command=win.destroy).pack(side=tk.RIGHT, padx=5)
+
+    def _clear_session(self):
+        self.overlay.clear_session()
+        self._append_log("累积匹配记录已清除", "INFO")
+
+    def _reset_config(self):
+        if messagebox.askyesno("确认", "重置所有配置为默认值?"):
+            config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
+            config.load(config_path)
+            self._load_settings()
+            self._append_log("配置已重置", "INFO")
+
+    def _clear_log(self):
+        self._log_text.delete('1.0', tk.END)
+
+    # -----------------------------------------------------------------------
+    # ROI 边框可视化
+    # -----------------------------------------------------------------------
+
+    def _show_roi_border(self):
+        try:
+            roi = self.roi
+            padding = config.get('scan.roi_padding')
+
+            import ctypes
+            user32 = ctypes.windll.user32
+            sw = user32.GetSystemMetrics(0)
+            sh = user32.GetSystemMetrics(1)
+
+            if roi:
+                x1, y1, x2, y2 = roi
+                x1 = max(0, x1 - padding)
+                y1 = max(0, y1 - padding)
+                x2 = min(sw, x2 + padding)
+                y2 = min(sh, y2 + padding)
+            else:
+                x1, y1, x2, y2 = 0, 0, sw, sh
+
+            w, h = x2 - x1, y2 - y1
+            if w <= 0 or h <= 0:
+                return
+
+            win = tk.Toplevel(self.root)
+            win.withdraw()
+            win.overrideredirect(True)
+            win.attributes('-topmost', True)
+            win.attributes('-transparentcolor', 'black')
+            win.geometry(f'{w}x{h}+{x1}+{y1}')
+            win.config(bg='black')
+
+            c = tk.Canvas(win, width=w, height=h, bg='black', highlightthickness=0, bd=0)
+            c.pack(fill=tk.BOTH, expand=True)
+            c.create_rectangle(1, 1, w - 1, h - 1, outline='#ff3333', width=3, fill='')
+
+            win.deiconify()
+            self._roi_border_win = win
+        except Exception as e:
+            logger.debug(f"ROI 边框显示失败: {e}")
+
+    def _hide_roi_border(self):
+        try:
+            if self._roi_border_win:
+                self._roi_border_win.destroy()
+                self._roi_border_win = None
         except Exception:
             pass
 
-        # 更新UI
-        self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.update_status("已停止")
-        self.append_log("扫描已停止", "INFO")
-    
-    def on_browse_banlist(self):
-        """浏览banlist文件"""
-        initial_dir = os.path.dirname(self.banlist_path_var.get()) if self.banlist_path_var.get() else "."
-        file_path = filedialog.askopenfilename(
-            title="选择关键词文件",
-            initialdir=initial_dir,
-            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")]
-        )
-        
-        if file_path:
-            self.banlist_path_var.set(file_path)
-            self.save_settings()
-    
-    def on_edit_banlist(self):
-        """编辑关键词文件"""
-        banlist_path = self.banlist_path_var.get()
-        
-        # 如果文件路径为空，提示用户先选择文件
-        if not banlist_path:
-            messagebox.showwarning("警告", "请先选择关键词文件")
-            return
-        
-        # 如果文件不存在，询问是否创建
-        if not os.path.exists(banlist_path):
-            if not messagebox.askyesno("确认", f"文件不存在：{banlist_path}\n是否创建新文件？"):
-                return
-            # 创建文件目录
-            os.makedirs(os.path.dirname(banlist_path) if os.path.dirname(banlist_path) else ".", exist_ok=True)
-        
-        # 使用ConfigEditor编辑文本文件（它会自动处理非YAML文件）
-        def on_file_saved():
-            """文件保存后的回调"""
-            self.append_log(f"关键词文件已更新: {banlist_path}", "INFO")
-        
-        editor = ConfigEditor(self.root, config_file=banlist_path, on_save_callback=on_file_saved)
-        editor.show()
-    
-    def on_reset_config(self):
-        """重置配置"""
-        if messagebox.askyesno("确认", "确定要重置所有配置为默认值吗？"):
-            # 重新加载配置（会使用默认值）
-            config.reload()
-            self.append_log("配置已重置为默认值", "INFO")
-            self.load_settings()
-            # 保存重置后的配置
-            config.save()
-    
-    def on_edit_config(self):
-        """编辑配置文件"""
-        def on_config_saved():
-            """配置保存后的回调"""
-            # 重新加载配置
-            config.reload()
-            self.load_settings()
-            self.append_log("配置文件已更新，已重新加载", "INFO")
-        
-        editor = ConfigEditor(self.root, config_file='config/config.yaml', on_save_callback=on_config_saved)
-        editor.show()
-    
-    def on_window_configure(self, event=None):
-        """窗口大小或位置改变事件"""
-        if event and event.widget == self.root:
-            # 保存窗口状态
+    # -----------------------------------------------------------------------
+    # 状态 / 标题 / 统计
+    # -----------------------------------------------------------------------
+
+    def _update_status(self, text):
+        self._lbl_status.config(text=f"状态: {text}")
+        self._update_title(text)
+
+    def _update_title(self, status):
+        base = "屏幕扫描OCR识别系统"
+        if status == "运行中":
+            self.root.title(f"【扫描中】{base}")
+        elif "初始化" in status:
+            self.root.title(f"【初始化中】{base}")
+        else:
+            self.root.title(base)
+
+    def _update_stats(self):
+        self._lbl_count.config(text=f"扫描: {self.scan_count}")
+        self._lbl_last.config(text=f"最后: {self.last_scan_time or '--'}")
+
+    def _schedule_memory_update(self):
+        mb = _get_memory_mb()
+        if mb is not None:
+            self._lbl_mem.config(text=f"内存: {mb:.1f} MB")
+        self.root.after(5000, self._schedule_memory_update)
+
+    # -----------------------------------------------------------------------
+    # 日志
+    # -----------------------------------------------------------------------
+
+    def _setup_gui_logger(self):
+        class _QueueHandler(logging.Handler):
+            def __init__(self, q):
+                super().__init__()
+                self._q = q
+
+            def emit(self, record):
+                try:
+                    msg = self.format(record) + '\n'
+                    self._q.put_nowait((msg, record.levelname))
+                except Exception:
+                    pass
+
+        handler = _QueueHandler(self.log_queue)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+
+        # 添加到 screen_scan logger 而非 root logger，避免日志重复
+        from src.utils.logger import logger as app_logger
+        app_logger.addHandler(handler)
+
+    def _append_log(self, message, level='INFO'):
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            self.log_queue.put_nowait((f"{ts} - {message}\n", level))
+        except queue.Full:
+            pass
+
+    def _drain_log_queue(self):
+        count = 0
+        while count < 15:
             try:
-                geometry = self.root.geometry()
-                # 解析geometry字符串: "widthxheight+x+y"
-                parts = geometry.split('+')
-                if len(parts) == 3:
-                    size_part = parts[0]
-                    x = int(parts[1])
-                    y = int(parts[2])
-                    width, height = map(int, size_part.split('x'))
-                    self.state_manager.set_window_geometry(x, y, width, height)
-            except:
-                pass
-    
+                msg, lvl = self.log_queue.get_nowait()
+                self._log_text.insert(tk.END, msg, lvl)
+                count += 1
+            except queue.Empty:
+                break
+        if count > 0:
+            self._log_text.see(tk.END)
+            # 限制行数
+            lines = int(self._log_text.index('end-1c').split('.')[0])
+            if lines > 2000:
+                self._log_text.delete('1.0', '200.0')
+        self.root.after(100, self._drain_log_queue)
+
+    # -----------------------------------------------------------------------
+    # 热键
+    # -----------------------------------------------------------------------
+
+    def _register_hotkeys(self):
+        try:
+            self._hotkey_mgr.register('ctrl+alt+1', lambda: self.root.after(0, self.on_start), "开始扫描")
+            self._hotkey_mgr.register('ctrl+alt+2', lambda: self.root.after(0, self.on_stop), "停止扫描")
+            self._append_log("热键: Ctrl+Alt+1 开始, Ctrl+Alt+2 停止", "INFO")
+        except Exception as e:
+            self._append_log(f"热键注册失败: {e}", "WARNING")
+
+    # -----------------------------------------------------------------------
+    # 托盘 / 关闭
+    # -----------------------------------------------------------------------
+
     def _minimize_to_tray(self):
-        """点击关闭按钮时缩到托盘（不退出）"""
         self.root.withdraw()
-    
-    def _tray_show_main(self):
-        """从托盘恢复主窗口"""
+
+    def _tray_show(self):
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
-    
+
     def _tray_quit(self):
-        """从托盘菜单选择退出，执行真正退出"""
-        self.on_window_close()
-    
-    def on_window_close(self):
+        self._on_close()
+
+    def _on_close(self):
         """清理 + 看门狗兜底：跑完所有清理就主动退出；任一步挂死则 3 秒后强杀"""
         import os
         import threading
@@ -823,13 +1038,12 @@ class MainGUI:
 
         # 依次清理，每个独立 try/except——单步抛错不影响后续
         # 但若某步真"挂死"（不抛错也不返回），主线程会卡在那里，由 watchdog 兜底
-        if self.is_running:
-            try:
-                self.on_stop()
-            except Exception:
-                pass
         try:
             self._hide_roi_border()
+        except Exception:
+            pass
+        try:
+            self.overlay.destroy()
         except Exception:
             pass
         try:
@@ -838,277 +1052,22 @@ class MainGUI:
         except Exception:
             pass
         try:
-            if getattr(self, '_hotkey_manager', None):
-                self._hotkey_manager.stop()
+            self._hotkey_mgr.unregister_all()
         except Exception:
             pass
         try:
-            self.state_manager.save_state()
+            self.pipeline.release()
         except Exception:
             pass
 
         os._exit(0)
-    
-    def _show_roi_border(self):
-        """显示ROI区域红色边框（使用实际截图区域）"""
-        try:
-            roi = self.scan_service.roi
-            padding = getattr(self.scan_service, 'roi_padding', 10)
-            
-            import ctypes
-            user32 = ctypes.windll.user32
-            screen_width = user32.GetSystemMetrics(0)
-            screen_height = user32.GetSystemMetrics(1)
-            
-            if roi is not None:
-                # 有框选区域
-                x1, y1, x2, y2 = roi
-                
-                x1_actual = max(0, x1 - padding)
-                y1_actual = max(0, y1 - padding)
-                x2_actual = min(screen_width, x2 + padding)
-                y2_actual = min(screen_height, y2 + padding)
-            else:
-                # 全屏模式
-                x1_actual = 0
-                y1_actual = 0
-                x2_actual = screen_width
-                y2_actual = screen_height
-            
-            width = x2_actual - x1_actual
-            height = y2_actual - y1_actual
-            
-            if width <= 0 or height <= 0:
-                return
-            
-            self.roi_window = tk.Toplevel(self.root)
-            self.roi_window.withdraw()
-            self.roi_window.overrideredirect(True)
-            self.roi_window.attributes('-topmost', True)
-            self.roi_window.attributes('-transparentcolor', 'black')
-            
-            self.roi_window.geometry(f'{width}x{height}+{x1_actual}+{y1_actual}')
-            self.roi_window.config(bg='black')
-            
-            self.roi_canvas = tk.Canvas(
-                self.roi_window,
-                width=width,
-                height=height,
-                bg='black',
-                highlightthickness=0,
-                bd=0
-            )
-            self.roi_canvas.pack(fill=tk.BOTH, expand=True)
-            
-            self.roi_canvas.create_rectangle(
-                1, 1, width - 1, height - 1,
-                outline='#ff3333',
-                width=4,
-                fill=''
-            )
-            
-            self.roi_window.deiconify()
-            
-        except Exception as e:
-            print(f"显示ROI边框失败: {e}")
-    
-    def _hide_roi_border(self):
-        """隐藏ROI区域红色边框"""
-        try:
-            if self.roi_window:
-                self.roi_window.destroy()
-                self.roi_window = None
-                self.roi_canvas = None
-        except Exception:
-            pass
-    
-    def update_status(self, status):
-        """更新状态显示"""
-        status_text = f"状态: ● {status}"
-        self.status_label.config(text=status_text)
-        # 同时更新窗口标题（任务栏显示）
-        self.update_window_title(status)
-    
-    def update_window_title(self, status):
-        """更新窗口标题，在任务栏显示状态"""
-        base_title = "屏幕扫描OCR识别系统"
-        if status == "运行中":
-            title = f"【扫描中】{base_title}"
-        elif status == "初始化中...":
-            title = f"【初始化中】{base_title}"
-        elif status == "已停止":
-            title = base_title
-        else:
-            title = f"{base_title} - {status}"
-        
-        self.root.title(title)
-    
-    def update_stats(self):
-        """更新统计信息"""
-        self.scan_count_label.config(text=f"扫描次数: {self.scan_count}")
-        if self.last_scan_time:
-            self.last_scan_label.config(text=f"最后扫描: {self.last_scan_time}")
-        else:
-            self.last_scan_label.config(text="最后扫描: 无")
-    
-    def _schedule_memory_update(self):
-        """定时刷新内存显示"""
-        try:
-            if self.memory_label and get_working_set_mb is not None:
-                ws_mb = get_working_set_mb(self._memory_pid)
-                if ws_mb is None:
-                    self.memory_label.config(text="内存: -- MB")
-                else:
-                    self.memory_label.config(text=f"内存: {ws_mb:.1f} MB")
-        except Exception:
-            pass
-        
-        self.root.after(self._memory_interval_ms, self._schedule_memory_update)
-    
-    def setup_gui_logger(self):
-        """设置GUI日志处理器"""
-        # 创建GUI日志处理器
-        gui_handler = GUILoggerHandler(self.log_queue)
-        gui_handler.setLevel(logging.DEBUG)
-        
-        # 添加到根日志记录器
-        root_logger = logging.getLogger()
-        root_logger.addHandler(gui_handler)
-        
-        # 设置日志级别
-        log_level = config.get('logging.level')
-        root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-    
-    def append_log(self, message, level='INFO'):
-        """追加日志到日志区域"""
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        # 确保每条日志消息都以换行符结尾
-        log_message = f"{timestamp} - {message}\n"
-        
-        # 将日志放入队列
-        try:
-            self.log_queue.put_nowait((log_message, level))
-        except queue.Full:
-            pass
-    
-    def on_clear_log(self):
-        """清空日志"""
-        self.log_text.delete('1.0', tk.END)
-        self.append_log("日志已清空", "INFO")
-    
-    def process_log_queue(self):
-        """处理日志队列（在主线程中）- 优化版本：批量处理和自动清理"""
-        try:
-            # 检查队列大小，如果超过阈值则清理
-            queue_size = self.log_queue.qsize()
-            if queue_size > self.log_queue_cleanup_threshold:
-                # 清理一半的旧日志
-                cleanup_count = queue_size // 2
-                for _ in range(cleanup_count):
-                    try:
-                        self.log_queue.get_nowait()
-                    except queue.Empty:
-                        break
-                logger.debug(f"日志队列清理：移除 {cleanup_count} 条旧日志")
 
-            # drain 模式：一次取完队列所有待处理日志
-            processed_count = 0
 
-            while True:
-                try:
-                    log_message, level = self.log_queue.get_nowait()
-                    self.log_text.insert(tk.END, log_message, level)
-                    processed_count += 1
-                except queue.Empty:
-                    break
-
-            # 如果处理了日志，一次性滚动到底部（减少重绘）
-            if processed_count > 0:
-                self.log_text.see(tk.END)
-
-                # 限制日志行数
-                max_lines = self.state_manager.get_log_max_lines()
-                lines = int(self.log_text.index('end-1c').split('.')[0])
-                if lines > max_lines:
-                    # 删除前100行
-                    self.log_text.delete('1.0', '100.0')
-        except Exception as e:
-            # 避免日志处理错误影响主程序
-            pass
-
-        # 每100ms检查一次
-        self.root.after(100, self.process_log_queue)
-    
-    def show_error(self, message):
-        """显示错误消息"""
-        messagebox.showerror("错误", message)
-    
-    def show_info(self, message):
-        """显示信息消息"""
-        messagebox.showinfo("信息", message)
-    
-    def _run_scan_loop(self):
-        """运行扫描循环（在独立线程中）"""
-        # 获取配置
-        scan_interval = self.scan_interval_var.get()
-        
-        try:
-            while not self.stop_event.is_set():
-                self.scan_count += 1
-                self.append_log(f"开始第 {self.scan_count} 次扫描...", "INFO")
-                
-                # 获取当前时间
-                now = datetime.now()
-                self.last_scan_time = now.strftime('%H:%M:%S')
-                
-                # 更新统计信息（在主线程中）
-                self.root.after(0, self.update_stats)
-                
-                # 执行扫描
-                result = self.scan_service.scan_once()
-                
-                if result['success']:
-                    self.append_log(f"扫描完成，耗时 {result['duration']:.2f}秒", "INFO")
-                    if 'screenshot_path' in result and result['screenshot_path']:
-                        self.append_log(f"截图已保存: {os.path.basename(result['screenshot_path'])}", "DEBUG")
-
-                    ocr_results = result.get('ocr_results', [])
-                    matches = result.get('matches', [])
-                    if ocr_results:
-                        self.append_log(f"识别到 {len(ocr_results)} 个文本块", "INFO")
-                    for m in matches:
-                        self.append_log(f"  >>> {m['keyword']} | {m['hint']}", "WARNING")
-
-                    # 浮窗每次扫描都刷新（包括无匹配场景），由 Overlay 内部去重音效
-                    self.root.after(0, lambda ocr=ocr_results, m=matches: self.overlay.update(ocr, m))
-
-                elif 'error' in result:
-                    self.append_log(f"扫描出错: {result['error']}", "ERROR")
-                
-                # 计算等待时间
-                scan_duration = result['duration']
-                wait_time = max(0, scan_interval - scan_duration)
-                
-                if wait_time > 0:
-                    # 等待指定时间，但每0.5秒检查一次停止信号
-                    elapsed = 0
-                    while elapsed < wait_time and not self.stop_event.is_set():
-                        time.sleep(0.5)
-                        elapsed += 0.5
-                else:
-                    self.append_log(f"扫描耗时 {scan_duration:.2f}秒，超过间隔时间，立即开始下一次扫描", "WARNING")
-        
-        except Exception as e:
-            self.append_log(f"扫描循环出错: {e}", "ERROR")
-        finally:
-            self.is_running = False
-            self.root.after(0, lambda: self.update_status("已停止"))
-            self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL))
-            self.root.after(0, lambda: self.stop_btn.config(state=tk.DISABLED))
-
+# ---------------------------------------------------------------------------
+# 入口
+# ---------------------------------------------------------------------------
 
 def main():
-    """主函数"""
     root = tk.Tk()
     app = MainGUI(root)
     root.mainloop()
