@@ -425,19 +425,23 @@ class MainGUI:
                              ("active", _danger_hover)],
                   foreground=[("disabled", "white")])
 
-        # Tab：Chrome 风格——活跃 tab 与下方内容面板同色（视觉上接为一体），
-        # 非活跃 tab 略暗"在背后"。
-        style.configure("TNotebook", background=COLOR_SIDEBAR, borderwidth=0)
+        # Tab：Chrome 风格——深色 strip + 浅色活跃 tab。
+        # strip 与非活跃 tab 同色（融为一体）；活跃 tab 用 sidebar 色与下方内容面板"接"在一起。
+        # 关键：clam 默认会让 selected tab 加 1-2px expand → 显式 cancel 保持大小稳定。
+        _tab_strip = "#c8ccd1"
+        style.configure("TNotebook", background=_tab_strip, borderwidth=0,
+                        tabmargins=[0, 0, 0, 0])
         style.configure("TNotebook.Tab",
-                        background="#d4d8dd",          # 比 sidebar 略暗 = 非活跃
+                        background=_tab_strip,         # 非活跃 = strip 色（无视觉边）
                         foreground=COLOR_SUBTEXT,
                         padding=(14, 7),
                         font=(UI_FONT, 9),
                         borderwidth=0)
         style.map("TNotebook.Tab",
-                  background=[("selected", COLOR_SIDEBAR),  # 活跃 = 内容面板色，无缝
-                              ("active", "#c8ccd1")],        # 鼠标悬停
-                  foreground=[("selected", COLOR_PRIMARY)])
+                  background=[("selected", COLOR_SIDEBAR),  # 活跃 = 内容面板色
+                              ("active", "#b8bcc1")],        # hover 比 strip 再深一点
+                  foreground=[("selected", COLOR_PRIMARY)],
+                  expand=[("selected", [0, 0, 0, 0])])       # 取消 clam 的自动放大
 
     def _init_vars(self):
         """集中创建所有 Tk 变量。值由后续 _load_settings 覆盖，这里写默认值。"""
