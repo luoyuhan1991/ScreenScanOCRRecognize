@@ -354,28 +354,86 @@ class MainGUI:
         style.configure("TEntry", fieldbackground=COLOR_CARD)
         style.configure("TScale", background=COLOR_BG, troughcolor=COLOR_BORDER)
 
-        style.configure("TButton", background=COLOR_CARD, foreground=COLOR_TEXT,
-                        bordercolor=COLOR_BORDER, borderwidth=1, padding=(10, 5),
-                        relief="flat")
+        # 默认按钮：浅灰填充、无边框；clam 的 lightcolor/darkcolor 必须一并刷成 bg 才能去掉 3D 边
+        _btn_default_bg = "#ebebef"
+        _btn_default_hover = "#dcdce0"
+        _btn_default_press = "#c8c8cd"
+        style.configure("TButton", background=_btn_default_bg, foreground=COLOR_TEXT,
+                        bordercolor=_btn_default_bg, lightcolor=_btn_default_bg,
+                        darkcolor=_btn_default_bg, borderwidth=0,
+                        padding=(12, 6), relief="flat", font=(UI_FONT, 9))
         style.map("TButton",
-                  background=[("active", "#e8e8eb"), ("pressed", "#d8d8db")])
+                  background=[("disabled", "#f3f3f5"),
+                              ("pressed", _btn_default_press),
+                              ("active", _btn_default_hover)],
+                  bordercolor=[("disabled", "#f3f3f5"),
+                               ("pressed", _btn_default_press),
+                               ("active", _btn_default_hover)],
+                  lightcolor=[("disabled", "#f3f3f5"),
+                              ("pressed", _btn_default_press),
+                              ("active", _btn_default_hover)],
+                  darkcolor=[("disabled", "#f3f3f5"),
+                             ("pressed", _btn_default_press),
+                             ("active", _btn_default_hover)],
+                  foreground=[("disabled", "#a0a0a0")])
+
+        # Primary（开始）：实色蓝填充，禁用时保持白字 + 浅蓝
+        _primary_press = "#003e80"
+        _primary_hover = "#0050a0"
+        _primary_disabled = "#9bbfe2"
         style.configure("Primary.TButton", background=COLOR_PRIMARY, foreground="white",
-                        bordercolor=COLOR_PRIMARY, padding=(20, 8),
+                        bordercolor=COLOR_PRIMARY, lightcolor=COLOR_PRIMARY,
+                        darkcolor=COLOR_PRIMARY, borderwidth=0,
+                        padding=(24, 10), relief="flat",
                         font=(UI_FONT, 10, "bold"))
         style.map("Primary.TButton",
-                  background=[("active", "#0050a0"), ("pressed", "#003e80")])
-        style.configure("Danger.TButton", background=COLOR_CARD, foreground=COLOR_DANGER,
-                        bordercolor=COLOR_DANGER, padding=(20, 8),
+                  background=[("disabled", _primary_disabled),
+                              ("pressed", _primary_press),
+                              ("active", _primary_hover)],
+                  bordercolor=[("disabled", _primary_disabled),
+                               ("pressed", _primary_press),
+                               ("active", _primary_hover)],
+                  lightcolor=[("disabled", _primary_disabled),
+                              ("pressed", _primary_press),
+                              ("active", _primary_hover)],
+                  darkcolor=[("disabled", _primary_disabled),
+                             ("pressed", _primary_press),
+                             ("active", _primary_hover)],
+                  foreground=[("disabled", "white")])
+
+        # Danger（停止）：从「白底红描边」改为实色红填充，避免 clam 双边框；禁用时浅粉 + 白字
+        _danger_press = "#8b2400"
+        _danger_hover = "#b53000"
+        _danger_disabled = "#e8b5a8"
+        style.configure("Danger.TButton", background=COLOR_DANGER, foreground="white",
+                        bordercolor=COLOR_DANGER, lightcolor=COLOR_DANGER,
+                        darkcolor=COLOR_DANGER, borderwidth=0,
+                        padding=(24, 10), relief="flat",
                         font=(UI_FONT, 10, "bold"))
         style.map("Danger.TButton",
-                  background=[("active", "#fef0ec"), ("pressed", "#fbe2db")])
+                  background=[("disabled", _danger_disabled),
+                              ("pressed", _danger_press),
+                              ("active", _danger_hover)],
+                  bordercolor=[("disabled", _danger_disabled),
+                               ("pressed", _danger_press),
+                               ("active", _danger_hover)],
+                  lightcolor=[("disabled", _danger_disabled),
+                              ("pressed", _danger_press),
+                              ("active", _danger_hover)],
+                  darkcolor=[("disabled", _danger_disabled),
+                             ("pressed", _danger_press),
+                             ("active", _danger_hover)],
+                  foreground=[("disabled", "white")])
 
+        # Tab：所有 tab 粗体；选中态 padding 更大、白底蓝字凸出
         style.configure("TNotebook", background=COLOR_SIDEBAR, borderwidth=0)
         style.configure("TNotebook.Tab", background=COLOR_SIDEBAR, foreground=COLOR_SUBTEXT,
-                        padding=(12, 6), font=(UI_FONT, 9))
+                        padding=(12, 5), font=(UI_FONT, 9, "bold"), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", COLOR_CARD)],
-                  foreground=[("selected", COLOR_PRIMARY)])
+                  foreground=[("selected", COLOR_PRIMARY)],
+                  padding=[("selected", (20, 10))],
+                  expand=[("selected", (1, 1, 1, 0))])
 
     def _init_vars(self):
         """集中创建所有 Tk 变量。值由后续 _load_settings 覆盖，这里写默认值。"""
