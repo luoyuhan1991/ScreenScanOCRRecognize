@@ -2,9 +2,3 @@
 # 用户在 GUI 修改后会自动写入；这里也可以手动编辑。
 scan:
   interval_seconds: 3.0
-  enable_roi: true
-  saved_roi:
-  - 1170
-  - 256
-  - 1880
-  - 843
