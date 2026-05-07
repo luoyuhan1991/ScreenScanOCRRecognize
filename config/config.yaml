@@ -1,4 +1,10 @@
-# 用户改动后的覆盖值。空文件等同于全部使用 defaults.py 的 DEFAULT_CONFIG。
-# 用户在 GUI 修改后会自动写入；这里也可以手动编辑。
+# 用户改动后的覆盖值（仅记录与默认不同的项；空文件等同于全部使用 defaults.py 的 DEFAULT_CONFIG）。
+# 加载逻辑：先读 DEFAULT_CONFIG → 再用本文件深度合并覆盖。yaml 里没写 = 用默认。
+# GUI 修改后会自动写回；手动编辑也可。新增条目前请到 defaults.py 看下默认值，避免冗余覆盖。
+#
+# 注意：yaml.dump 不保留注释。如果代码路径触发了 config.save()（GUI 重置/保存配置），本文件
+# 会被整体序列化覆盖，注释会丢失。手动编辑后避免再触发 save。
+
 scan:
+  # 默认 5.0 秒；调到 3.0 让弹窗反应更快、CPU 占用略升。
   interval_seconds: 3.0
