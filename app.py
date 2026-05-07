@@ -425,15 +425,13 @@ class MainGUI:
                              ("active", _danger_hover)],
                   foreground=[("disabled", "white")])
 
-        # Tab：所有 tab 粗体；选中态 padding 更大、白底蓝字凸出
+        # Tab：标准切换式；选中态仅靠白底 + 主色字区分
         style.configure("TNotebook", background=COLOR_SIDEBAR, borderwidth=0)
         style.configure("TNotebook.Tab", background=COLOR_SIDEBAR, foreground=COLOR_SUBTEXT,
-                        padding=(12, 5), font=(UI_FONT, 9, "bold"), borderwidth=0)
+                        padding=(14, 7), font=(UI_FONT, 9), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", COLOR_CARD)],
-                  foreground=[("selected", COLOR_PRIMARY)],
-                  padding=[("selected", (20, 10))],
-                  expand=[("selected", (1, 1, 1, 0))])
+                  foreground=[("selected", COLOR_PRIMARY)])
 
     def _init_vars(self):
         """集中创建所有 Tk 变量。值由后续 _load_settings 覆盖，这里写默认值。"""
