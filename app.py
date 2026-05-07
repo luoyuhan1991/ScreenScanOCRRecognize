@@ -441,7 +441,10 @@ class MainGUI:
                   background=[("selected", COLOR_SIDEBAR),  # 活跃 = 内容面板色
                               ("active", "#b8bcc1")],        # hover 比 strip 再深一点
                   foreground=[("selected", COLOR_PRIMARY)],
-                  expand=[("selected", [0, 0, 0, 0])])       # 取消 clam 的自动放大
+                  # clam 默认给 selected 加 padding={6 4 6 2} → 顶部 +2px。
+                  # 显式 map 回 base 值，强行压平。
+                  padding=[("selected", (14, 7))],
+                  expand=[("selected", [0, 0, 0, 0])])
 
     def _init_vars(self):
         """集中创建所有 Tk 变量。值由后续 _load_settings 覆盖，这里写默认值。"""
