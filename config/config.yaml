@@ -1,10 +1,15 @@
 # 用户改动后的覆盖值（仅记录与默认不同的项；空文件等同于全部使用 defaults.py 的 DEFAULT_CONFIG）。
 # 加载逻辑：先读 DEFAULT_CONFIG → 再用本文件深度合并覆盖。yaml 里没写 = 用默认。
-# GUI 修改后会自动写回；手动编辑也可。新增条目前请到 defaults.py 看下默认值，避免冗余覆盖。
-#
-# 注意：yaml.dump 不保留注释。如果代码路径触发了 config.save()（GUI 重置/保存配置），本文件
-# 会被整体序列化覆盖，注释会丢失。手动编辑后避免再触发 save。
+# GUI 修改后会自动写回；写回时走 diff_from_defaults，文件会被收敛回最小集，本头部注释也会丢
+# （PyYAML 的 yaml.dump 不保留注释）。如果要在这里写持久注释，请改用 ruamel.yaml；当前接受丢失。
 
 scan:
   # 默认 5.0 秒；调到 3.0 让弹窗反应更快、CPU 占用略升。
   interval_seconds: 3.0
+  # GUI「保存预设」写入；defaults.roi_presets 为空字典，所以这里整段都是用户数据。
+  roi_presets:
+    '4+2':
+    - 1170
+    - 256
+    - 1880
+    - 843

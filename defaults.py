@@ -20,6 +20,33 @@
 
 DEFAULT_BANLIST_FILE = 'C:/Users/Administrator/Desktop/banlist.txt'
 
+
+def diff_from_defaults(data, defaults=None):
+    """递归剔除等于默认的项，返回最小化字典——只含用户实际改动。
+
+    Config.save() 用它把 in-memory dict 收敛回 yaml；这样 yaml 一直保持「只记差异」，
+    避免一次保存就把整份默认值灌满文件，也让人手写的注释不会被全量覆盖时挤掉。
+
+    特殊情况：
+    - 不在 defaults 里的键 = 用户/未来扩展的自定义项，整段保留；不要"清理"未知键。
+    - 子树差异为空 dict 时整段省略，避免写出 `scan: {}` 这类空节。
+    """
+    if defaults is None:
+        defaults = DEFAULT_CONFIG
+    if not isinstance(data, dict) or not isinstance(defaults, dict):
+        return data
+    result = {}
+    for k, v in data.items():
+        if k not in defaults:
+            result[k] = v
+        elif isinstance(v, dict) and isinstance(defaults[k], dict):
+            sub = diff_from_defaults(v, defaults[k])
+            if sub:
+                result[k] = sub
+        elif v != defaults[k]:
+            result[k] = v
+    return result
+
 DEFAULT_CONFIG = {
     'scan': {
         'interval_seconds': 5.0,         # 两次扫描之间的间隔（秒）
@@ -28,11 +55,10 @@ DEFAULT_CONFIG = {
         'remember_roi': True,             # 启动时是否复用上次保存的 ROI（False = 每次启动都重新框选）
         'enable_diff_skip': True,         # 帧差检测：与上次画面相似时跳过 OCR
         'diff_threshold': 5.0,            # MSE 阈值，小于此值视为画面无变化（缩成 160x120 灰度图比较）
-        # ROI 坐标格式 [x1, y1, x2, y2]（屏幕绝对像素），None 表示未保存。
-        # 默认值 [1170, 256, 1880, 843] 是项目当前的工作区域，开箱即用。
-        'saved_roi': [1170, 256, 1880, 843],   # 旧版 ROI 持久化键
-        'roi': [1170, 256, 1880, 843],         # 新版 ROI 持久化键（与 saved_roi 含义重叠，新版用这套）
-        'roi_presets': {},                # ROI 预设字典 {名字: [x1,y1,x2,y2]}（保留扩展位）
+        # 当前生效的 ROI（新旧两版统一读这个键）。格式 [x1, y1, x2, y2]，屏幕绝对像素；
+        # None = 未保存。默认 [1170, 256, 1880, 843] 是项目工作区域，开箱即用。
+        'roi': [1170, 256, 1880, 843],
+        'roi_presets': {},                # ROI 预设字典 {名字: [x1,y1,x2,y2]}（GUI 「保存预设」会写入）
     },
     'ocr': {
         'default_engine': 'paddle',       # 旧版引擎选择：'paddle' 或 'easy'；新版只有 paddle

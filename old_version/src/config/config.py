@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 _PROJECT_ROOT = str(Path(__file__).resolve().parents[3])
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
-from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG  # noqa: E402
+from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG, diff_from_defaults  # noqa: E402
 
 try:
     import yaml
@@ -123,13 +123,14 @@ class Config:
             config_file = Path(config_file)
         
         try:
-            # 确保目录存在
             config_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 保存配置到文件
+
+            # 与新版 src/config/config.py.save() 同款：只 dump 与 DEFAULT_CONFIG 的差异，
+            # 让 yaml 保持「最小覆盖集」形态，避免一次保存就把全量默认值灌满文件。
+            minimal = diff_from_defaults(self._config, DEFAULT_CONFIG)
             with open(config_file, 'w', encoding='utf-8') as f:
-                yaml.dump(self._config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-            
+                yaml.dump(minimal, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
             return True
         except Exception as e:
             import warnings
