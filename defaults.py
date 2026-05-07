@@ -24,9 +24,9 @@ DEFAULT_CONFIG = {
         'enable_diff_skip': True,
         'diff_threshold': 5.0,
         # 旧版 ROI 持久化
-        'saved_roi': None,
+        'saved_roi': [1170, 256, 1880, 843],
         # 新版 ROI 持久化（与 saved_roi 含义重叠，新版用这套）
-        'roi': None,
+        'roi': [1170, 256, 1880, 843],
         'roi_presets': {},
     },
     'ocr': {
