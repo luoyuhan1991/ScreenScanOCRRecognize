@@ -24,6 +24,23 @@ from shared.overlay import Overlay
 
 
 # ---------------------------------------------------------------------------
+# UI 配色与字体（clam 主题，与 mockups/mockup_c.py 一致）
+# ---------------------------------------------------------------------------
+
+UI_FONT = "Microsoft YaHei"
+COLOR_BG = "#fafafa"
+COLOR_SIDEBAR = "#eef0f3"
+COLOR_CARD = "#ffffff"
+COLOR_PRIMARY = "#0066cc"
+COLOR_DANGER = "#d83b01"
+COLOR_SUCCESS = "#107c10"
+COLOR_WARNING = "#d8a200"
+COLOR_TEXT = "#222222"
+COLOR_SUBTEXT = "#777777"
+COLOR_BORDER = "#d8dade"
+
+
+# ---------------------------------------------------------------------------
 # 托盘图标 (内联，避免额外文件)
 # ---------------------------------------------------------------------------
 
@@ -315,213 +332,310 @@ class MainGUI:
     # UI 构建
     # -----------------------------------------------------------------------
 
-    def _create_widgets(self):
-        main = ttk.Frame(self.root, padding="10")
-        main.pack(fill=tk.BOTH, expand=True)
+    def _setup_styles(self):
+        """配置 ttk 主题与各样式。clam 主题对 Combobox/Scale/Notebook 配色支持最完整。"""
+        self.root.configure(bg=COLOR_BG)
+        style = ttk.Style()
+        style.theme_use("clam")
 
-        self._create_status_bar(main)
-        self._create_scan_config(main)
-        self._create_ocr_config(main)
-        self._create_match_config(main)
-        self._create_log_area(main)
-        self._create_buttons(main)
+        style.configure(".", background=COLOR_BG, foreground=COLOR_TEXT, font=(UI_FONT, 9))
+        style.configure("TFrame", background=COLOR_BG)
+        style.configure("Sidebar.TFrame", background=COLOR_SIDEBAR)
+        style.configure("TLabel", background=COLOR_BG, foreground=COLOR_TEXT)
+        style.configure("Sidebar.TLabel", background=COLOR_SIDEBAR, foreground=COLOR_TEXT)
+        style.configure("SubSidebar.TLabel", background=COLOR_SIDEBAR,
+                        foreground=COLOR_SUBTEXT, font=(UI_FONT, 8))
+        style.configure("Section.TLabel", background=COLOR_SIDEBAR, foreground=COLOR_TEXT,
+                        font=(UI_FONT, 10, "bold"))
 
-    # ----- 状态栏 -----
+        style.configure("TCheckbutton", background=COLOR_BG)
+        style.configure("Sidebar.TCheckbutton", background=COLOR_SIDEBAR)
+        style.configure("TCombobox", fieldbackground=COLOR_CARD)
+        style.configure("TEntry", fieldbackground=COLOR_CARD)
+        style.configure("TScale", background=COLOR_BG, troughcolor=COLOR_BORDER)
 
-    def _create_status_bar(self, parent):
-        fr = ttk.LabelFrame(parent, text="状态", padding="5")
-        fr.pack(fill=tk.X, pady=(0, 5))
+        style.configure("TButton", background=COLOR_CARD, foreground=COLOR_TEXT,
+                        bordercolor=COLOR_BORDER, borderwidth=1, padding=(10, 5),
+                        relief="flat")
+        style.map("TButton",
+                  background=[("active", "#e8e8eb"), ("pressed", "#d8d8db")])
+        style.configure("Primary.TButton", background=COLOR_PRIMARY, foreground="white",
+                        bordercolor=COLOR_PRIMARY, padding=(20, 8),
+                        font=(UI_FONT, 10, "bold"))
+        style.map("Primary.TButton",
+                  background=[("active", "#0050a0"), ("pressed", "#003e80")])
+        style.configure("Danger.TButton", background=COLOR_CARD, foreground=COLOR_DANGER,
+                        bordercolor=COLOR_DANGER, padding=(20, 8),
+                        font=(UI_FONT, 10, "bold"))
+        style.map("Danger.TButton",
+                  background=[("active", "#fef0ec"), ("pressed", "#fbe2db")])
 
-        self._lbl_status = ttk.Label(fr, text="状态: 已停止", font=("Microsoft YaHei", 10))
-        self._lbl_status.pack(side=tk.LEFT, padx=5)
+        style.configure("TNotebook", background=COLOR_SIDEBAR, borderwidth=0)
+        style.configure("TNotebook.Tab", background=COLOR_SIDEBAR, foreground=COLOR_SUBTEXT,
+                        padding=(12, 6), font=(UI_FONT, 9))
+        style.map("TNotebook.Tab",
+                  background=[("selected", COLOR_CARD)],
+                  foreground=[("selected", COLOR_PRIMARY)])
 
-        self._lbl_count = ttk.Label(fr, text="扫描: 0", font=("Microsoft YaHei", 10))
-        self._lbl_count.pack(side=tk.LEFT, padx=5)
-
-        self._lbl_last = ttk.Label(fr, text="最后: --", font=("Microsoft YaHei", 10))
-        self._lbl_last.pack(side=tk.LEFT, padx=5)
-
-        self._lbl_mem = ttk.Label(fr, text="内存: -- MB", font=("Microsoft YaHei", 10))
-        self._lbl_mem.pack(side=tk.LEFT, padx=5)
-
-    # ----- 扫描配置 -----
-
-    def _create_scan_config(self, parent):
-        fr = ttk.LabelFrame(parent, text="扫描配置", padding="5")
-        fr.pack(fill=tk.X, pady=(0, 5))
-
-        row = ttk.Frame(fr)
-        row.pack(fill=tk.X, pady=2)
-
-        # ROI
+    def _init_vars(self):
+        """集中创建所有 Tk 变量。值由后续 _load_settings 覆盖，这里写默认值。"""
+        # 扫描配置
         self._var_enable_roi = tk.BooleanVar()
-        ttk.Checkbutton(row, text="启用ROI", variable=self._var_enable_roi).pack(side=tk.LEFT, padx=5)
-
         self._var_remember_roi = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row, text="记住ROI", variable=self._var_remember_roi).pack(side=tk.LEFT, padx=5)
-
-        # ROI 预设
-        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-        ttk.Label(row, text="ROI预设:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_roi_preset = tk.StringVar()
-        self._combo_preset = ttk.Combobox(row, textvariable=self._var_roi_preset, width=14, state='readonly')
-        self._combo_preset.pack(side=tk.LEFT, padx=2)
-        self._combo_preset.bind('<<ComboboxSelected>>', self._on_preset_selected)
-        ttk.Button(row, text="保存当前", command=self._save_roi_preset).pack(side=tk.LEFT, padx=2)
-
-        # GPU
-        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
         self._var_gpu = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row, text="GPU加速", variable=self._var_gpu).pack(side=tk.LEFT, padx=5)
-
-        # 扫描间隔
-        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-        ttk.Label(row, text="间隔:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_interval = tk.DoubleVar(value=2.0)
-        ttk.Scale(row, from_=0.5, to=15, orient=tk.HORIZONTAL,
-                  variable=self._var_interval, length=160,
-                  command=self._on_interval_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row, width=5, textvariable=self._var_interval).pack(side=tk.LEFT, padx=2)
-        ttk.Label(row, text="秒").pack(side=tk.LEFT, padx=(0, 5))
-
-        # 帧差阈值
-        row2 = ttk.Frame(fr)
-        row2.pack(fill=tk.X, pady=2)
-        ttk.Label(row2, text="帧差阈值:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_diff_threshold = tk.DoubleVar(value=5.0)
-        ttk.Scale(row2, from_=0, to=50, orient=tk.HORIZONTAL,
-                  variable=self._var_diff_threshold, length=160,
-                  command=self._on_diff_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row2, width=5, textvariable=self._var_diff_threshold).pack(side=tk.LEFT, padx=2)
-        ttk.Label(row2, text="(0=每次都OCR)").pack(side=tk.LEFT, padx=(0, 5))
-
-    # ----- OCR 配置 -----
-
-    def _create_ocr_config(self, parent):
-        fr = ttk.LabelFrame(parent, text="OCR配置", padding="5")
-        fr.pack(fill=tk.X, pady=(0, 5))
-
-        row = ttk.Frame(fr)
-        row.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row, text="语言:").pack(side=tk.LEFT, padx=(0, 4))
+        # OCR
         self._var_lang = tk.StringVar(value='ch')
-        ttk.Combobox(row, textvariable=self._var_lang, width=8, state='readonly',
-                     values=('ch', 'en', 'japan', 'korean')).pack(side=tk.LEFT, padx=2)
-
-        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-
-        ttk.Label(row, text="最小置信度:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_confidence = tk.DoubleVar(value=0.3)
-        ttk.Scale(row, from_=0, to=1, orient=tk.HORIZONTAL,
-                  variable=self._var_confidence, length=140,
-                  command=self._on_conf_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row, width=5, textvariable=self._var_confidence).pack(side=tk.LEFT, padx=2)
-
-        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-
         self._var_invert = tk.BooleanVar()
-        ttk.Checkbutton(row, text="图像反色", variable=self._var_invert).pack(side=tk.LEFT, padx=5)
-
-    # ----- 匹配配置 -----
-
-    def _create_match_config(self, parent):
-        fr = ttk.LabelFrame(parent, text="关键词匹配", padding="5")
-        fr.pack(fill=tk.X, pady=(0, 5))
-
-        row1 = ttk.Frame(fr)
-        row1.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row1, text="关键词文件:").pack(side=tk.LEFT, padx=(0, 4))
+        # 关键词 / 浮窗
         self._var_banlist = tk.StringVar(value=DEFAULT_BANLIST_FILE)
-        ttk.Entry(row1, textvariable=self._var_banlist, width=30).pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
-        ttk.Button(row1, text="浏览...", command=self._browse_banlist).pack(side=tk.LEFT, padx=2)
-        ttk.Button(row1, text="编辑", command=self._edit_banlist).pack(side=tk.LEFT, padx=2)
-
-        row2 = ttk.Frame(fr)
-        row2.pack(fill=tk.X, pady=2)
-
-        ttk.Label(row2, text="显示时长:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_duration = tk.DoubleVar(value=3.0)
-        ttk.Scale(row2, from_=1, to=10, orient=tk.HORIZONTAL,
-                  variable=self._var_duration, length=120,
-                  command=self._on_dur_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row2, width=5, textvariable=self._var_duration).pack(side=tk.LEFT, padx=2)
-        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 8))
-
-        ttk.Label(row2, text="字号:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_fontsize = tk.IntVar(value=18)
-        ttk.Scale(row2, from_=10, to=36, orient=tk.HORIZONTAL,
-                  variable=self._var_fontsize, length=120,
-                  command=self._on_fs_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row2, width=4, textvariable=self._var_fontsize).pack(side=tk.LEFT, padx=2)
-
-        ttk.Separator(row2, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-
-        ttk.Label(row2, text="位置:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_position = tk.StringVar(value='居中')
-        ttk.Combobox(row2, textvariable=self._var_position, width=6, state='readonly',
-                     values=('居中', '顶部', '底部')).pack(side=tk.LEFT, padx=2)
-
-        ttk.Separator(row2, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-
         self._var_sound = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row2, text="音效提醒", variable=self._var_sound).pack(side=tk.LEFT, padx=5)
 
-    # ----- 日志区 -----
+    def _create_topbar(self, parent):
+        """顶部状态栏：左侧 ● + 状态文字，右侧 3 个统计 cell。"""
+        bar = tk.Frame(parent, bg=COLOR_CARD, height=56,
+                       highlightbackground=COLOR_BORDER, highlightthickness=1)
+        bar.pack(fill=tk.X)
+        bar.pack_propagate(False)
+        inner = tk.Frame(bar, bg=COLOR_CARD)
+        inner.pack(fill=tk.BOTH, expand=True, padx=14, pady=6)
 
-    def _create_log_area(self, parent):
-        fr = ttk.LabelFrame(parent, text="运行日志", padding="5")
-        fr.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        # 左侧：● + 状态
+        left = tk.Frame(inner, bg=COLOR_CARD)
+        left.pack(side=tk.LEFT)
+        self._lbl_dot = tk.Label(left, text="●", fg=COLOR_DANGER, bg=COLOR_CARD,
+                                 font=(UI_FONT, 14))
+        self._lbl_dot.pack(side=tk.LEFT)
+        cell = tk.Frame(left, bg=COLOR_CARD)
+        cell.pack(side=tk.LEFT, padx=(6, 0))
+        tk.Label(cell, text="状态", bg=COLOR_CARD, fg=COLOR_SUBTEXT,
+                 font=(UI_FONT, 8)).pack(anchor=tk.W)
+        self._lbl_status = tk.Label(cell, text="已停止", bg=COLOR_CARD, fg=COLOR_TEXT,
+                                     font=(UI_FONT, 11, "bold"))
+        self._lbl_status.pack(anchor=tk.W)
 
+        # 右侧：3 个统计 cell
+        right = tk.Frame(inner, bg=COLOR_CARD)
+        right.pack(side=tk.RIGHT)
+
+        def _stat_cell(caption, initial):
+            c = tk.Frame(right, bg=COLOR_CARD)
+            c.pack(side=tk.LEFT, padx=14)
+            tk.Label(c, text=caption, bg=COLOR_CARD, fg=COLOR_SUBTEXT,
+                     font=(UI_FONT, 8)).pack(anchor=tk.E)
+            v = tk.Label(c, text=initial, bg=COLOR_CARD, fg=COLOR_TEXT,
+                         font=(UI_FONT, 11, "bold"))
+            v.pack(anchor=tk.E)
+            return v
+
+        self._lbl_count = _stat_cell("扫描次数", "0")
+        self._lbl_last = _stat_cell("最近扫描", "--")
+        self._lbl_mem = _stat_cell("内存", "-- MB")
+
+    def _create_bottombar(self, parent):
+        """底部按钮栏：左侧 开始/停止；右侧 清除/重置。"""
+        bar = tk.Frame(parent, bg=COLOR_CARD, height=56,
+                       highlightbackground=COLOR_BORDER, highlightthickness=1)
+        bar.pack(side=tk.BOTTOM, fill=tk.X)
+        bar.pack_propagate(False)
+        inner = tk.Frame(bar, bg=COLOR_CARD)
+        inner.pack(fill=tk.BOTH, expand=True, padx=14, pady=8)
+
+        self._btn_start = ttk.Button(inner, text="开始扫描", style="Primary.TButton",
+                                      command=self.on_start)
+        self._btn_start.pack(side=tk.LEFT, padx=(0, 6))
+        self._btn_stop = ttk.Button(inner, text="停止扫描", style="Danger.TButton",
+                                     command=self.on_stop, state=tk.DISABLED)
+        self._btn_stop.pack(side=tk.LEFT)
+
+        ttk.Button(inner, text="重置配置",
+                   command=self._reset_config).pack(side=tk.RIGHT)
+        ttk.Button(inner, text="清除匹配记录",
+                   command=self._clear_session).pack(side=tk.RIGHT, padx=(0, 6))
+
+    def _create_sidebar(self, parent):
+        """左侧 300px 配置面板，含两个 Notebook 标签。"""
+        sb = tk.Frame(parent, bg=COLOR_SIDEBAR, width=300,
+                       highlightbackground=COLOR_BORDER, highlightthickness=1)
+        sb.pack(side=tk.LEFT, fill=tk.Y)
+        sb.pack_propagate(False)
+
+        nb = ttk.Notebook(sb)
+        nb.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        common = ttk.Frame(nb, style="Sidebar.TFrame", padding=(10, 8))
+        nb.add(common, text="  常用配置  ")
+        self._create_tab_common(common)
+
+        adv = ttk.Frame(nb, style="Sidebar.TFrame", padding=(10, 8))
+        nb.add(adv, text="  高级  ")
+        self._create_tab_advanced(adv)
+
+    def _create_tab_common(self, parent):
+        """常用配置 tab：扫描区域 / 扫描节奏 / OCR / 关键词。"""
+
+        def header(text):
+            ttk.Label(parent, text=text, style="Section.TLabel").pack(
+                anchor=tk.W, pady=(8, 2))
+
+        def sub(text):
+            ttk.Label(parent, text=text, style="SubSidebar.TLabel").pack(
+                anchor=tk.W, pady=(4, 2))
+
+        def row():
+            r = tk.Frame(parent, bg=COLOR_SIDEBAR)
+            r.pack(fill=tk.X, pady=2)
+            return r
+
+        # ----- 扫描区域 -----
+        header("扫描区域")
+        r = row()
+        tk.Checkbutton(r, text="启用 ROI", bg=COLOR_SIDEBAR,
+                       variable=self._var_enable_roi).pack(side=tk.LEFT)
+        tk.Checkbutton(r, text="记住", bg=COLOR_SIDEBAR,
+                       variable=self._var_remember_roi).pack(side=tk.LEFT, padx=(10, 0))
+
+        sub("ROI 预设")
+        r = row()
+        self._combo_preset = ttk.Combobox(r, textvariable=self._var_roi_preset,
+                                           width=16, state='readonly')
+        self._combo_preset.pack(side=tk.LEFT)
+        self._combo_preset.bind('<<ComboboxSelected>>', self._on_preset_selected)
+        ttk.Button(r, text="保存当前",
+                   command=self._save_roi_preset).pack(side=tk.LEFT, padx=(6, 0))
+
+        # ----- 扫描节奏 -----
+        header("扫描节奏")
+        sub("扫描间隔（秒）")
+        r = row()
+        ttk.Scale(r, from_=0.5, to=15, variable=self._var_interval, length=180,
+                  command=self._on_interval_scale).pack(side=tk.LEFT)
+        ttk.Entry(r, width=5,
+                  textvariable=self._var_interval).pack(side=tk.LEFT, padx=(6, 0))
+
+        # ----- OCR -----
+        header("OCR")
+        r = row()
+        tk.Label(r, text="语言", bg=COLOR_SIDEBAR, fg=COLOR_SUBTEXT,
+                 font=(UI_FONT, 8)).pack(side=tk.LEFT)
+        ttk.Combobox(r, textvariable=self._var_lang, width=8, state='readonly',
+                     values=('ch', 'en', 'japan', 'korean')).pack(side=tk.LEFT, padx=(6, 14))
+        tk.Checkbutton(r, text="GPU 加速", bg=COLOR_SIDEBAR,
+                       variable=self._var_gpu).pack(side=tk.LEFT)
+
+        sub("最小置信度")
+        r = row()
+        ttk.Scale(r, from_=0, to=1, variable=self._var_confidence, length=180,
+                  command=self._on_conf_scale).pack(side=tk.LEFT)
+        ttk.Entry(r, width=5,
+                  textvariable=self._var_confidence).pack(side=tk.LEFT, padx=(6, 0))
+
+        # ----- 关键词 -----
+        header("关键词")
+        sub("词表文件")
+        r = row()
+        ttk.Entry(r, textvariable=self._var_banlist).pack(
+            side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(r, text="浏览…",
+                   command=self._browse_banlist).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(r, text="编辑",
+                   command=self._edit_banlist).pack(side=tk.LEFT, padx=(4, 0))
+
+        sub("匹配后显示时长（秒）")
+        r = row()
+        ttk.Scale(r, from_=1, to=10, variable=self._var_duration, length=180,
+                  command=self._on_dur_scale).pack(side=tk.LEFT)
+        ttk.Entry(r, width=5,
+                  textvariable=self._var_duration).pack(side=tk.LEFT, padx=(6, 0))
+
+    def _create_tab_advanced(self, parent):
+        """高级 tab：帧差检测 / 浮窗外观 / OCR 进阶。"""
+
+        def header(text):
+            ttk.Label(parent, text=text, style="Section.TLabel").pack(
+                anchor=tk.W, pady=(8, 2))
+
+        def sub(text):
+            ttk.Label(parent, text=text, style="SubSidebar.TLabel").pack(
+                anchor=tk.W, pady=(4, 2))
+
+        def row():
+            r = tk.Frame(parent, bg=COLOR_SIDEBAR)
+            r.pack(fill=tk.X, pady=2)
+            return r
+
+        # ----- 帧差检测 -----
+        header("帧差检测")
+        sub("MSE 阈值（0=每次都 OCR）")
+        r = row()
+        ttk.Scale(r, from_=0, to=50, variable=self._var_diff_threshold, length=180,
+                  command=self._on_diff_scale).pack(side=tk.LEFT)
+        ttk.Entry(r, width=5,
+                  textvariable=self._var_diff_threshold).pack(side=tk.LEFT, padx=(6, 0))
+
+        # ----- 浮窗外观 -----
+        header("浮窗外观")
+        sub("字号（px）")
+        r = row()
+        ttk.Scale(r, from_=10, to=36, variable=self._var_fontsize, length=180,
+                  command=self._on_fs_scale).pack(side=tk.LEFT)
+        ttk.Entry(r, width=5,
+                  textvariable=self._var_fontsize).pack(side=tk.LEFT, padx=(6, 0))
+
+        sub("位置")
+        ttk.Combobox(parent, textvariable=self._var_position, width=10,
+                     state='readonly',
+                     values=('居中', '顶部', '底部')).pack(anchor=tk.W, pady=2)
+
+        tk.Checkbutton(parent, text="音效提醒", bg=COLOR_SIDEBAR,
+                       variable=self._var_sound).pack(anchor=tk.W, pady=(8, 0))
+
+        # ----- OCR 进阶 -----
+        header("OCR 进阶")
+        tk.Checkbutton(parent, text="图像反色（黑底白字时启用）", bg=COLOR_SIDEBAR,
+                       variable=self._var_invert).pack(anchor=tk.W, pady=2)
+
+    def _create_main_area(self, parent):
+        """右侧主区：日志 header + 日志 ScrolledText（占满剩余空间）。"""
+        main = tk.Frame(parent, bg=COLOR_BG)
+        main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # 日志 header
+        head = tk.Frame(main, bg=COLOR_BG)
+        head.pack(fill=tk.X, padx=12, pady=(10, 4))
+        tk.Label(head, text="运行日志", bg=COLOR_BG, fg=COLOR_TEXT,
+                 font=(UI_FONT, 11, "bold")).pack(side=tk.LEFT)
+        ttk.Button(head, text="清空", command=self._clear_log).pack(side=tk.RIGHT)
+
+        # 日志框（外层加 1px 边框）
+        wrap = tk.Frame(main, bg=COLOR_BORDER)
+        wrap.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
         self._log_text = scrolledtext.ScrolledText(
-            fr, height=8, wrap=tk.WORD,
-            font=("Consolas", 9),
-            bg="#1e1e1e", fg="#d4d4d4",
-            insertbackground="#d4d4d4"
+            wrap, wrap=tk.WORD, font=("Consolas", 9),
+            bg="#1e1e1e", fg="#d4d4d4", insertbackground="#d4d4d4",
+            borderwidth=0, highlightthickness=0,
         )
-        self._log_text.pack(fill=tk.BOTH, expand=True)
+        self._log_text.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         self._log_text.tag_config("INFO", foreground="#4ec9b0")
         self._log_text.tag_config("WARNING", foreground="#dcdcaa")
         self._log_text.tag_config("ERROR", foreground="#f48771")
         self._log_text.tag_config("DEBUG", foreground="#569cd6")
 
-        # 清空按钮
-        clear_btn = tk.Button(
-            fr, text="X", command=self._clear_log,
-            bg="#1e1e1e", fg="#d4d4d4",
-            activebackground="#3c3c3c", activeforeground="#d4d4d4",
-            relief=tk.FLAT, borderwidth=0, cursor="hand2",
-            font=("Consolas", 9), padx=4, pady=1
-        )
-
-        def _reposition_clear(event=None):
-            try:
-                lx = self._log_text.winfo_x()
-                ly = self._log_text.winfo_y()
-                lw = self._log_text.winfo_width()
-                clear_btn.place(x=lx + lw - 28, y=ly + 4, width=24, height=20)
-            except Exception:
-                pass
-
-        self._log_text.bind("<Configure>", _reposition_clear)
-        fr.after(200, _reposition_clear)
-
-    # ----- 按钮区 -----
-
-    def _create_buttons(self, parent):
-        fr = ttk.Frame(parent)
-        fr.pack(fill=tk.X)
-
-        self._btn_start = ttk.Button(fr, text="开始扫描", command=self.on_start)
-        self._btn_start.pack(side=tk.LEFT, padx=5)
-
-        self._btn_stop = ttk.Button(fr, text="停止扫描", command=self.on_stop, state=tk.DISABLED)
-        self._btn_stop.pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(fr, text="清除匹配记录", command=self._clear_session).pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(fr, text="重置配置", command=self._reset_config).pack(side=tk.LEFT, padx=5)
+    def _create_widgets(self):
+        self._setup_styles()
+        self._init_vars()
+        self._create_topbar(self.root)
+        self._create_bottombar(self.root)        # 先 BOTTOM 占位再 body fill
+        body = tk.Frame(self.root, bg=COLOR_BG)
+        body.pack(fill=tk.BOTH, expand=True)
+        self._create_sidebar(body)
+        self._create_main_area(body)
 
     # -----------------------------------------------------------------------
     # 配置读写
@@ -915,7 +1029,14 @@ class MainGUI:
     # -----------------------------------------------------------------------
 
     def _update_status(self, text):
-        self._lbl_status.config(text=f"状态: {text}")
+        self._lbl_status.config(text=text)
+        if '初始化' in text:
+            color = COLOR_WARNING            # 黄
+        elif text == '运行中':
+            color = COLOR_SUCCESS            # 绿
+        else:
+            color = COLOR_DANGER             # 红：已停止 / 其它
+        self._lbl_dot.config(fg=color)
         self._update_title(text)
 
     def _update_title(self, status):
@@ -928,13 +1049,13 @@ class MainGUI:
             self.root.title(base)
 
     def _update_stats(self):
-        self._lbl_count.config(text=f"扫描: {self.scan_count}")
-        self._lbl_last.config(text=f"最后: {self.last_scan_time or '--'}")
+        self._lbl_count.config(text=str(self.scan_count))
+        self._lbl_last.config(text=self.last_scan_time or '--')
 
     def _schedule_memory_update(self):
         mb = _get_memory_mb()
         if mb is not None:
-            self._lbl_mem.config(text=f"内存: {mb:.1f} MB")
+            self._lbl_mem.config(text=f"{mb:.1f} MB")
         self.root.after(5000, self._schedule_memory_update)
 
     # -----------------------------------------------------------------------
