@@ -425,12 +425,18 @@ class MainGUI:
                              ("active", _danger_hover)],
                   foreground=[("disabled", "white")])
 
-        # Tab：标准切换式；选中态仅靠白底 + 主色字区分
+        # Tab：Chrome 风格——活跃 tab 与下方内容面板同色（视觉上接为一体），
+        # 非活跃 tab 略暗"在背后"。
         style.configure("TNotebook", background=COLOR_SIDEBAR, borderwidth=0)
-        style.configure("TNotebook.Tab", background=COLOR_SIDEBAR, foreground=COLOR_SUBTEXT,
-                        padding=(14, 7), font=(UI_FONT, 9), borderwidth=0)
+        style.configure("TNotebook.Tab",
+                        background="#d4d8dd",          # 比 sidebar 略暗 = 非活跃
+                        foreground=COLOR_SUBTEXT,
+                        padding=(14, 7),
+                        font=(UI_FONT, 9),
+                        borderwidth=0)
         style.map("TNotebook.Tab",
-                  background=[("selected", COLOR_CARD)],
+                  background=[("selected", COLOR_SIDEBAR),  # 活跃 = 内容面板色，无缝
+                              ("active", "#c8ccd1")],        # 鼠标悬停
                   foreground=[("selected", COLOR_PRIMARY)])
 
     def _init_vars(self):
