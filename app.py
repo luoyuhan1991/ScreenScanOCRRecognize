@@ -956,14 +956,17 @@ class MainGUI:
 
         handler = _QueueHandler(self.log_queue)
         handler.setLevel(logging.DEBUG)
-        handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+        queue_formatter = logging.Formatter('%(asctime)s - %(message)s')
+        queue_formatter.default_msec_format = '%s.%03d'
+        handler.setFormatter(queue_formatter)
 
         # 添加到 screen_scan logger 而非 root logger，避免日志重复
         from src.utils.logger import logger as app_logger
         app_logger.addHandler(handler)
 
     def _append_log(self, message, level='INFO'):
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # %f 输出 6 位微秒，截到 3 位毫秒，得到 "2026-05-07 10:56:27.582"，与 logger 输出对齐
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
         try:
             self.log_queue.put_nowait((f"{ts} - {message}\n", level))
         except queue.Full:

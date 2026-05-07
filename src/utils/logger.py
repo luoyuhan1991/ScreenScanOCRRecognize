@@ -9,6 +9,8 @@ def setup_logger(name='screen_scan', level=logging.INFO):
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
+        # 把默认的逗号毫秒分隔符（"...27,582"）改成点（"...27.582"），与 GUI 内 _append_log 对齐
+        formatter.default_msec_format = '%s.%03d'
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(level)
