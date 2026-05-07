@@ -13,7 +13,7 @@ ScreenScanOCRRecognize 是一个 Windows 平台的屏幕扫描 OCR 应用。核�
 ```bash
 # GUI 模式（推荐）
 python app.py
-# 或 Windows 双击 gui.bat（使用项目根 venv 启动 app.py，pythonw 隐藏控制台）
+# 或 Windows 双击 gui.bat（使用项目根 .venv 启动 app.py，pythonw 隐藏控制台）
 
 # CLI 模式
 python cli.py
@@ -26,9 +26,9 @@ pip install -r requirements.txt
 pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 ```
 
-注意：`gui.bat` 需要项目根目录已存在 `venv/` 虚拟环境。`README.md` 中提到的 `gui.py`/`main.py` 是历史名称，当前入口为 `app.py` / `cli.py`。
+注意：`gui.bat` 需要项目根目录已存在 `.venv/` 虚拟环境。`README.md` 中提到的 `gui.py`/`main.py` 是历史名称，当前入口为 `app.py` / `cli.py`。
 
-旧版（含 EasyOCR、test_gpu、buildexe 打包脚本）位于 `old_version/`，独立 `gui.bat` 通过 `..\venv\Scripts\pythonw.exe` 复用根目录虚拟环境启动旧版 `app.py`。
+旧版（含 EasyOCR、test_gpu、buildexe 打包脚本）位于 `old_version/`，独立 `gui.bat` 通过 `..\.venv\Scripts\pythonw.exe` 复用根目录虚拟环境启动旧版 `app.py`。
 
 ## 目录结构
 
@@ -55,7 +55,7 @@ ScreenScanOCRRecognize/
 │       ├── hotkey.py               # HotkeyManager（keyboard 库全局热键）
 │       └── logger.py               # logger 单例 + configure_from_config
 ├── old_version/                    # 归档：旧版 ScanService 架构（双 OCR 引擎、文件落盘、buildexe）
-│   ├── app.py / cli.py / gui.bat   # 独立入口（gui.bat 用 ..\venv 复用根虚拟环境）
+│   ├── app.py / cli.py / gui.bat   # 独立入口（gui.bat 用 ..\.venv 复用根虚拟环境）
 │   ├── requirements.txt
 │   └── src/{config,core,gui,ocr,tests,utils}/
 ├── docs/                           # 文档（GUI_DESIGN.md / PRD_COMPARISON.md / 默认关键词）
@@ -150,7 +150,7 @@ app.py / cli.py → ScanPipeline.scan_once()
 - **`old_version/src/tests/`** — `test_gpu.py` / `test_memory_optimization.py` / `test_ocr_performance.py`。
 - **`old_version/src/config/config_editor.py`** + **`gui_state.py`** — GUI 内置 YAML 编辑器与 `GUIStateManager` 窗口状态管理（新版未保留）。
 
-`old_version/src/config/config.py` 用 `Path(__file__).resolve().parents[3]` 找项目根，与主版本共用 `defaults.py` / `config/config.yaml` / `shared/`。`old_version/gui.bat` 以 `..\venv\Scripts\pythonw.exe` 复用根目录虚拟环境。
+`old_version/src/config/config.py` 用 `Path(__file__).resolve().parents[3]` 找项目根，与主版本共用 `defaults.py` / `config/config.yaml` / `shared/`。`old_version/gui.bat` 以 `..\.venv\Scripts\pythonw.exe` 复用根目录虚拟环境。
 
 匹配与提示逻辑（两版统一，定义在 `shared/`）：
 - `SubstringMatcher` 基于 Aho-Corasick 多模式子串匹配，casefold 不区分大小写。**不做任何模糊/比例匹配**——历史上的"按字符顺序匹配比例"会让短关键词（如 `034`、`da`）误判长串中分散字符的 ID。
