@@ -14,8 +14,6 @@ from tkinter import ttk
 UI_FONT = "Microsoft YaHei"
 FONT_SIZE_BASE = 9
 FONT_SIZE_TITLE = 11
-FONT_SIZE_HEADER = 13
-
 # ---------------------------------------------------------------------------
 # 背景层（外 → 内：窗口 → 侧栏 → 内容 → 卡片）
 # ---------------------------------------------------------------------------
@@ -27,6 +25,9 @@ COLOR_BG_CARD       = "#1a2235"
 COLOR_BG_CARD_HOVER = "#222b40"
 COLOR_BG_INPUT      = "#0a0f1a"
 COLOR_BG_LOG        = "#0a0f1a"
+COLOR_BG_BTN_DEFAULT       = "#222b40"   # 默认按钮 base（注：与 COLOR_BG_CARD_HOVER 同色，但语义不同）
+COLOR_BG_BTN_HOVER         = "#2a3650"   # 默认按钮 hover
+COLOR_BG_SIDEBAR_HOVER     = "#1f2538"   # Sidebar 按钮 hover
 
 # ---------------------------------------------------------------------------
 # 边框
@@ -55,6 +56,10 @@ COLOR_DANGER_HOVER   = "#ff5858"
 COLOR_DANGER_PRESS   = "#c53838"
 COLOR_SUCCESS        = "#22c55e"
 COLOR_WARNING        = "#f59e0b"
+COLOR_PRIMARY_DISABLED_BG  = "#1f4a8c"
+COLOR_PRIMARY_DISABLED_FG  = "#9bbfe2"
+COLOR_DANGER_DISABLED_BG   = "#7a2828"
+COLOR_DANGER_DISABLED_FG   = "#e8b5a8"
 
 # ---------------------------------------------------------------------------
 # 日志颜色（深底浅字）
@@ -149,10 +154,10 @@ def apply(root):
                     darkcolor=COLOR_PRIMARY)
 
     # ---- 默认 Button（深灰背景） ----
-    _btn_bg       = "#222b40"
-    _btn_hover    = "#2a3650"
-    _btn_press    = "#1a2235"
-    _btn_disabled = "#161b2a"
+    _btn_bg       = COLOR_BG_BTN_DEFAULT
+    _btn_hover    = COLOR_BG_BTN_HOVER
+    _btn_press    = COLOR_BG_CARD
+    _btn_disabled = COLOR_BG_SIDEBAR
     style.configure("TButton",
                     background=_btn_bg, foreground=COLOR_TEXT,
                     bordercolor=_btn_bg, lightcolor=_btn_bg, darkcolor=_btn_bg,
@@ -174,11 +179,11 @@ def apply(root):
                     font=(UI_FONT, FONT_SIZE_BASE, "bold"))
     for prop in ("background", "bordercolor", "lightcolor", "darkcolor"):
         style.map("Primary.TButton", **{prop: [
-            ("disabled", "#1f4a8c"),
+            ("disabled", COLOR_PRIMARY_DISABLED_BG),
             ("pressed", COLOR_PRIMARY_PRESS),
             ("active", COLOR_PRIMARY_HOVER),
         ]})
-    style.map("Primary.TButton", foreground=[("disabled", "#9bbfe2")])
+    style.map("Primary.TButton", foreground=[("disabled", COLOR_PRIMARY_DISABLED_FG)])
 
     # ---- Danger（停止扫描） ----
     style.configure("Danger.TButton",
@@ -188,11 +193,11 @@ def apply(root):
                     font=(UI_FONT, FONT_SIZE_BASE, "bold"))
     for prop in ("background", "bordercolor", "lightcolor", "darkcolor"):
         style.map("Danger.TButton", **{prop: [
-            ("disabled", "#7a2828"),
+            ("disabled", COLOR_DANGER_DISABLED_BG),
             ("pressed", COLOR_DANGER_PRESS),
             ("active", COLOR_DANGER_HOVER),
         ]})
-    style.map("Danger.TButton", foreground=[("disabled", "#e8b5a8")])
+    style.map("Danger.TButton", foreground=[("disabled", COLOR_DANGER_DISABLED_FG)])
 
     # ---- Sidebar 导航按钮（基础态 + 选中态由 Sidebar 自己刷 background） ----
     style.configure("Sidebar.TButton",
@@ -203,7 +208,7 @@ def apply(root):
                     font=(UI_FONT, FONT_SIZE_BASE))
     for prop in ("background", "bordercolor", "lightcolor", "darkcolor"):
         style.map("Sidebar.TButton", **{prop: [
-            ("active", "#1f2538"),
+            ("active", COLOR_BG_SIDEBAR_HOVER),
         ]})
     style.map("Sidebar.TButton", foreground=[("active", COLOR_TEXT)])
 
