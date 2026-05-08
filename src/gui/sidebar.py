@@ -13,7 +13,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from src.gui.theme import (
-    UI_FONT, FONT_SIZE_BASE, COLOR_BG_SIDEBAR, COLOR_TEXT_DIM,
+    UI_FONT, FONT_SIZE_BASE, COLOR_BG_WINDOW,
 )
 
 
@@ -36,8 +36,8 @@ class Sidebar(ttk.Frame):
 
     def _build(self):
         # 顶部 logo / 标题区（占位）
-        title = tk.Label(self, text="✏  屏幕扫描", bg=COLOR_BG_SIDEBAR,
-                         fg=COLOR_TEXT_DIM, font=(UI_FONT, FONT_SIZE_BASE))
+        title = ttk.Label(self, text="✏  屏幕扫描", style="Sidebar.TLabel",
+                          font=(UI_FONT, FONT_SIZE_BASE))
         title.pack(pady=(0, 16))
 
         for key, icon, label in VIEW_ITEMS:
@@ -82,9 +82,9 @@ if __name__ == "__main__":
     sb = Sidebar(root, on_select=lambda k: status.config(text=f"切到: {k}"))
     sb.pack(side="left", fill="y")
 
-    main = tk.Frame(root, bg="#0f1420")
+    main = tk.Frame(root, bg=COLOR_BG_WINDOW)
     main.pack(side="left", fill="both", expand=True)
-    status = tk.Label(main, text="点击侧栏按钮", bg="#0f1420",
+    status = tk.Label(main, text="点击侧栏按钮", bg=COLOR_BG_WINDOW,
                       fg="white", font=(UI_FONT, 12))
     status.pack(expand=True)
 
