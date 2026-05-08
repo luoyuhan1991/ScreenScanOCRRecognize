@@ -160,5 +160,4 @@ class SettingsView(BaseView):
 
     def reload_from_config(self):
         """配置外部被重置时调用（比如 StatusBar 的"重置配置"）。"""
-        # 解开 trace 防止重置过程触发 save 反向写
         self._load_settings()
