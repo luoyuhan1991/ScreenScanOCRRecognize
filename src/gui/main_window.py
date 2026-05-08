@@ -79,9 +79,6 @@ class MainWindow:
         self._build_views()
         self._switch_view("scan")
 
-        # ---- 关闭事件（Task 16 加 watchdog 清理） ----
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-
         # ---- 内存定时刷新 ----
         self._schedule_memory_update()
 
@@ -496,6 +493,10 @@ class MainWindow:
         watchdog = threading.Timer(3.0, lambda: os._exit(0))
         watchdog.daemon = True
         watchdog.start()
+
+        # 先发停止信号，让扫描线程退出当前 scan_once 后停下，
+        # 这样 pipeline.release() 才不会与正在跑的 OCR 抢 GPU 资源
+        self.stop_event.set()
 
         try:
             self.root.withdraw()
