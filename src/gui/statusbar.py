@@ -140,12 +140,14 @@ class StatusBar(ttk.Frame):
             self._btn_stop.config(state="disabled")
 
     def set_busy(self, starting):
-        """starting=True：OCR 初始化中；按钮全 disabled，状态显示初始化中。"""
+        """starting=True：进入"初始化中"态；False：恢复到"已停止"态（等同 set_running(False)）。"""
         if starting:
             self._dot.config(fg=COLOR_WARNING)
             self._lbl_status.config(text="初始化中...")
             self._btn_start.config(state="disabled")
             self._btn_stop.config(state="disabled")
+        else:
+            self.set_running(False)
 
     def set_memory(self, mb):
         if mb is None:
