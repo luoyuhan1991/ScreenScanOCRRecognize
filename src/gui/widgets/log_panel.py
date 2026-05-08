@@ -19,9 +19,8 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from src.gui.theme import (
-    UI_FONT, FONT_SIZE_BASE, FONT_SIZE_TITLE,
-    COLOR_BG_CARD, COLOR_BG_LOG, COLOR_BORDER,
-    COLOR_TEXT, COLOR_TEXT_DIM,
+    FONT_SIZE_BASE,
+    COLOR_BG_LOG, COLOR_BORDER, COLOR_TEXT,
     COLOR_INFO_LOG, COLOR_DEBUG_LOG, COLOR_WARNING_LOG, COLOR_ERROR_LOG,
 )
 
@@ -47,7 +46,7 @@ class LogPanel(ttk.Frame):
         wrap = tk.Frame(self, bg=COLOR_BORDER)
         wrap.pack(fill="both", expand=True)
         self._text = scrolledtext.ScrolledText(
-            wrap, wrap=tk.WORD, font=("Consolas", 9),
+            wrap, wrap=tk.WORD, font=("Consolas", FONT_SIZE_BASE),
             bg=COLOR_BG_LOG, fg=COLOR_TEXT,
             insertbackground=COLOR_TEXT,
             borderwidth=0, highlightthickness=0,
