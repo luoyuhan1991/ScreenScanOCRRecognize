@@ -21,9 +21,17 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(_THIS)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+import time
+
 from src.config.config import config, PROJECT_ROOT
 from src.utils.logger import logger, configure_from_config
 from src.gui import theme
+from src.pipeline.pipeline import ScanPipeline
+from src.utils.hotkey import HotkeyManager
+from shared.overlay import Overlay
+from src.gui.widgets.roi_overlay import select_roi_interactive
+from src.gui.widgets.roi_border import RoiBorder
+from src.gui.widgets.tray import setup_tray
 from src.gui.sidebar import Sidebar
 from src.gui.statusbar import StatusBar, get_memory_mb
 from src.gui.widgets.log_panel import LogPanel
@@ -54,16 +62,17 @@ class MainWindow:
         self.log_queue = queue.Queue(maxsize=1000)
         self.match_records = deque(maxlen=10)
 
-        # ---- 扫描相关（Task 16 接入实际逻辑） ----
+        # ---- 扫描相关 ----
         self.is_running = False
         self.scan_thread = None
         self.stop_event = threading.Event()
         self.roi = None
-        self.pipeline = None       # Task 16 实例化
-        self.overlay = None        # Task 16 实例化
-        self.roi_border = None     # Task 16 实例化
-        self.tray = None           # Task 16 启动
-        self.hotkey_mgr = None     # Task 16 启动
+        self.pipeline = ScanPipeline()
+        self.overlay = Overlay(parent_root=self.root, config=config, logger=logger)
+        self.roi_border = RoiBorder(self.root,
+                                     padding=config.get("scan.roi_padding"))
+        self.hotkey_mgr = HotkeyManager()
+        self.tray = None
 
         # ---- 构建 UI ----
         self._build_layout()
@@ -79,6 +88,22 @@ class MainWindow:
         # ---- 日志队列消费（Task 16 启动） ----
         self._setup_gui_logger()
         self._drain_log_queue()
+
+        # ---- 托盘 ----
+        self.tray = setup_tray(
+            self.root,
+            on_show=self._tray_show,
+            on_quit=self._tray_quit,
+            tooltip="屏幕扫描OCR识别",
+        )
+        if self.tray:
+            self.root.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
+            self.append_log("托盘图标已启用：关闭窗口将缩到托盘，右键托盘可退出", "INFO")
+        else:
+            self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # ---- 热键 ----
+        self.root.after_idle(self._register_hotkeys)
 
     # =======================================================================
     # 布局
@@ -145,10 +170,175 @@ class MainWindow:
     # =======================================================================
 
     def on_start(self):
-        self.append_log("（开始扫描）— Task 16 接入 pipeline 后生效", "INFO")
+        if self.is_running:
+            return
+
+        # 把扫描视图当前的设置存到 config，再触发 pipeline.init
+        scan_view = self._views["scan"]
+        scan_view.save_settings()
+        self.overlay.clear_session()
+        self.match_records.clear()
+        self.match_panel.refresh(self.match_records)
+
+        self.statusbar.set_busy(True)
+        self.append_log("正在初始化 OCR 引擎...", "INFO")
+
+        threading.Thread(target=self._init_and_start, daemon=True).start()
+
+    def _init_and_start(self):
+        try:
+            self.pipeline.init()
+            self.root.after(0, self._after_init_ok)
+        except Exception as e:
+            msg = str(e)
+            self.root.after(0, lambda: self._after_init_fail(msg))
+
+    def _after_init_ok(self):
+        self.append_log("OCR 初始化完成", "INFO")
+
+        # ROI
+        scan_view = self._views["scan"]
+        if scan_view.var_enable_roi.get():
+            saved = config.get("scan.roi")
+            if scan_view.var_remember_roi.get() and saved:
+                self.roi = tuple(saved)
+                self.append_log(f"使用已保存 ROI: {self.roi}", "INFO")
+                self._start_scanning()
+                return
+            self.root.iconify()
+            self.root.after(300, self._do_roi_select)
+            return
+
+        self.roi = None
+        self._start_scanning()
+
+    def _do_roi_select(self):
+        self.roi = select_roi_interactive(parent=self.root)
+        self.root.deiconify()
+        if self.roi:
+            self.append_log(f"ROI 已选择: {self.roi}", "INFO")
+            config.set("scan.roi", list(self.roi))
+            config.save()
+        else:
+            self.append_log("ROI 选择取消，使用全屏", "WARNING")
+        self._start_scanning()
+
+    def _start_scanning(self):
+        self.pipeline.set_roi(self.roi)
+        self.overlay.setup()
+
+        self.is_running = True
+        self.stop_event.clear()
+        self.scan_thread = threading.Thread(target=self._scan_loop, daemon=True)
+        self.scan_thread.start()
+
+        self.statusbar.set_running(True)
+        self.append_log("扫描已启动", "INFO")
+        self.roi_border.show(self.roi)
+
+    def _after_init_fail(self, msg):
+        self.append_log(f"初始化失败: {msg}", "ERROR")
+        messagebox.showerror("错误", f"OCR 初始化失败:\n{msg}")
+        self.statusbar.set_running(False)
 
     def on_stop(self):
-        self.append_log("（停止扫描）— Task 16 接入 pipeline 后生效", "INFO")
+        if not self.is_running:
+            return
+        self.is_running = False
+        self.stop_event.set()
+        self.roi_border.hide()
+        self.overlay.hide()
+        self.statusbar.set_running(False)
+        self.append_log("扫描已停止", "INFO")
+
+    # =======================================================================
+    # 扫描循环
+    # =======================================================================
+
+    def _scan_loop(self):
+        try:
+            scan_view = self._views["scan"]
+            while not self.stop_event.is_set():
+                interval = scan_view.var_interval.get()
+                start = time.time()
+
+                result = self.pipeline.scan_once()
+                self.root.after(0, self._on_scan_result, result)
+
+                elapsed = time.time() - start
+                wait = max(0, interval - elapsed)
+                waited = 0.0
+                while waited < wait and not self.stop_event.is_set():
+                    time.sleep(0.3)
+                    waited += 0.3
+        except Exception as e:
+            self.append_log(f"扫描异常: {e}", "ERROR")
+        finally:
+            self.is_running = False
+            self.root.after(0, self._on_scan_thread_exit)
+
+    def _on_scan_result(self, result):
+        # 1. 日志一行总结
+        if result.skipped:
+            status_txt = "跳过(无变化)"
+        else:
+            status_txt = f"{len(result.ocr_results)}行"
+        self.append_log(
+            f"OCR: {status_txt}, 匹配: {len(result.matches)}, "
+            f"耗时: {result.duration:.3f}s", "INFO"
+        )
+
+        # 2. 命中的关键词 + 写入 match_records deque
+        for m in result.matches:
+            self.append_log(f"  >>> {m['keyword']} | {m['hint']}", "WARNING")
+            self.match_records.append({
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "keyword": m["keyword"],
+                "ocr_text": m.get("ocr_text", ""),
+            })
+
+        # 3. 当前在扫描视图就刷新匹配记录面板
+        if self._current_view is self._views["scan"] and result.matches:
+            self.match_panel.refresh(self.match_records)
+
+        # 4. Overlay 浮窗（每次扫描都刷，包括 skipped 与无匹配）
+        self.overlay.update(result.ocr_results, result.matches)
+
+    def _on_scan_thread_exit(self):
+        self.roi_border.hide()
+        self.overlay.hide()
+        self.statusbar.set_running(False)
+
+    # =======================================================================
+    # 托盘 / 关闭
+    # =======================================================================
+
+    def _minimize_to_tray(self):
+        self.root.withdraw()
+
+    def _tray_show(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _tray_quit(self):
+        self._on_close()
+
+    # =======================================================================
+    # 热键
+    # =======================================================================
+
+    def _register_hotkeys(self):
+        try:
+            self.hotkey_mgr.register("ctrl+alt+1",
+                                       lambda: self.root.after(0, self.on_start),
+                                       "开始扫描")
+            self.hotkey_mgr.register("ctrl+alt+2",
+                                       lambda: self.root.after(0, self.on_stop),
+                                       "停止扫描")
+            self.append_log("热键: Ctrl+Alt+1 开始, Ctrl+Alt+2 停止", "INFO")
+        except Exception as e:
+            self.append_log(f"热键注册失败: {e}", "WARNING")
 
     def _on_toggle_sound(self, enabled):
         config.set("matching.enable_sound", enabled)
@@ -302,7 +492,29 @@ class MainWindow:
     # =======================================================================
 
     def _on_close(self):
-        self.root.destroy()
+        """看门狗式清理：3 秒后强杀，保证不卡死。"""
+        watchdog = threading.Timer(3.0, lambda: os._exit(0))
+        watchdog.daemon = True
+        watchdog.start()
+
+        try:
+            self.root.withdraw()
+        except Exception:
+            pass
+
+        for cleanup in (
+            lambda: self.roi_border.hide(),
+            lambda: self.overlay.destroy(),
+            lambda: self.tray and self.tray.stop(),
+            lambda: self.hotkey_mgr.unregister_all(),
+            lambda: self.pipeline.release(),
+        ):
+            try:
+                cleanup()
+            except Exception:
+                pass
+
+        os._exit(0)
 
 
 # ---------------------------------------------------------------------------
