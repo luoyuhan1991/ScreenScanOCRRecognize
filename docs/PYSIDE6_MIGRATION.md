@@ -4,7 +4,7 @@
 
 ## 背景与决策
 
-当前 `app.py` 使用 tkinter（含 ttk/scrolledtext）实现，约 1073 行。设计稿 `mockups/light_ui_prototype.html` 是 1982 行精致 CSS 原型（圆角、阴影、品牌色、卡片化侧栏）。三方案对比后选定 PySide6：
+当前 `app.py` 使用 tkinter（含 ttk/scrolledtext）实现，约 1073 行。设计稿 `mockups/light_ui_prototype.html` 是浅色主题高保真原型（圆角、阴影、品牌色、卡片化侧栏 + 独立设置页）。三方案对比后选定 PySide6：
 
 | 方案 | 还原度 | 改造量 | Overlay | 体积 | 选用 |
 |---|---|---|---|---|---|
@@ -12,73 +12,145 @@
 | **PySide6** | **神似（QSS≈CSS）** | **~800–1200 行** | **顺势重写更优雅** | **+60–80MB** | **是** |
 | pywebview/Flet | 神似（直接用 HTML） | ~1500 行 + 桥 | Windows 透明窗有坑 | +50–150MB |  |
 
-核心理由：PySide6 是唯一能 1:1 还原 mockup 的方案，pipeline/matcher/config/hotkey 全部不动，重构面积可控；overlay 重写是净改善（摆脱 `#010101` 魔法色，用真 alpha 通道）。
+核心理由：PySide6 是唯一能 1:1 还原 mockup 的方案，pipeline / matcher / config / hotkey 全部不动，重构面积可控；overlay 重写是净改善（摆脱 `#010101` 魔法色，用真 alpha 通道）。
+
+## 架构
+
+- **单 `QMainWindow`** + 左侧 sidebar (`QListWidget`) + 右侧 `QStackedWidget`，三页：扫描 / 设置 / 关于
+- **系统 titlebar**（不自绘 min/max/close），mockup 里独立"设置窗口"的装饰条不复用
+- **扫描页** = 配置面板（4 个 group）+ 启动按钮 + 日志区 + 状态栏
+- **设置页** = `QScrollArea` + 5 张卡（其中"热键设置"整卡 disabled + 占位）
+- **关于页** = 静态 logo / 版本 / 致谢
+- **pipeline / matcher / hotkey / config 全部复用**，overlay **算法**移植到 PySide6 重写（数据结构与音效逻辑保留，渲染层换 Qt）
 
 ## 目录结构
 
 ```
 ScreenScanOCRRecognize/
-├── app.py                    # 重写：~50 行启动入口（QApplication + 加载 qss）
-├── ui/                       # 新增：所有 PySide6 代码集中于此
+├── app.py                       # 重写：~50 行启动入口（QApplication + 加载 qss）
+├── ui/                          # 新增：所有 PySide6 代码集中于此
 │   ├── __init__.py
-│   ├── main_window.py        # MainWindow 主窗口骨架（替代 MainGUI 类）
-│   ├── panels/
+│   ├── main_window.py           # QMainWindow 装载 sidebar + stacked
+│   ├── pages/
 │   │   ├── __init__.py
-│   │   ├── scan_panel.py     # 扫描配置面板（ROI/GPU/间隔/语言/置信度）
-│   │   ├── match_panel.py    # 匹配配置面板（关键词/时长/位置/字号）
-│   │   └── log_panel.py      # 日志显示（QPlainTextEdit）
-│   ├── overlay.py            # 新版浮窗（QWidget + 真 alpha）
-│   ├── tray.py               # QSystemTrayIcon 托盘
-│   ├── log_bridge.py         # QThread + Signal 日志泵
+│   │   ├── scan_page.py         # 扫描页：装载 config_panel + log_panel + status_bar
+│   │   ├── settings_page.py     # 设置页：QScrollArea + 5 张 settings_card
+│   │   └── about_page.py        # 关于页：版本 / 作者 / 依赖致谢
+│   ├── widgets/
+│   │   ├── __init__.py
+│   │   ├── sidebar.py           # 自绘 QListWidget（icon + 文案）
+│   │   ├── config_panel.py      # 4 个 group：扫描区域 / 节奏 / OCR / 关键词匹配 + 启动按钮
+│   │   ├── log_panel.py         # QPlainTextEdit + 颜色规则（DEBUG/INFO/WARNING/ERROR）
+│   │   └── status_bar.py        # 4 字段：运行状态 / 内存 / 版本 / 引擎
+│   ├── overlay.py               # PySide6 重写浮窗（QWidget + 真 alpha）
+│   ├── tray.py                  # QSystemTrayIcon
+│   ├── log_bridge.py            # logging.Handler → Signal → log_panel
 │   └── styles/
-│       └── light.qss         # 从 mockup CSS 翻译而来
+│       └── light.qss            # 从 mockup CSS 翻译而来
 ├── shared/
-│   ├── matcher.py            # 不动
-│   └── overlay.py            # 保留（old_version 仍依赖）
-├── src/pipeline/             # 完全不动
-├── src/utils/                # 完全不动
-├── src/config/               # 完全不动
-├── defaults.py               # 不动
-└── config/config.yaml        # 不动
+│   ├── matcher.py               # 不动
+│   └── overlay.py               # 保留（old_version 仍依赖）
+├── src/pipeline/                # 完全不动
+├── src/utils/                   # 完全不动
+├── src/config/                  # 完全不动
+├── defaults.py                  # 新增 APP_VERSION 常量 + 'app' 键（minimize_to_tray / startup_mode）
+└── config/config.yaml           # 不动
 ```
 
-## 5 阶段迁移计划
+## 扫描页（主战场）
 
-每阶段独立可运行，便于独立 commit / 回滚。
+mockup 主窗口右侧 = `scan_page.py` 装载：
 
-### 阶段 1：启动骨架（0.5 天）
+| 区块 | widget | 控件 | 接 config |
+|---|---|---|---|
+| 扫描区域 | config_panel | 启用 ROI / 记住区域 / ROI 预设 select / 保存当前按钮 | `scan.enable_roi` / `scan.remember_roi` / `scan.roi_presets`（见下方注） |
+| 扫描节奏 | config_panel | 扫描间隔 slider (0.5–10s) | `scan.interval_seconds` |
+| OCR 识别 | config_panel | 语言 select / GPU 加速 toggle / 最小置信度 slider | `ocr.language` / `gpu.enabled` / `ocr.min_confidence` |
+| 关键词匹配 | config_panel | 词库文件 row（input + 浏览 + 编辑）/ 显示时长 slider | `files.banlist_file` / `matching.display_duration` |
 
-- 安装 PySide6（`pip install PySide6`）
-- 写 `app.py`：`QApplication` + 加载 `light.qss` + 显示 `MainWindow`
-- `ui/main_window.py`：空 `MainWindow`，标题栏 + 占位中央区域
-- 从 mockup `:root` 提取色板，写第一版 `ui/styles/light.qss`
+**ROI 预设 select 行为约定**：
+- 下拉项 = `scan.roi_presets`（dict）的 keys
+- 选中后把对应 value（坐标）写到 `scan.roi`（与现版 `app.py` 一致）
+- **不持久化"当前选中的预设名"**——重启后下拉回到默认项；这与现版行为一致，避免新增 `scan.current_preset` 键
+| Action | config_panel | 开始扫描 / 停止扫描 大按钮 + 热键提示 | — |
+| 日志 | log_panel | QPlainTextEdit + 着色 + 清空按钮 | — |
+| 状态 | status_bar | 4 字段，详见下文 | — |
 
-**验证**：能打开窗口，背景/前景/边框颜色与 mockup 一致。
+## 设置页（5 卡）
 
-### 阶段 2：三个 panel 翻译（2–3 天）
+| 卡 | 控件 | config 键 | 状态 |
+|---|---|---|---|
+| 常规设置 | 最小化到托盘 toggle | `app.minimize_to_tray`（**新键，默认 true**） | active |
+| | 启动后默认状态 select（暂停扫描 / 自动开始） | `app.startup_mode`（**新键，string 枚举 `'paused'` / `'auto'`，默认 `'paused'`**） | active |
+| 扫描配置 | 帧差阈值 slider (0–20) | `scan.diff_threshold` | active |
+| 浮窗提示 | 字号 slider (10–48) | `matching.font_size` | active |
+| | 位置 select（居中 / 顶部 / 底部） | `matching.position` | active |
+| | 音效提醒 toggle | `matching.enable_sound` | active |
+| 热键设置 | 开始/停止热键编辑 + 恢复默认 | — | **disabled + "敬请期待"**（见注） |
+| 配置管理 | 重置全部配置 button | — | active |
 
-按 mockup 翻译三个面板（CSS→QSS 占大头）：
+**关于"热键设置"卡 disabled**：mockup 该卡视觉是正常可交互的（kbd 显示当前热键 + 编辑笔图标 + "恢复默认"链接 + "保存默认"按钮），并未标 disabled。本方案为节省工时**主动收窄 scope**——热键编辑涉及全局钩子重注册、冲突检测、按键序列录制等边界情况，单独迭代更稳。
 
-- `ui/panels/scan_panel.py` — ROI 选择 / GPU 开关 / 扫描间隔 / OCR 语言 / 置信度阈值
-- `ui/panels/match_panel.py` — 关键词文件 / 显示时长 / 位置 / 字号 / 声音开关
-- `ui/panels/log_panel.py` — `QPlainTextEdit` + 颜色规则（DEBUG/INFO/WARNING/ERROR）
+**重置配置实现**（前置：`config.load()` 必须已调用过——`MainWindow.__init__` 阶段已满足）：
 
-控件双向绑定 `config` 单例（`config.get(...)` 初始化、`valueChanged` 写回 `config.set(...)` + `config.save()`）。
+```python
+import copy
+from defaults import DEFAULT_CONFIG
 
-**验证**：所有控件可见可交互，改动能持久化到 `config/config.yaml`。
+def reset_to_defaults():
+    for key, value in DEFAULT_CONFIG.items():
+        config.set(key, copy.deepcopy(value))
+    config.save()
+    main_window.reload_all_widgets_from_config()  # 触发各 widget 从 config 重读
+```
 
-### 阶段 3：pipeline 接入（1 天）
+走 `config.set()` 而非直写 `_data`，保留封装边界；`set()` 内部已经处理点号路径展开。
 
-- 把 `ScanPipeline` 实例化挪到 `MainWindow.__init__`
-- 用 `QThread` 跑扫描循环（替代当前 `threading.Thread + Event`）
-- 用 `Signal` 把 `ScanResult` 传回主线程更新 UI
-- 日志走新的 `ui/log_bridge.py`：`logging.Handler` → `Signal` → `LogPanel`
+**新增 config 键**（写入 `defaults.py` 的 `DEFAULT_CONFIG`）：
 
-**验证**：能完整跑 OCR 流程，启动/停止按钮正常，日志着色与现版一致。
+```python
+'app': {
+    'minimize_to_tray': True,
+    'startup_mode': 'paused',  # 'paused' | 'auto'
+}
+```
 
-### 阶段 4：Overlay 重写（1 天）
+旧 yaml 缺这两个键时由 `Config` 深合并兜底。
 
-新建 `ui/overlay.py`，用 `QWidget` 实现：
+## 状态栏
+
+```
+左：● 运行状态：[运行中 / 已暂停 / 初始化中]   内存占用：XX.X MB
+右：版本：1.0.0  |  引擎：PaddleOCR 3.x
+```
+
+| 字段 | 来源 |
+|---|---|
+| 运行状态 | `MainWindow.is_running` 状态推断（pipeline 启停时刷新） |
+| 内存占用 | 搬现版 `_get_memory_mb()`，`QTimer(5000)` 每 5s 刷新 |
+| 版本 | `defaults.APP_VERSION = "1.0.0"`（新增常量） |
+| 引擎 | OCR 初始化前显示"引擎：加载中"；OCR 初始化完成后由 `OCRStage` 通过 Signal 暴露版本号给状态栏，格式 `f"PaddleOCR {paddle_version.split('.')[0]}.x"`。`paddleocr` 模块只在 `OCRStage` 内 import，UI 层不直接 import |
+
+## 关于页
+
+```
+[扫描图标] ScreenScanOCRRecognize
+版本 1.0.0  ·  © 2026 yhluo9
+
+GitHub: https://github.com/yhluo9/ScreenScanOCRRecognize
+
+第三方依赖
+  · PaddleOCR (Apache-2.0)
+  · pyahocorasick (BSD-3)
+  · PySide6 (LGPL-3)        ← 动态链接合规
+  · keyboard / mss
+```
+
+`QVBoxLayout` 居中对齐，超链接 `QLabel.setOpenExternalLinks(True)`。
+
+## Overlay 重写
+
+新建 `ui/overlay.py`，用 `QWidget` 实现，移植 `shared/overlay.py` 的所有数据逻辑（左列累计匹配、右列本次 OCR、新匹配音效）：
 
 ```python
 self.setAttribute(Qt.WA_TranslucentBackground)        # 真 alpha 通道
@@ -90,19 +162,72 @@ self.setWindowFlags(
 )
 ```
 
-- 移植 `shared/overlay.py` 的布局算法（左列累计匹配、右列本次 OCR）
+- 用 `paintEvent` + `QPainter` 绘制带阴影文字
+- `QTimer.singleShot(duration*1000, self.hide)` 替代 tkinter `after`
+- C 大三和弦 WAV 不变，`winsound.PlaySound(SND_MEMORY)` 直接复用
+
+`shared/overlay.py` 文件**保留**（`old_version/` 仍依赖），新 overlay 独立放在 `ui/overlay.py`。
+
+## 5 阶段迁移计划
+
+每阶段独立可运行，便于独立 commit / 回滚。
+
+### 阶段 1：启动骨架（0.5 天）
+
+- 安装 PySide6（`pip install PySide6`）
+- 写 `app.py`：`QApplication` + 加载 `light.qss` + 显示 `MainWindow`
+- `ui/main_window.py`：sidebar (`QListWidget`) + `QStackedWidget` 装三个空白页
+- 从 mockup `:root` 提取色板，写第一版 `ui/styles/light.qss`
+
+**验证**：能打开窗口，sidebar 能切换三页，背景/前景/边框颜色与 mockup 一致。
+
+### 阶段 2：扫描页（2 天，主战场）
+
+- `ui/widgets/config_panel.py` — 4 个 group + 启动按钮（CSS→QSS 占大头）
+- `ui/widgets/log_panel.py` — `QPlainTextEdit` + 颜色规则
+- `ui/widgets/status_bar.py` — 4 字段 + `QTimer` 刷新内存
+- 控件双向绑定 `config` 单例（`config.get(...)` 初始化、`valueChanged` 写回 `config.set(...)` + `config.save()`）
+- 在 `defaults.py` 加 `APP_VERSION` 与 `app.*` 默认键
+
+**验证**：所有控件可见可交互，改动能持久化到 `config/config.yaml`，状态栏内存数字 5s 刷新一次。
+
+### 阶段 3a：pipeline 接入（1 天）
+
+- 把 `ScanPipeline` 实例化挪到 `MainWindow.__init__`
+- 用 `QThread` 跑扫描循环（替代当前 `threading.Thread + Event`）
+- 用 `Signal` 把 `ScanResult` 传回主线程更新 UI 与状态栏
+- 日志走新的 `ui/log_bridge.py`：`logging.Handler` → `Signal` → `LogPanel`
+- 老 overlay (`shared/overlay.py`) 暂时不动——验证它在 Qt 主循环里能否正常出现一次（不能则提前进入阶段 4）
+- `OCRStage` 加 `version_ready` Signal，初始化完成时把 PaddleOCR 版本号推给状态栏
+
+**验证**：能完整跑 OCR 流程，启动/停止按钮正常；状态栏能显示运行状态、内存、引擎版本；日志着色与现版一致。
+
+### 阶段 3b：设置页 + 关于页（1 天）
+
+- `ui/pages/settings_page.py` — 5 张卡（其中"热键设置"整卡 `setEnabled(False)` + 灰底"敬请期待"）
+- `ui/pages/about_page.py` — 静态布局
+- "重置配置"按钮走 `for k,v in DEFAULT_CONFIG.items(): config.set(...)` + `save()` + 触发 `reload_all_widgets_from_config()`，弹 `QMessageBox` 二次确认
+- 接入"启动后默认状态"——启动时根据 `app.startup_mode` 决定是否自动调用扫描启动
+
+**验证**：切到设置页改字号/帧差阈值能立即生效；重置配置能把 yaml 还原到出厂值并刷新 UI；改 `startup_mode` 重启后行为变化。
+
+### 阶段 4：Overlay 重写（1 天）
+
+- `ui/overlay.py` 用 `QWidget` + `WA_TranslucentBackground` 实现真 alpha
+- 移植 `shared/overlay.py` 的左右双列布局算法（`paintEvent`）
 - 移植 C 大三和弦音效（`winsound` 不变）
-- 用 `paintEvent` + `QPainter` 绘制文字（带阴影）
-- `QTimer.singleShot(duration*1000, self.hide)` 替代 tkinter 的 `after`
+- `MainWindow` 切换持有的 overlay 实例为新版
 
 **验证**：视觉/行为与原 overlay 一致；关键词颜色不再受 `#010101` 限制。
 
 ### 阶段 5：托盘 + 收尾（0.5 天）
 
 - `QSystemTrayIcon` 替代 `pystray`（少一个依赖）
+- 接入"最小化到托盘"配置项
 - `HotkeyManager`（`keyboard` 库）完全不动，只把回调改成发 `Signal`
 - 更新 `gui.bat` 启动入口
 - 删除 `app.py` 旧 tkinter 代码
+- pyproject / requirements.txt 加 `PySide6`，删 `pystray` / `Pillow`（如果只用于托盘图标）
 
 **验证**：全功能等价于现 `app.py`，可替换 `gui.bat` 入口；冷启动 + 内存占用记录基线。
 
@@ -116,6 +241,7 @@ self.setWindowFlags(
 | 日志吞吐过大 | `QPlainTextEdit.setMaximumBlockCount(10000)` 自动截首 |
 | 阶段 1–3 期间主分支可能有改动 | 在 `feature/light_ui` 之上新开 `feature/pyside6` 分支，每阶段 rebase 一次 |
 | LGPL 合规 | PySide6 用 LGPL，确保动态链接（不要 PyInstaller `--onefile` 静态打包 Qt 库） |
+| 重置配置误触 | `QMessageBox` 二次确认 + 提示"不可撤销" |
 
 ## 性能影响（已评估）
 
@@ -125,16 +251,20 @@ UI 框架不影响 OCR/截图主路径（pipeline 在工作线程跑）。PySide
 
 - `old_version/` 全部不动，仍用 tkinter
 - `shared/overlay.py` 保留（`old_version/` 仍依赖），新 overlay 独立放在 `ui/overlay.py`
-- `defaults.py` / `src/config/` / `src/pipeline/` / `src/utils/` / `shared/matcher.py` 全部复用，重构 0 行
+- `defaults.py` / `src/config/` / `src/pipeline/` / `src/utils/` / `shared/matcher.py` 全部复用，仅 `defaults.py` 新增 `APP_VERSION` 与 `app.*` 默认键
 - 暗色主题（如需，后续基于同一 `light.qss` 派生 `dark.qss`）
+- 热键编辑（mockup 卡留位但 disabled，后续单独迭代）
+- OCR 图像反色（mockup 已删除，主版本无此功能）
+- CLI（`cli.py`）不动
 
 ## 工作量估算
 
 | 阶段 | 工时 |
 |---|---|
 | 1. 启动骨架 | 0.5 天 |
-| 2. 三个 panel | 2–3 天 |
-| 3. pipeline 接入 | 1 天 |
+| 2. 扫描页 | 2 天 |
+| 3a. pipeline 接入 | 1 天 |
+| 3b. 设置页 + 关于页 | 1 天 |
 | 4. Overlay 重写 | 1 天 |
 | 5. 托盘 + 收尾 | 0.5 天 |
-| **合计** | **5–6 天** |
+| **合计** | **6 天** |
