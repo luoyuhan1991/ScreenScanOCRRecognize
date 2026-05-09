@@ -189,17 +189,24 @@ class Overlay:
             ]
 
         # ===== 右栏：命中行（红）+ 最多 10 条无命中行（绿）+ 摘要（灰） =====
+        # 命中行按"命中的最小关键词字母序"排，与左栏 sorted 顺序一致 → 行对齐
         right_rows = []
+        matched_with_keys = []  # [(sort_key, text), ...]
         unmatched_lines = []
         for r in ocr_results:
             text = r.get('text', '') if isinstance(r, dict) else ''
             if not text:
                 continue
             text_cf = text.casefold()
-            if any(kw.casefold() in text_cf for kw in matched_keywords):
-                right_rows.append((text, '#ff3333'))
+            hit = [kw for kw in matched_keywords if kw.casefold() in text_cf]
+            if hit:
+                matched_with_keys.append((min(kw.casefold() for kw in hit), text))
             else:
                 unmatched_lines.append(text)
+
+        matched_with_keys.sort(key=lambda x: x[0])
+        for _, text in matched_with_keys:
+            right_rows.append((text, '#ff3333'))
 
         for text in unmatched_lines[:10]:
             right_rows.append((text, '#00ff00'))
