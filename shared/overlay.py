@@ -168,19 +168,18 @@ class Overlay:
         shadow_offset = max(1, effective_size // 30)
         matched_keywords = {m['keyword'] for m in matches if m.get('keyword')}
 
+        # 屏幕封顶：浮窗最大不超过这些值，超出部分由 Canvas 自动裁剪（不再算字符截断）
+        screen_w = self._window.winfo_screenwidth()
+        screen_h = self._window.winfo_screenheight()
+        kw_cap = int(screen_w * 0.20)
+        hint_cap = int(screen_w * 0.20)
+        ocr_cap = int(screen_w * 0.40)
+        height_cap = int(screen_h * 0.50)
+
+        # ===== 左栏：累计匹配 =====
         left_rows = sorted(
             self._session_matches.items(), key=lambda kv: kv[0].casefold(),
         )
-        right_rows = []
-        for r in ocr_results:
-            text = r.get('text', '') if isinstance(r, dict) else ''
-            if not text:
-                continue
-            text_cf = text.casefold()
-            is_matched = any(kw.casefold() in text_cf for kw in matched_keywords)
-            color = '#ff3333' if is_matched else '#00ff00'
-            right_rows.append((text, color))
-
         if not left_rows:
             left_rows_fmt = [('暂无匹配', '', '#aaaaaa', '#aaaaaa')]
         else:
@@ -189,11 +188,46 @@ class Overlay:
                 for kw, hint in left_rows
             ]
 
+        # ===== 右栏：命中行（红）+ 最多 10 条无命中行（绿）+ 摘要（灰） =====
+        right_rows = []
+        unmatched_lines = []
+        for r in ocr_results:
+            text = r.get('text', '') if isinstance(r, dict) else ''
+            if not text:
+                continue
+            text_cf = text.casefold()
+            if any(kw.casefold() in text_cf for kw in matched_keywords):
+                right_rows.append((text, '#ff3333'))
+            else:
+                unmatched_lines.append(text)
+
+        for text in unmatched_lines[:10]:
+            right_rows.append((text, '#00ff00'))
+        extra = len(unmatched_lines) - 10
+        if extra > 0:
+            right_rows.append((f'+ {extra} 行未显示', '#888888'))
         if not right_rows:
-            right_rows = [('暂无识别结果', '#aaaaaa')]
+            right_rows.append(('暂无识别结果', '#aaaaaa'))
+
+        # ===== 行数封顶：超过则截断并加「+ N 已隐藏」尾行 =====
+        max_visible_rows = max(1, (height_cap - 8) // line_height)
+        natural_rows = max(len(left_rows_fmt), len(right_rows))
+        if natural_rows > max_visible_rows:
+            visible_n = max(1, max_visible_rows - 1)
+            if len(left_rows_fmt) > visible_n:
+                hidden_l = len(left_rows_fmt) - visible_n
+                left_rows_fmt = left_rows_fmt[:visible_n]
+                left_rows_fmt.append(
+                    (f'+ {hidden_l} 项已隐藏', '', '#888888', '#888888')
+                )
+            if len(right_rows) > visible_n:
+                hidden_r = len(right_rows) - visible_n
+                right_rows = right_rows[:visible_n]
+                right_rows.append((f'+ {hidden_r} 行已隐藏', '#888888'))
 
         total_rows = max(len(left_rows_fmt), len(right_rows))
 
+        # ===== 列宽：取自然最大宽度，但封顶到 cap；超出 Canvas 边界由窗口裁剪 =====
         def measure(text):
             try:
                 if font_obj is not None:
@@ -202,9 +236,9 @@ class Overlay:
             except Exception:
                 return len(text) * int(effective_size * 0.6)
 
-        max_kw_w = max((measure(r[0]) for r in left_rows_fmt), default=0)
-        max_hint_w = max((measure(r[1]) for r in left_rows_fmt), default=0)
-        max_ocr_w = max((measure(r[0]) for r in right_rows), default=0)
+        max_kw_w = min(max((measure(r[0]) for r in left_rows_fmt), default=0), kw_cap)
+        max_hint_w = min(max((measure(r[1]) for r in left_rows_fmt), default=0), hint_cap)
+        max_ocr_w = min(max((measure(r[0]) for r in right_rows), default=0), ocr_cap)
 
         kw_hint_gap = 12
         mid_gap = 28
@@ -215,10 +249,11 @@ class Overlay:
         )
         total_height = total_rows * line_height + 8
 
-        screen_w = self._window.winfo_screenwidth()
-        screen_h = self._window.winfo_screenheight()
-        position = self._cfg('matching.position', 'center')
+        # 兜底：理论上 cap + 行截断已经控制住了，这里再夹一次
+        total_width = min(total_width, int(screen_w * 0.95))
+        total_height = min(total_height, int(screen_h * 0.95))
 
+        position = self._cfg('matching.position', 'center')
         if position == 'top':
             wx = (screen_w - total_width) // 2
             wy = 50
