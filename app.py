@@ -361,22 +361,22 @@ class MainGUI:
         self._combo_preset.bind('<<ComboboxSelected>>', self._on_preset_selected)
         ttk.Button(row, text="保存当前", command=self._save_roi_preset).pack(side=tk.LEFT, padx=2)
 
-        # GPU
+        # 扫描间隔
         ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-        self._var_gpu = tk.BooleanVar(value=True)
-        ttk.Checkbutton(row, text="GPU加速", variable=self._var_gpu).pack(side=tk.LEFT, padx=5)
+        ttk.Label(row, text="间隔:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_interval = tk.DoubleVar(value=2.0)
+        ttk.Scale(row, from_=0.5, to=10, orient=tk.HORIZONTAL,
+                  variable=self._var_interval, length=130,
+                  command=self._on_interval_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row, width=5, textvariable=self._var_interval).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row, text="秒").pack(side=tk.LEFT, padx=(0, 5))
 
-        # 第二行：扫描间隔 + 帧差阈值
+        # 第二行：GPU加速 + 帧差阈值
         row2 = ttk.Frame(fr)
         row2.pack(fill=tk.X, pady=2)
 
-        ttk.Label(row2, text="间隔:").pack(side=tk.LEFT, padx=(0, 4))
-        self._var_interval = tk.DoubleVar(value=2.0)
-        ttk.Scale(row2, from_=0.5, to=10, orient=tk.HORIZONTAL,
-                  variable=self._var_interval, length=130,
-                  command=self._on_interval_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row2, width=5, textvariable=self._var_interval).pack(side=tk.LEFT, padx=2)
-        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 8))
+        self._var_gpu = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row2, text="GPU加速", variable=self._var_gpu).pack(side=tk.LEFT, padx=5)
 
         ttk.Separator(row2, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
 

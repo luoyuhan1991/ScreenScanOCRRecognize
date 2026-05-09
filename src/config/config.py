@@ -8,7 +8,7 @@ import yaml
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG, diff_from_defaults  # noqa: E402
+from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG  # noqa: E402
 
 
 def _deep_merge(default, override):
@@ -73,11 +73,8 @@ class Config:
         d[keys[-1]] = value
 
     def save(self):
-        # 只 dump 与 DEFAULT_CONFIG 的差异，让 yaml 保持「最小覆盖集」形态：
-        # 文件短、人类注释存活时间长、未来调默认值不会被旧用户的全量覆盖固化。
-        minimal = diff_from_defaults(self._data, DEFAULT_CONFIG)
         with open(self._path, 'w', encoding='utf-8') as f:
-            yaml.dump(minimal, f, allow_unicode=True, default_flow_style=False)
+            yaml.dump(self._data, f, allow_unicode=True, default_flow_style=False)
 
 
 config = Config()

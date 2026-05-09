@@ -1,16 +1,11 @@
 """
 项目级默认值（唯一来源）。
 
-设计：
-- 这里的值是"默认值"——代码层面唯一来源。
-- 用户在 GUI 里改动后，新值会被写入 config/config.yaml；加载时 yaml 优先、defaults 兜底。
-- yaml 里没有的项 = 用户未改动 = 用 defaults。
-- 新旧两版 Config 类都从这里取默认，保持实现逻辑统一。
+- 这里是代码层面唯一的默认来源；DEFAULT_CONFIG 缺的键，运行时 config.get() 也拿不到。
+- 启动时 Config.load() 把 yaml 深合并到 defaults 之上：yaml 优先，defaults 兜底。
+- Config.save() 写全量字典回 yaml（含默认值），所以 yaml 文件会被覆盖、手写注释不保留。
 
-新增配置项的步骤：
-1. 在 DEFAULT_CONFIG 加默认值
-2. 业务代码用 config.get('key.path') 读取（无需传 fallback）
-3. GUI 改动会自动 config.set + config.save
+新增配置项：在 DEFAULT_CONFIG 加默认值；业务代码用 config.get('key.path')；GUI 改动走 config.set + config.save。
 
 行尾注释里若标注"旧版/新版"：
 - 旧版 = old_version/，依赖 ScanService + 双 OCR 引擎 + 文件落盘
@@ -19,33 +14,6 @@
 """
 
 DEFAULT_BANLIST_FILE = 'C:/Users/Administrator/Desktop/banlist.txt'
-
-
-def diff_from_defaults(data, defaults=None):
-    """递归剔除等于默认的项，返回最小化字典——只含用户实际改动。
-
-    Config.save() 用它把 in-memory dict 收敛回 yaml；这样 yaml 一直保持「只记差异」，
-    避免一次保存就把整份默认值灌满文件，也让人手写的注释不会被全量覆盖时挤掉。
-
-    特殊情况：
-    - 不在 defaults 里的键 = 用户/未来扩展的自定义项，整段保留；不要"清理"未知键。
-    - 子树差异为空 dict 时整段省略，避免写出 `scan: {}` 这类空节。
-    """
-    if defaults is None:
-        defaults = DEFAULT_CONFIG
-    if not isinstance(data, dict) or not isinstance(defaults, dict):
-        return data
-    result = {}
-    for k, v in data.items():
-        if k not in defaults:
-            result[k] = v
-        elif isinstance(v, dict) and isinstance(defaults[k], dict):
-            sub = diff_from_defaults(v, defaults[k])
-            if sub:
-                result[k] = sub
-        elif v != defaults[k]:
-            result[k] = v
-    return result
 
 DEFAULT_CONFIG = {
     'scan': {
