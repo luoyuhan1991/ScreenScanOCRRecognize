@@ -1,0 +1,1888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>屏幕扫描 OCR 识别系统 · 浅色主题原型</title>
+<style>
+  :root {
+    --bg: #F1F5FA;
+    --canvas: #FFFFFF;
+    --sidebar-bg: #F4F7FB;
+    --sidebar-active: #E6EFFD;
+    --primary: #2F6FEB;
+    --primary-hover: #2A60D1;
+    --primary-soft: #DCE8FB;
+    --danger: #E5484D;
+    --danger-hover: #CC3B40;
+    --success: #2BA471;
+    --warning: #E0A82E;
+    --border: #E3E8EF;
+    --border-strong: #CBD5E1;
+    --text: #1E293B;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --log-bg: #F7F9FC;
+    --log-time: #6B7280;
+    --log-info: #16A34A;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06);
+    --shadow-lg: 0 12px 36px rgba(15, 23, 42, 0.1);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1640px;
+    margin: 0 auto;
+    padding: 48px 32px 96px;
+  }
+
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 32px;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+    margin: 40px 0 14px;
+    padding-left: 4px;
+    border-left: 3px solid var(--primary);
+    padding-left: 10px;
+  }
+
+  /* ============ Window chrome ============ */
+  .window {
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+  /* Default SVG inside windows: line-style with currentColor */
+  .window svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .window svg [fill="currentColor"] { fill: currentColor; }
+  .window svg [fill="white"] { fill: white; }
+  .titlebar {
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #FAFBFD, #F4F6FA);
+    user-select: none;
+  }
+  .titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .titlebar-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .titlebar-btn {
+    width: 28px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .titlebar-btn:hover { background: rgba(0,0,0,0.05); }
+  .titlebar-btn.close:hover { background: var(--danger); color: white; }
+
+  /* ============ Main interface ============ */
+  .main-window { width: 100%; max-width: 1180px; }
+
+  .app-body {
+    display: grid;
+    grid-template-columns: 64px 1fr 1.05fr;
+    height: 660px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    padding: 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 6px;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-item:hover { background: rgba(47, 111, 235, 0.06); }
+  .nav-item.active {
+    background: var(--primary);
+    color: white;
+    font-weight: 500;
+    box-shadow: 0 4px 10px rgba(47, 111, 235, 0.25);
+  }
+  .nav-item.active svg { stroke: white; }
+  .nav-item.active svg [fill]:not([fill="none"]) { fill: white; }
+
+  /* Center panel */
+  .config-panel {
+    padding: 20px 22px;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+  .group { margin-bottom: 22px; }
+  .group-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .group-title::before {
+    content: '';
+    width: 3px;
+    height: 13px;
+    background: var(--primary);
+    border-radius: 2px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .row-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .label-inline {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 84px;
+  }
+
+  /* Checkbox */
+  .checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .checkbox-box {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border-strong);
+    background: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .checkbox-box.checked {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+  .checkbox-box.checked svg { display: block; stroke: white; }
+  .checkbox-box svg { display: none; }
+
+  /* Select / Dropdown */
+  .select {
+    height: 32px;
+    background: white;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0 30px 0 10px;
+    font-size: 13px;
+    color: var(--text);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    min-width: 140px;
+  }
+  .select::after {
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: translateY(-70%) rotate(45deg);
+  }
+
+  /* Input */
+  .input {
+    height: 32px;
+    background: white;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text);
+    width: 100%;
+    font-family: inherit;
+  }
+  .input:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+
+  /* Button */
+  .btn {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: white;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: #F8FAFC; border-color: var(--text-muted); }
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    font-weight: 500;
+  }
+  .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .btn-danger {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+    font-weight: 500;
+  }
+  .btn-danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
+  .btn-large {
+    flex: 1;
+    height: 52px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0;
+  }
+  .btn-large .hotkey-hint {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.85;
+    text-align: center;
+  }
+  .btn-large .btn-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+  }
+
+  /* Slider */
+  .slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .slider {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 999px;
+    position: relative;
+  }
+  .slider-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 999px;
+  }
+  .slider-thumb {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: var(--shadow-sm);
+  }
+  .slider-value {
+    width: 56px;
+    height: 28px;
+    background: white;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    line-height: 28px;
+    font-size: 12px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .input-with-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .input-with-actions .input { flex: 1; font-family: 'Consolas', 'Source Code Pro', monospace; font-size: 12px; }
+
+  .action-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  /* Log panel */
+  .log-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--canvas);
+  }
+  .log-header {
+    height: 40px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .log-clear {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .log-clear:hover { background: #F1F5F9; }
+  .log-body {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--log-bg);
+    font-family: 'Consolas', 'Source Code Pro', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-y: auto;
+  }
+  .log-line {
+    display: flex;
+    gap: 8px;
+    color: var(--text);
+  }
+  .log-time { color: var(--log-time); }
+  .log-msg-info { color: var(--log-info); }
+  .log-msg-warn { color: var(--warning); }
+  .log-msg-err { color: var(--danger); }
+  .log-arrow { color: var(--text-muted); }
+
+  /* Status bar */
+  .status-bar {
+    height: 40px;
+    border-top: 1px solid var(--border);
+    background: linear-gradient(180deg, #FAFBFD, #F4F6FA);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .status-left, .status-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(43, 164, 113, 0.18);
+    margin-right: 6px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .status-divider {
+    width: 1px;
+    height: 14px;
+    background: var(--border);
+  }
+  .status-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .status-action:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+
+  /* ============ Settings window ============ */
+  .settings-window { width: 440px; }
+  .settings-body {
+    height: 660px;
+    display: flex;
+    flex-direction: column;
+  }
+  .settings-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .settings-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .settings-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .settings-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .settings-row + .settings-row {
+    border-top: 1px solid var(--border);
+  }
+
+  /* Switch */
+  .switch {
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: #CBD5E1;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    transition: transform 0.2s;
+  }
+  .switch.on { background: var(--primary); }
+  .switch.on::after { transform: translateX(16px); }
+  .switch.disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Hotkey */
+  .hotkey-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kbd {
+    display: inline-block;
+    padding: 2px 8px;
+    background: white;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-family: 'Consolas', 'Source Code Pro', monospace;
+    font-size: 12px;
+    color: var(--text);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.05);
+    line-height: 1.4;
+  }
+  .hotkey-edit {
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .hotkey-edit:hover { background: #F1F5F9; color: var(--text); }
+
+  .reset-link {
+    color: var(--primary);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* ============ Top layout: two windows side by side ============ */
+  .preview-row {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+  }
+
+  /* ============ Component library ============ */
+  .components {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+  }
+  .component-card {
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+  }
+  .component-card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .component-card .caption {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    text-align: center;
+  }
+  .component-card .demo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .component-card .demo-row:last-child { margin-bottom: 0; }
+  .demo-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* sidebar nav demo */
+  .nav-demo {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 6px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    min-width: 48px;
+  }
+  .nav-demo.active { background: var(--sidebar-active); color: var(--primary); }
+  .nav-demo.active svg { stroke: var(--primary); }
+
+  /* Window controls demo */
+  .winctrl-demo {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #FAFBFD, #F4F6FA);
+  }
+  .winctrl-demo .titlebar-btn { width: 36px; height: 28px; border-radius: 0; }
+
+  /* Status indicator demo */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: #F1F5F9;
+    color: var(--text);
+  }
+  .status-pill .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .dot-running { background: var(--success); box-shadow: 0 0 0 3px rgba(43,164,113,0.18); }
+  .dot-paused { background: var(--warning); box-shadow: 0 0 0 3px rgba(224,168,46,0.18); }
+  .dot-stopped { background: var(--danger); box-shadow: 0 0 0 3px rgba(229,72,77,0.18); }
+
+  /* Slider demo */
+  .slider-demo {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 999px;
+    position: relative;
+    margin: 14px 0 6px;
+  }
+  .slider-demo .slider-fill {
+    position: absolute;
+    height: 100%;
+    background: var(--primary);
+    border-radius: 999px;
+  }
+  .slider-demo .slider-thumb {
+    position: absolute;
+    top: 50%;
+  }
+  .slider-demo.disabled .slider-fill { background: var(--text-muted); }
+  .slider-demo.disabled .slider-thumb { border-color: var(--text-muted); opacity: 0.7; }
+  .slider-demo.hover .slider-thumb {
+    box-shadow: 0 0 0 6px rgba(47, 111, 235, 0.15), var(--shadow-sm);
+  }
+  .progress-demo {
+    width: 100%;
+    height: 6px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 14px 0 6px;
+    position: relative;
+  }
+  .progress-demo .fill {
+    height: 100%;
+    background: var(--primary);
+    width: 60%;
+    border-radius: 999px;
+  }
+
+  /* Number input */
+  .number-input {
+    display: inline-flex;
+    align-items: stretch;
+    height: 32px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: white;
+  }
+  .number-input input {
+    width: 64px;
+    border: none;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text);
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .number-input input:focus { outline: none; }
+  .number-input .steppers {
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+  }
+  .number-input .step {
+    flex: 1;
+    width: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 9px;
+    background: #FAFBFD;
+  }
+  .number-input .step:hover { background: #F1F5F9; color: var(--text); }
+  .number-input .step + .step { border-top: 1px solid var(--border); }
+
+  /* Dropdown demo */
+  .dropdown-open {
+    position: relative;
+    display: inline-block;
+  }
+  .dropdown-menu {
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    width: 140px;
+    overflow: hidden;
+  }
+  .dropdown-menu .item {
+    padding: 7px 12px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .dropdown-menu .item.active { background: var(--sidebar-active); color: var(--primary); font-weight: 500; }
+  .dropdown-menu .item:hover { background: #F4F6FA; }
+
+  /* Icon button row */
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: white;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover {
+    background: var(--sidebar-active);
+    color: var(--primary);
+    border-color: var(--primary-soft);
+  }
+
+  /* App icon demo */
+  .app-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #4F8EF7, #2F6FEB);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 10px rgba(47, 111, 235, 0.25);
+  }
+
+  /* Inline icon utility */
+  .icon { width: 16px; height: 16px; stroke-width: 2; stroke: currentColor; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-sm { width: 14px; height: 14px; }
+  .icon-lg { width: 20px; height: 20px; }
+  .icon-xl { width: 24px; height: 24px; }
+
+  /* Browse button next to file input */
+  .file-row { display: flex; gap: 6px; }
+  .file-row .input { flex: 1; }
+  .btn-sm {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: white;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .btn-sm:hover { background: #F8FAFC; }
+
+  /* ===== Components grid v2 ===== */
+  .components { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; }
+  .span-3 { grid-column: span 3; }
+  .span-4 { grid-column: span 4; }
+  .span-5 { grid-column: span 5; }
+  .span-6 { grid-column: span 6; }
+  .span-8 { grid-column: span 8; }
+  .span-12 { grid-column: span 12; }
+
+  /* Icon grid (functional icons) — flat, borderless, like the cutout */
+  .icon-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 18px 10px;
+  }
+  .icon-grid.cols-7 { grid-template-columns: repeat(7, 1fr); }
+  .icon-grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
+  .icon-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .icon-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .icon-cell .ic {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748B;
+    transition: color 0.15s;
+  }
+  .icon-cell:hover .ic { color: var(--primary); }
+  .icon-cell .ic-app {
+    color: var(--primary);
+  }
+  .icon-cell .ic-active {
+    background: var(--primary);
+    border-radius: 10px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(47, 111, 235, 0.3);
+  }
+  .icon-cell .ic-success {
+    background: var(--success);
+    border-radius: 50%;
+    color: white;
+    width: 32px;
+    height: 32px;
+  }
+  .icon-cell .ic-danger {
+    background: var(--danger);
+    border-radius: 50%;
+    color: white;
+    width: 32px;
+    height: 32px;
+  }
+  .icon-cell .lbl { font-size: 11px; color: var(--text-secondary); }
+  .icon-cell.active .lbl { color: var(--primary); font-weight: 500; }
+  .icon-cell .ic svg {
+    width: 22px;
+    height: 22px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .icon-cell .ic svg [fill="currentColor"] { fill: currentColor; }
+  .icon-cell .ic-success svg, .icon-cell .ic-danger svg { width: 20px; height: 20px; }
+  .icon-cell .ic-app svg { width: 24px; height: 24px; }
+  /* play/stop should be filled */
+  .icon-cell .ic.is-filled svg { fill: currentColor; stroke: currentColor; }
+
+  /* Status indicator pills */
+  .status-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .status-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .status-cell .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .dot-running { background: var(--success); box-shadow: 0 0 0 3px rgba(43,164,113,0.18); }
+  .dot-scanning { background: var(--primary); box-shadow: 0 0 0 3px rgba(47,111,235,0.2); }
+  .dot-warn { background: var(--warning); box-shadow: 0 0 0 3px rgba(224,168,46,0.2); }
+  .dot-error { background: var(--danger); box-shadow: 0 0 0 3px rgba(229,72,77,0.18); }
+  .dot-stopped { background: #94A3B8; box-shadow: 0 0 0 3px rgba(148,163,184,0.2); }
+
+  /* Buttons matrix */
+  .btn-matrix {
+    display: grid;
+    grid-template-columns: 70px repeat(4, 1fr);
+    gap: 12px 14px;
+    align-items: center;
+  }
+  .btn-matrix .col-header { font-size: 12px; color: var(--text-muted); text-align: center; }
+  .btn-matrix .row-label { font-size: 12px; color: var(--text-secondary); }
+  .btn-matrix .btn-large {
+    height: 48px;
+    flex: none;
+  }
+  .btn-large.disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-large.hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .btn-large.active { background: #1F50C5; border-color: #1F50C5; box-shadow: inset 0 2px 6px rgba(0,0,0,0.15); }
+  .btn-large.danger-hover { background: var(--danger-hover); border-color: var(--danger-hover); }
+  .btn-large.danger-active { background: #B53236; border-color: #B53236; box-shadow: inset 0 2px 6px rgba(0,0,0,0.15); }
+
+  .btn-secondary-cell { height: 32px; padding: 0 14px; font-size: 12px; border: 1px solid var(--border-strong); background: white; border-radius: var(--radius-sm); color: var(--text); display: inline-flex; align-items: center; gap: 4px; }
+  .btn-secondary-cell.hover { background: #F1F6FE; border-color: var(--primary-soft); color: var(--primary); }
+  .btn-secondary-cell.active { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+  .btn-secondary-cell.disabled { opacity: 0.4; }
+
+  /* Tabs */
+  .tabs {
+    display: inline-flex;
+    background: #F1F5F9;
+    padding: 4px;
+    border-radius: 8px;
+    gap: 2px;
+  }
+  .tabs .tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .tabs .tab.active {
+    background: white;
+    color: var(--primary);
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+  }
+  .tabs .tab.hover { background: rgba(255,255,255,0.6); color: var(--text); }
+  .tabs.disabled { opacity: 0.4; pointer-events: none; }
+
+  /* Radio */
+  .radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .radio-circle {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong);
+    background: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .radio-circle.checked { border-color: var(--primary); }
+  .radio-circle.checked::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+  .radio.disabled, .checkbox.disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Field column for forms */
+  .field-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .field {
+    display: grid;
+    grid-template-columns: 50px 1fr;
+    align-items: center;
+    gap: 10px;
+  }
+  .field .field-label { font-size: 12px; color: var(--text-secondary); }
+  .input.focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .input.disabled, .select.disabled { background: #F1F5F9; color: var(--text-muted); cursor: not-allowed; }
+
+  /* Slider list */
+  .slider-list { display: flex; flex-direction: column; gap: 14px; }
+  .slider-row {
+    display: grid;
+    grid-template-columns: 50px 1fr 56px;
+    gap: 12px;
+    align-items: center;
+  }
+  .slider-row .lbl { font-size: 12px; color: var(--text-secondary); }
+  .slider-row .slider-thumb.pressed { box-shadow: 0 0 0 8px rgba(47,111,235,0.2), var(--shadow-sm); transform: translate(-50%, -50%) scale(1.1); }
+
+  /* Progress list */
+  .progress-list { display: flex; flex-direction: column; gap: 14px; }
+  .progress-row {
+    display: grid;
+    grid-template-columns: 1fr 50px;
+    gap: 12px;
+    align-items: center;
+  }
+  .progress-track {
+    height: 8px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-track .fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 999px;
+  }
+  .progress-row .pct { font-size: 12px; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .badge-success { background: rgba(43,164,113,0.12); color: var(--success); }
+  .badge-info { background: var(--primary-soft); color: var(--primary); }
+  .badge-warn { background: rgba(224,168,46,0.15); color: #B98212; }
+  .badge-error { background: rgba(229,72,77,0.12); color: var(--danger); }
+  .badge-neutral { background: #E2E8F0; color: #475569; }
+
+  .num-badge {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: white;
+    border: 1.5px solid var(--primary);
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .file-size-tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .file-size-tag.s-sm { background: rgba(43,164,113,0.12); color: var(--success); }
+  .file-size-tag.s-md { background: rgba(224,168,46,0.15); color: #B98212; }
+  .file-size-tag.s-lg { background: #EDE9FE; color: #7C3AED; }
+
+  /* Table rows */
+  .row-table {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .row-cell {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text);
+    background: white;
+    border-bottom: 1px solid var(--border);
+  }
+  .row-cell:last-child { border-bottom: none; }
+  .row-cell.hover { background: #F7FAFE; }
+  .row-cell.selected { background: var(--primary-soft); color: var(--primary); font-weight: 500; }
+  .row-cell.disabled { opacity: 0.45; }
+  .row-cell .checkbox-box { margin-right: 4px; }
+
+  /* List items */
+  .list-items {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .list-item:last-child { border-bottom: none; }
+  .list-item .time { font-family: 'Consolas', monospace; color: var(--text-muted); font-size: 12px; }
+  .list-item .text { flex: 1; color: var(--text); }
+  .list-item .arrow { color: var(--text-muted); }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 0;
+  }
+  .divider-dashed {
+    height: 0;
+    border-top: 1px dashed var(--border);
+    margin: 8px 0;
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .breadcrumb .crumb { color: var(--text-secondary); cursor: pointer; }
+  .breadcrumb .crumb:hover { color: var(--primary); }
+  .breadcrumb .crumb.current { color: var(--text); font-weight: 500; cursor: default; }
+  .breadcrumb .sep { color: var(--text-muted); }
+
+  /* Alerts */
+  .alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    border: 1px solid;
+  }
+  .alert-success { background: rgba(43,164,113,0.08); border-color: rgba(43,164,113,0.3); color: var(--success); }
+  .alert-warn { background: rgba(224,168,46,0.1); border-color: rgba(224,168,46,0.3); color: #B98212; }
+  .alert-error { background: rgba(229,72,77,0.08); border-color: rgba(229,72,77,0.3); color: var(--danger); }
+  .alert-info { background: var(--primary-soft); border-color: rgba(47,111,235,0.25); color: var(--primary); }
+
+  /* Tooltip */
+  .tooltip {
+    display: inline-block;
+    padding: 6px 12px;
+    background: #1E293B;
+    color: white;
+    border-radius: 6px;
+    font-size: 12px;
+    position: relative;
+  }
+  .tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 24px;
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid #1E293B;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1 class="page-title">屏幕扫描 OCR 识别系统 — 浅色主题原型</h1>
+  <p class="page-subtitle">单文件 HTML 高保真原型，包含主界面、设置页、组件库三部分。可在浏览器内任意缩放查看细节。</p>
+
+  <!-- ============ Top: Main interface + Settings panel ============ -->
+  <div class="section-label">① 主界面 + 设置面板</div>
+  <div class="preview-row">
+
+    <!-- ===== Main window ===== -->
+    <div class="window main-window">
+      <!-- Title bar -->
+      <div class="titlebar">
+        <div class="titlebar-left">
+          <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M14 4 4 14l4 4 10-10z" fill="#2F6FEB" stroke="#2F6FEB"/></svg>
+          屏幕扫描 OCR 识别系统
+        </div>
+        <div class="titlebar-right">
+          <div class="titlebar-btn" title="最小化">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </div>
+          <div class="titlebar-btn" title="最大化">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+          </div>
+          <div class="titlebar-btn close" title="关闭">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- App body: sidebar + config + log -->
+      <div class="app-body">
+
+        <!-- Sidebar -->
+        <nav class="sidebar">
+          <div class="nav-item active">
+            <svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+            扫描
+          </div>
+          <div class="nav-item">
+            <svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+            设置
+          </div>
+          <div class="nav-item">
+            <svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            关于
+          </div>
+        </nav>
+
+        <!-- Config panel -->
+        <main class="config-panel">
+
+          <!-- 扫描区域 -->
+          <div class="group">
+            <div class="group-title">扫描区域</div>
+            <div class="row">
+              <label class="checkbox">
+                <span class="checkbox-box checked"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg></span>
+                启用 ROI
+              </label>
+              <label class="checkbox">
+                <span class="checkbox-box checked"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg></span>
+                记住区域
+              </label>
+            </div>
+            <label class="label">ROI 预设</label>
+            <div class="row" style="gap:8px;">
+              <div class="select" style="flex:1; min-width:0;">4:3</div>
+              <button class="btn">保存当前</button>
+            </div>
+          </div>
+
+          <!-- 扫描节奏 -->
+          <div class="group">
+            <div class="group-title">扫描节奏</div>
+            <label class="label">扫描间隔（秒）</label>
+            <div class="slider-wrap">
+              <div class="slider">
+                <div class="slider-fill" style="width:30%"></div>
+                <div class="slider-thumb" style="left:30%"></div>
+              </div>
+              <div class="slider-value">3.0</div>
+            </div>
+          </div>
+
+          <!-- OCR 识别 -->
+          <div class="group">
+            <div class="group-title">OCR 识别</div>
+            <div class="row" style="gap:14px; flex-wrap:wrap;">
+              <div class="row-inline">
+                <span class="label-inline" style="min-width:auto;">语言</span>
+                <div class="select" style="min-width:120px;">ch (中文)</div>
+              </div>
+              <label class="checkbox">
+                <span class="checkbox-box checked"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg></span>
+                GPU 加速
+              </label>
+            </div>
+            <label class="label" style="margin-top:10px;">最小置信度</label>
+            <div class="slider-wrap">
+              <div class="slider">
+                <div class="slider-fill" style="width:30%"></div>
+                <div class="slider-thumb" style="left:30%"></div>
+              </div>
+              <div class="slider-value">0.3</div>
+            </div>
+          </div>
+
+          <!-- 关键词匹配 -->
+          <div class="group">
+            <div class="group-title">关键词匹配</div>
+            <label class="label">词库文件</label>
+            <div class="file-row">
+              <input class="input" type="text" value="C:\Users\yhluo9\Downloads\keywords.txt" readonly>
+              <button class="btn-sm">浏览…</button>
+              <button class="btn-sm">编辑</button>
+            </div>
+            <label class="label" style="margin-top:10px;">匹配后显示时长（秒）</label>
+            <div class="slider-wrap">
+              <div class="slider">
+                <div class="slider-fill" style="width:30%"></div>
+                <div class="slider-thumb" style="left:30%"></div>
+              </div>
+              <div class="slider-value">3.0</div>
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="action-row">
+            <button class="btn btn-primary btn-large disabled">
+              <div class="btn-row">
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="white" stroke="white"/></svg>
+                开始扫描
+              </div>
+              <span class="hotkey-hint">Ctrl + Alt + 1</span>
+            </button>
+            <button class="btn btn-danger btn-large">
+              <div class="btn-row">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="white" stroke="white"/></svg>
+                停止扫描
+              </div>
+              <span class="hotkey-hint">Ctrl + Alt + 2</span>
+            </button>
+          </div>
+        </main>
+
+        <!-- Log panel -->
+        <section class="log-panel">
+          <div class="log-header">
+            <div class="log-title">运行日志</div>
+            <button class="log-clear">
+              <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.4 14a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 6"/></svg>
+              清空日志
+            </button>
+          </div>
+          <div class="log-body">
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:47.031</span><span class="log-arrow">-</span><span class="log-msg-info">托盘图标已启用：关闭窗口将缩进托盘，右键托盘可退出</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:47.609</span><span class="log-arrow">-</span><span class="log-msg-info">热键已注册：Ctrl+Alt+1 开始扫描</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:47.610</span><span class="log-arrow">-</span><span class="log-msg-info">热键已注册：Ctrl+Alt+2 停止扫描</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:47.610</span><span class="log-arrow">-</span><span class="log-msg-info">热键：Ctrl+Alt+1 开始，Ctrl+Alt+2 停止</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:51.224</span><span class="log-arrow">-</span><span style="color:var(--text);">扫描循环已启动（间隔 3.0s · ROI 启用）</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:54.288</span><span class="log-arrow">-</span><span style="color:var(--text);">第 1 帧 OCR：识别 12 段文本，命中 0 条关键词</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:03:57.341</span><span class="log-arrow">-</span><span style="color:var(--text);">第 2 帧 帧差跳过（MSE=2.1 &lt; 5.0）</span></div>
+            <div class="log-line"><span class="log-time">2026-05-07 18:04:00.418</span><span class="log-arrow">-</span><span class="log-msg-warn">第 3 帧 命中关键词："error" → 提示词："请检查日志"</span></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div class="status-left">
+          <span><span class="status-dot"></span>运行状态：<strong style="color:var(--text); font-weight:500;">运行中</strong></span>
+          <span>内存占用：<strong style="color:var(--text); font-weight:500;">9.7 MB</strong></span>
+        </div>
+        <div class="status-right">
+          <span>版本：1.0.0</span>
+          <span class="status-divider"></span>
+          <span>引擎：PaddleOCR 3.x</span>
+          <span class="status-divider"></span>
+          <span class="status-action">
+            <svg class="icon-sm" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>
+            声音提醒
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Settings window ===== -->
+    <div class="window settings-window">
+      <div class="titlebar">
+        <div class="titlebar-left">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          设置
+        </div>
+        <div class="titlebar-right">
+          <div class="titlebar-btn"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+          <div class="titlebar-btn"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></div>
+          <div class="titlebar-btn close"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></div>
+        </div>
+      </div>
+
+      <div class="settings-body">
+        <div class="settings-content">
+          <!-- 常规设置 -->
+          <div class="settings-card">
+            <div class="settings-card-title">常规设置</div>
+            <div class="settings-row">
+              <span>开机启动</span>
+              <span class="switch"></span>
+            </div>
+            <div class="settings-row">
+              <span>开机时自动启动程序</span>
+              <span class="switch"></span>
+            </div>
+            <div class="settings-row">
+              <span>最小化到托盘</span>
+              <span class="switch on"></span>
+            </div>
+            <div class="settings-row">
+              <span>关闭主窗口时最小化到托盘</span>
+              <span class="switch on"></span>
+            </div>
+            <div class="settings-row">
+              <span>启动后默认状态</span>
+              <div class="select">暂停扫描</div>
+            </div>
+          </div>
+
+          <!-- 热键设置 -->
+          <div class="settings-card">
+            <div class="settings-card-title">热键设置</div>
+            <div class="settings-row">
+              <span>开始/暂停扫描</span>
+              <div class="hotkey-display">
+                <span class="kbd">Ctrl + Alt + 1</span>
+                <span class="hotkey-edit"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span>停止扫描</span>
+              <div class="hotkey-display">
+                <span class="kbd">Ctrl + Alt + 2</span>
+                <span class="hotkey-edit"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="reset-link">恢复默认热键</span>
+              <button class="btn-sm">保存默认</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Bottom: Component library ============ -->
+  <div class="section-label">② 组件库（切图）</div>
+
+  <div class="components">
+
+    <!-- ========== 应用图标 ========== -->
+    <div class="component-card span-4">
+      <h3>应用图标</h3>
+      <div class="icon-grid cols-5">
+        <div class="icon-cell">
+          <span class="ic ic-app is-filled"><svg viewBox="0 0 24 24"><path d="M14 4 4 14l4 4 10-10z"/></svg></span>
+          <span class="lbl">应用图标</span>
+        </div>
+        <div class="icon-cell active">
+          <span class="ic ic-active"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+          <span class="lbl">首页(选中)</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg></span>
+          <span class="lbl">扫描</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
+          <span class="lbl">设置</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/></svg></span>
+          <span class="lbl">热键</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+          <span class="lbl">记录</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+          <span class="lbl">关于</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+          <span class="lbl">信息</span>
+        </div>
+        <div class="icon-cell">
+          <span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg></span>
+          <span class="lbl">配置管理</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 功能图标 ========== -->
+    <div class="component-card span-5">
+      <h3>功能图标</h3>
+      <div class="icon-grid">
+        <div class="icon-cell"><span class="ic is-filled"><svg viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg></span><span class="lbl">开始</span></div>
+        <div class="icon-cell"><span class="ic is-filled"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></span><span class="lbl">停止</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.4 14a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 6"/></svg></span><span class="lbl">清空</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="lbl">打开</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span><span class="lbl">文件</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></svg></span><span class="lbl">编辑</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span><span class="lbl">保存</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="lbl">复制</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="lbl">搜索</span></div>
+
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></span><span class="lbl">声音开启</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg></span><span class="lbl">静音</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></span><span class="lbl">音量</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="lbl">提醒</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><span class="lbl">最近扫描</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span><span class="lbl">扫描次数</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="4"/><line x1="15" y1="2" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="22"/><line x1="15" y1="20" x2="15" y2="22"/><line x1="20" y1="9" x2="22" y2="9"/><line x1="20" y1="15" x2="22" y2="15"/><line x1="2" y1="9" x2="4" y2="9"/><line x1="2" y1="15" x2="4" y2="15"/></svg></span><span class="lbl">内存占用</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="lbl">显示</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span><span class="lbl">隐藏</span></div>
+
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></span><span class="lbl">上</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></span><span class="lbl">下</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span><span class="lbl">左</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span><span class="lbl">右</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span><span class="lbl">刷新</span></div>
+        <div class="icon-cell"><span class="ic ic-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 8"/></svg></span><span class="lbl">成功</span></div>
+        <div class="icon-cell"><span class="ic ic-danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><line x1="17" y1="7" x2="7" y2="17"/></svg></span><span class="lbl">关闭</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></span><span class="lbl">最小化</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></span><span class="lbl">最大化</span></div>
+      </div>
+    </div>
+
+    <!-- ========== 窗口控制 + 更多图标 ========== -->
+    <div class="component-card span-3">
+      <h3>窗口控制</h3>
+      <div class="icon-grid cols-4" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg></span><span class="lbl">最小化</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></span><span class="lbl">最大化</span></div>
+        <div class="icon-cell"><span class="ic" style="color:var(--danger);"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></span><span class="lbl">关闭</span></div>
+      </div>
+      <div class="divider-dashed" style="margin:14px 0;"></div>
+      <h3 style="margin-top:0;">更多图标</h3>
+      <div class="icon-grid cols-5">
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></span><span class="lbl">置顶</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="2" y1="2" x2="22" y2="22"/><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h11"/></svg></span><span class="lbl">取消置顶</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span><span class="lbl">打开位置</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 14"/></svg></span><span class="lbl">历史</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></span><span class="lbl">筛选</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span><span class="lbl">选项</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="lbl">帮助</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><span class="lbl">导出</span></div>
+        <div class="icon-cell"><span class="ic"><svg class="icon-lg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="lbl">导入</span></div>
+      </div>
+    </div>
+
+    <!-- ========== 状态指示 ========== -->
+    <div class="component-card span-12">
+      <h3>状态指示</h3>
+      <div class="status-list">
+        <span class="status-cell"><span class="dot dot-running"></span>运行中</span>
+        <span class="status-cell"><span class="dot dot-scanning"></span>扫描中</span>
+        <span class="status-cell"><span class="dot dot-warn"></span>警告</span>
+        <span class="status-cell"><span class="dot dot-error"></span>错误</span>
+        <span class="status-cell"><span class="dot dot-stopped"></span>已停止</span>
+      </div>
+    </div>
+
+    <!-- ========== 主要按钮（4 状态） ========== -->
+    <div class="component-card span-12">
+      <h3>主要按钮</h3>
+      <div class="btn-matrix">
+        <div></div>
+        <div class="col-header">默认</div>
+        <div class="col-header">悬停</div>
+        <div class="col-header">按下</div>
+        <div class="col-header">禁用</div>
+
+        <!-- 主按钮 row -->
+        <div class="row-label">主按钮</div>
+        <button class="btn btn-primary btn-large">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="white" stroke="white"/></svg>开始扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 1</span>
+        </button>
+        <button class="btn btn-primary btn-large hover">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="white" stroke="white"/></svg>开始扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 1</span>
+        </button>
+        <button class="btn btn-primary btn-large active">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="white" stroke="white"/></svg>开始扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 1</span>
+        </button>
+        <button class="btn btn-primary btn-large disabled">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="white" stroke="white"/></svg>开始扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 1</span>
+        </button>
+
+        <!-- 危险按钮 row -->
+        <div class="row-label">危险按钮</div>
+        <button class="btn btn-danger btn-large">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="white" stroke="white"/></svg>停止扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 2</span>
+        </button>
+        <button class="btn btn-danger btn-large danger-hover">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="white" stroke="white"/></svg>停止扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 2</span>
+        </button>
+        <button class="btn btn-danger btn-large danger-active">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="white" stroke="white"/></svg>停止扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 2</span>
+        </button>
+        <button class="btn btn-danger btn-large disabled">
+          <div class="btn-row"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="white" stroke="white"/></svg>停止扫描</div>
+          <span class="hotkey-hint">Ctrl + Alt + 2</span>
+        </button>
+
+        <!-- 次要按钮 row -->
+        <div class="row-label">次要按钮</div>
+        <button class="btn-secondary-cell">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.4 14a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 6"/></svg>
+          清空日志
+        </button>
+        <button class="btn-secondary-cell hover">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.4 14a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 6"/></svg>
+          清空日志
+        </button>
+        <button class="btn-secondary-cell active">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.4 14a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 6"/></svg>
+          清空日志
+        </button>
+        <button class="btn-secondary-cell disabled">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.4 14a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 6"/></svg>
+          清空日志
+        </button>
+
+        <!-- 通用按钮 row -->
+        <div class="row-label">通用按钮</div>
+        <button class="btn-secondary-cell">保存当前</button>
+        <button class="btn-secondary-cell hover">保存当前</button>
+        <button class="btn-secondary-cell active">保存当前</button>
+        <button class="btn-secondary-cell disabled">保存当前</button>
+      </div>
+    </div>
+
+    <!-- ========== 标签页 ========== -->
+    <div class="component-card span-3">
+      <h3>标签页</h3>
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:6px;">默认状态</div>
+          <div class="tabs">
+            <span class="tab active">常用配置</span>
+            <span class="tab">高级设置</span>
+          </div>
+        </div>
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:6px;">悬停状态</div>
+          <div class="tabs">
+            <span class="tab">常用配置</span>
+            <span class="tab hover active">高级设置</span>
+          </div>
+        </div>
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:6px;">禁用状态</div>
+          <div class="tabs disabled">
+            <span class="tab active">常用配置</span>
+            <span class="tab">高级设置</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 开关 & 复选框 & 单选框 ========== -->
+    <div class="component-card span-5">
+      <h3>开关 &amp; 复选框 &amp; 单选框</h3>
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:18px;">
+        <!-- Switch col -->
+        <div class="field-col">
+          <div class="caption" style="text-align:left;">开关</div>
+          <div class="row-inline" style="gap:10px;"><span class="switch on"></span><span style="font-size:13px;">开启</span></div>
+          <div class="row-inline" style="gap:10px;"><span class="switch"></span><span style="font-size:13px;">关闭</span></div>
+          <div class="row-inline" style="gap:10px;"><span class="switch disabled"></span><span style="font-size:13px; color:var(--text-muted);">禁用</span></div>
+        </div>
+        <!-- Checkbox col -->
+        <div class="field-col">
+          <div class="caption" style="text-align:left;">复选框</div>
+          <label class="checkbox"><span class="checkbox-box checked"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg></span>选中</label>
+          <label class="checkbox"><span class="checkbox-box"></span>未选中</label>
+          <label class="checkbox disabled"><span class="checkbox-box checked"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.5"><polyline points="3 8 7 12 13 4"/></svg></span>禁用选中</label>
+          <label class="checkbox disabled"><span class="checkbox-box"></span>禁用未选中</label>
+        </div>
+        <!-- Radio col -->
+        <div class="field-col">
+          <div class="caption" style="text-align:left;">单选框</div>
+          <label class="radio"><span class="radio-circle checked"></span>选中</label>
+          <label class="radio"><span class="radio-circle"></span>未选中</label>
+          <label class="radio disabled"><span class="radio-circle checked"></span>禁用选中</label>
+          <label class="radio disabled"><span class="radio-circle"></span>禁用未选中</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 输入框 & 下拉框 ========== -->
+    <div class="component-card span-4">
+      <h3>输入框 &amp; 下拉框</h3>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+        <div class="field-col">
+          <div class="caption" style="text-align:left;">输入框</div>
+          <div class="field"><span class="field-label">默认</span><input class="input" placeholder="请输入内容"></div>
+          <div class="field"><span class="field-label">聚焦</span><input class="input focus" placeholder="请输入内容"></div>
+          <div class="field"><span class="field-label">禁用</span><input class="input disabled" placeholder="请输入内容" disabled></div>
+        </div>
+        <div class="field-col">
+          <div class="caption" style="text-align:left;">下拉框</div>
+          <div class="field"><span class="field-label">默认</span><div class="select" style="width:100%;">4:3</div></div>
+          <div class="field" style="align-items:flex-start;"><span class="field-label" style="margin-top:8px;">展开</span>
+            <div style="position:relative;">
+              <div class="select" style="width:100%;">4:3</div>
+              <div class="dropdown-menu" style="margin-top:4px; width:100%;">
+                <div class="item">3:2</div>
+                <div class="item active">4:3</div>
+                <div class="item">16:9</div>
+              </div>
+            </div>
+          </div>
+          <div class="field"><span class="field-label">禁用</span><div class="select disabled" style="width:100%;">4:3</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 滑块 & 进度条 ========== -->
+    <div class="component-card span-8">
+      <h3>滑块 &amp; 进度条</h3>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">滑块</div>
+          <div class="slider-list">
+            <div class="slider-row"><span class="lbl">默认</span>
+              <div class="slider"><div class="slider-fill" style="width:30%"></div><div class="slider-thumb" style="left:30%"></div></div>
+              <div class="slider-value">3.0</div>
+            </div>
+            <div class="slider-row"><span class="lbl">悬停</span>
+              <div class="slider"><div class="slider-fill" style="width:30%"></div><div class="slider-thumb" style="left:30%; box-shadow:0 0 0 6px rgba(47,111,235,0.15), var(--shadow-sm);"></div></div>
+              <div class="slider-value">3.0</div>
+            </div>
+            <div class="slider-row"><span class="lbl">按下</span>
+              <div class="slider"><div class="slider-fill" style="width:30%"></div><div class="slider-thumb pressed" style="left:30%"></div></div>
+              <div class="slider-value">3.0</div>
+            </div>
+            <div class="slider-row"><span class="lbl">禁用</span>
+              <div class="slider"><div class="slider-fill" style="width:30%; background:var(--text-muted);"></div><div class="slider-thumb" style="left:30%; border-color:var(--text-muted); opacity:0.7;"></div></div>
+              <div class="slider-value" style="color:var(--text-muted);">3.0</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">进度条</div>
+          <div class="progress-list">
+            <div class="progress-row"><div class="progress-track"><div class="fill" style="width:0%"></div></div><span class="pct">0%</span></div>
+            <div class="progress-row"><div class="progress-track"><div class="fill" style="width:25%"></div></div><span class="pct">25%</span></div>
+            <div class="progress-row"><div class="progress-track"><div class="fill" style="width:50%"></div></div><span class="pct">50%</span></div>
+            <div class="progress-row"><div class="progress-track"><div class="fill" style="width:75%"></div></div><span class="pct">75%</span></div>
+            <div class="progress-row"><div class="progress-track"><div class="fill" style="width:100%"></div></div><span class="pct">100%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 徽章 & 计数 ========== -->
+    <div class="component-card span-4">
+      <h3>徽章 &amp; 计数</h3>
+      <div class="caption" style="text-align:left; margin-bottom:8px;">状态徽章</div>
+      <div class="demo-row">
+        <span class="badge badge-success">运行中</span>
+        <span class="badge badge-info">扫描中</span>
+        <span class="badge badge-warn">警告</span>
+        <span class="badge badge-error">错误</span>
+        <span class="badge badge-neutral">已停止</span>
+      </div>
+      <div class="caption" style="text-align:left; margin:14px 0 8px;">数字徽章</div>
+      <div class="demo-row">
+        <span class="num-badge">1</span>
+        <span class="num-badge">12</span>
+        <span class="num-badge">99+</span>
+      </div>
+      <div class="caption" style="text-align:left; margin:14px 0 8px;">文件大小</div>
+      <div class="demo-row">
+        <span class="file-size-tag s-sm">12.4 MB</span>
+        <span class="file-size-tag s-md">83.1 MB</span>
+        <span class="file-size-tag s-lg">1.2 GB</span>
+      </div>
+    </div>
+
+    <!-- ========== 表格 & 列表元素 ========== -->
+    <div class="component-card span-12">
+      <h3>表格 &amp; 列表元素</h3>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">表格行状态</div>
+          <div class="row-table">
+            <div class="row-cell"><span class="checkbox-box"></span>正常行</div>
+            <div class="row-cell hover"><span class="checkbox-box"></span>悬停行</div>
+            <div class="row-cell selected"><span class="checkbox-box checked"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.5" stroke="white"><polyline points="3 8 7 12 13 4"/></svg></span>选中行</div>
+            <div class="row-cell disabled"><span class="checkbox-box"></span>禁用行</div>
+          </div>
+        </div>
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">列表项</div>
+          <div class="list-items">
+            <div class="list-item"><span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--success);"></span><span class="time">18:03:47</span><span class="text">成功匹配关键词</span></div>
+            <div class="list-item"><span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--warning);"></span><span class="time">18:03:42</span><span class="text">警告：内存不足</span></div>
+            <div class="list-item"><span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--danger);"></span><span class="time">18:03:41</span><span class="text">扫描已停止</span></div>
+            <div class="list-item"><span class="dot" style="width:8px; height:8px; border-radius:50%; background:#94A3B8;"></span><span class="time">18:03:40</span><span class="text">系统启动</span><span class="arrow"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 分割线 & 其他控件 ========== -->
+    <div class="component-card span-12">
+      <h3>分割线 &amp; 其他控件</h3>
+      <div style="display:grid; grid-template-columns: 1.4fr 1.4fr 2fr 1.2fr; gap:24px; align-items:flex-start;">
+        <!-- 分割线 -->
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">分割线</div>
+          <div class="divider"></div>
+          <div class="divider-dashed"></div>
+        </div>
+        <!-- 面包屑 -->
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">面包屑</div>
+          <div class="breadcrumb">
+            <span class="crumb">首页</span>
+            <span class="sep">›</span>
+            <span class="crumb">扫描配置</span>
+            <span class="sep">›</span>
+            <span class="crumb current">高级设置</span>
+          </div>
+        </div>
+        <!-- 提示框 -->
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">提示框</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <div class="alert alert-success"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg>操作成功</div>
+            <div class="alert alert-warn"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>注意事项</div>
+            <div class="alert alert-error"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>操作失败</div>
+            <div class="alert alert-info"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>温馨提示</div>
+          </div>
+        </div>
+        <!-- 工具提示 -->
+        <div>
+          <div class="caption" style="text-align:left; margin-bottom:8px;">工具提示</div>
+          <div class="tooltip">这是一段提示文字</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
