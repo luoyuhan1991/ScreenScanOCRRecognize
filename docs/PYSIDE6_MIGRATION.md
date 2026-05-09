@@ -21,7 +21,7 @@
 - **扫描页** = 配置面板（4 个 group）+ 启动按钮 + 日志区 + 状态栏
 - **设置页** = `QScrollArea` + 5 张卡（其中"热键设置"整卡 disabled + 占位）
 - **关于页** = 静态 logo / 版本 / 致谢
-- **pipeline / matcher / hotkey / config 全部复用**，overlay **算法**移植到 PySide6 重写（数据结构与音效逻辑保留，渲染层换 Qt）
+- **pipeline / matcher / hotkey / config 大体复用**：`capture.py` 加 1 行读 `enable_roi`；`defaults.py` 新增/重命名若干键；其他文件不动。`OCRStage` 保持纯 Python 无 Qt 依赖（CLI 也用）。Overlay 算法移植到 PySide6 重写（数据结构与音效逻辑保留，渲染层换 Qt）
 
 ## 目录结构
 
@@ -68,10 +68,21 @@ mockup 主窗口右侧 = `scan_page.py` 装载：
 | OCR 识别 | config_panel | 语言 select / GPU 加速 toggle / 最小置信度 slider | `ocr.language` / `gpu.enabled` / `ocr.min_confidence` |
 | 关键词匹配 | config_panel | 词库文件 row（input + 浏览 + 编辑）/ 显示时长 slider | `files.banlist_file` / `matching.display_duration` |
 
+**ROI 键语义重构**（行为变更，迁移期一次性完成）：
+
+现版 `scan.roi` 一键双义（None=禁用，coords=启用）。本次拆为：
+
+- **`scan.roi_rect`**（重命名自 `scan.roi`）—— 只承载坐标 `[x1,y1,x2,y2]`，可为 None
+- **`scan.enable_roi`**（升级为真开关）—— `capture.py` 加一行 `if not config.get('scan.enable_roi'): roi = None`，`enable_roi` 成为 ROI 是否生效的唯一权威
+
+GUI 行为：toggle 只控 `enable_roi`；选预设 / 保存预设只动 `roi_rect` / `roi_presets`；两键完全解耦。
+
+**重命名波及面**（迁移期同步改）：`defaults.py` / `app.py`（被新版替换，只需改完前确保旧 tk 版能跑）/ `cli.py` / `old_version/app.py` / `old_version/cli.py` / `old_version/src/core/scan_service.py`，约 10 处文本替换。
+
 **ROI 预设 select 行为约定**：
-- 下拉项 = `scan.roi_presets`（dict）的 keys
-- 选中后把对应 value（坐标）写到 `scan.roi`（与现版 `app.py` 一致）
-- **不持久化"当前选中的预设名"**——重启后下拉回到默认项；这与现版行为一致，避免新增 `scan.current_preset` 键
+- 下拉项 = `scan.roi_presets`（dict）的 keys；defaults 内置 `'4+2': [1170, 256, 1880, 843]`
+- 选中后把对应 value 写到 `scan.roi_rect`
+- **不持久化"当前选中的预设名"**——重启后下拉回到默认项；避免新增 `scan.current_preset` 键
 | Action | config_panel | 开始扫描 / 停止扫描 大按钮 + 热键提示 | — |
 | 日志 | log_panel | QPlainTextEdit + 着色 + 清空按钮 | — |
 | 状态 | status_bar | 4 字段，详见下文 | — |
@@ -98,13 +109,14 @@ import copy
 from defaults import DEFAULT_CONFIG
 
 def reset_to_defaults():
-    for key, value in DEFAULT_CONFIG.items():
-        config.set(key, copy.deepcopy(value))
+    config._data = copy.deepcopy(DEFAULT_CONFIG)
     config.save()
     main_window.reload_all_widgets_from_config()  # 触发各 widget 从 config 重读
 ```
 
-走 `config.set()` 而非直写 `_data`，保留封装边界；`set()` 内部已经处理点号路径展开。
+直写 `_data` 是有意为之——走 `config.set('scan', dict)` 在顶层 key 时会触发"按子树覆盖"（参 `src/config/config.py:66-73`），但 walker 写到叶子又啰嗦；而"重置全部配置"语义本就是清空所有用户改动，直接整块替换最干净。
+
+**告知**：重置会清空所有用户自定义，包括 `scan.roi_presets` 里用户保存的预设、`scan.roi_rect` 里当前 ROI、关键词文件路径等——`QMessageBox` 二次确认时必须明文提示"会清空所有自定义预设和 ROI 坐标"。
 
 **新增 config 键**（写入 `defaults.py` 的 `DEFAULT_CONFIG`）：
 
@@ -129,7 +141,7 @@ def reset_to_defaults():
 | 运行状态 | `MainWindow.is_running` 状态推断（pipeline 启停时刷新） |
 | 内存占用 | 搬现版 `_get_memory_mb()`，`QTimer(5000)` 每 5s 刷新 |
 | 版本 | `defaults.APP_VERSION = "1.0.0"`（新增常量） |
-| 引擎 | OCR 初始化前显示"引擎：加载中"；OCR 初始化完成后由 `OCRStage` 通过 Signal 暴露版本号给状态栏，格式 `f"PaddleOCR {paddle_version.split('.')[0]}.x"`。`paddleocr` 模块只在 `OCRStage` 内 import，UI 层不直接 import |
+| 引擎 | OCR 初始化前显示"引擎：加载中"；初始化由 worker QThread 跑，完成后 worker 自己 `import paddleocr; ver = paddleocr.__version__`，通过 Signal 推给状态栏，格式 `f"PaddleOCR {ver.split('.')[0]}.x"`。**`OCRStage` 类本身保持纯 Python 无 Qt 依赖**（CLI 也用它） |
 
 ## 关于页
 
@@ -194,22 +206,22 @@ self.setWindowFlags(
 ### 阶段 3a：pipeline 接入（1 天）
 
 - 把 `ScanPipeline` 实例化挪到 `MainWindow.__init__`
-- 用 `QThread` 跑扫描循环（替代当前 `threading.Thread + Event`）
+- 用 `QThread` 跑扫描循环（替代当前 `threading.Thread + Event`）；worker 内部完成 OCR init 后读 `paddleocr.__version__` 推 Signal 给状态栏
 - 用 `Signal` 把 `ScanResult` 传回主线程更新 UI 与状态栏
 - 日志走新的 `ui/log_bridge.py`：`logging.Handler` → `Signal` → `LogPanel`
-- 老 overlay (`shared/overlay.py`) 暂时不动——验证它在 Qt 主循环里能否正常出现一次（不能则提前进入阶段 4）
-- `OCRStage` 加 `version_ready` Signal，初始化完成时把 PaddleOCR 版本号推给状态栏
+- ROI 重命名 + 解耦：`defaults.py` / `cli.py` / `old_version/*` 同步把 `scan.roi` 改成 `scan.roi_rect`；`capture.py` 加一行 `if not config.get('scan.enable_roi'): roi = None`
+- **3a 阶段无浮窗能力**——老 `shared/overlay.py` 是 tkinter 实现，无法挂到 Qt 主循环；浮窗到阶段 4 才回来。GUI 里相关代码先写 `OverlayStub`（仅打日志）
 
-**验证**：能完整跑 OCR 流程，启动/停止按钮正常；状态栏能显示运行状态、内存、引擎版本；日志着色与现版一致。
+**验证**：能完整跑 OCR 流程，启动/停止按钮正常；状态栏能显示运行状态、内存、引擎版本；日志着色与现版一致；ROI toggle off 时确实跑全屏 OCR。
 
 ### 阶段 3b：设置页 + 关于页（1 天）
 
 - `ui/pages/settings_page.py` — 5 张卡（其中"热键设置"整卡 `setEnabled(False)` + 灰底"敬请期待"）
 - `ui/pages/about_page.py` — 静态布局
-- "重置配置"按钮走 `for k,v in DEFAULT_CONFIG.items(): config.set(...)` + `save()` + 触发 `reload_all_widgets_from_config()`，弹 `QMessageBox` 二次确认
-- 接入"启动后默认状态"——启动时根据 `app.startup_mode` 决定是否自动调用扫描启动
+- "重置配置"按钮走 `config._data = copy.deepcopy(DEFAULT_CONFIG); config.save(); reload_all_widgets_from_config()`，弹 `QMessageBox` 二次确认（明文提示"会清空所有自定义预设和 ROI"）
+- "启动后默认状态"接入：`app.startup_mode='auto'` 时**等到 OCR worker init-done Signal 后才触发扫描启动**，不在 `MainWindow.__init__` 调用——否则 UI 卡在"初始化中"且 pipeline 还没 ready
 
-**验证**：切到设置页改字号/帧差阈值能立即生效；重置配置能把 yaml 还原到出厂值并刷新 UI；改 `startup_mode` 重启后行为变化。
+**验证**：切到设置页改字号/帧差阈值能立即生效；重置配置能把 yaml 还原到出厂值并刷新 UI；改 `startup_mode='auto'` 重启后等 OCR 加载完自动开扫。
 
 ### 阶段 4：Overlay 重写（1 天）
 
@@ -249,9 +261,11 @@ UI 框架不影响 OCR/截图主路径（pipeline 在工作线程跑）。PySide
 
 ## 不在本方案范围内
 
-- `old_version/` 全部不动，仍用 tkinter
+- `old_version/` 仍用 tkinter，**只做 `scan.roi` → `scan.roi_rect` 的机械重命名**（约 5 处），其他逻辑不动
 - `shared/overlay.py` 保留（`old_version/` 仍依赖），新 overlay 独立放在 `ui/overlay.py`
-- `defaults.py` / `src/config/` / `src/pipeline/` / `src/utils/` / `shared/matcher.py` 全部复用，仅 `defaults.py` 新增 `APP_VERSION` 与 `app.*` 默认键
+- `src/config/` / `src/utils/` / `shared/matcher.py` 完全不动
+- `src/pipeline/`：仅 `capture.py` 加 1 行读 `enable_roi`；`OCRStage` 不动
+- `defaults.py`：新增 `APP_VERSION` 常量、`app.*` 默认键、`'4+2'` 内置 ROI 预设；rename `'roi'` → `'roi_rect'`
 - 暗色主题（如需，后续基于同一 `light.qss` 派生 `dark.qss`）
 - 热键编辑（mockup 卡留位但 disabled，后续单独迭代）
 - OCR 图像反色（mockup 已删除，主版本无此功能）
