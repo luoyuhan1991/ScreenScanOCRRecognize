@@ -67,6 +67,9 @@ mockup 主窗口右侧 = `scan_page.py` 装载：
 | 扫描节奏 | config_panel | 扫描间隔 slider (0.5–10s) | `scan.interval_seconds` |
 | OCR 识别 | config_panel | 语言 select / GPU 加速 toggle / 最小置信度 slider | `ocr.language` / `gpu.enabled` / `ocr.min_confidence` |
 | 关键词匹配 | config_panel | 词库文件 row（input + 浏览 + 编辑）/ 显示时长 slider | `files.banlist_file` / `matching.display_duration` |
+| Action | config_panel | 开始扫描 / 停止扫描 大按钮 + 热键提示 | — |
+| 日志 | log_panel | QPlainTextEdit + 着色 + 清空按钮 | — |
+| 状态 | status_bar | 4 字段，详见下文 | — |
 
 **ROI 键语义重构**（行为变更，迁移期一次性完成）：
 
@@ -77,15 +80,45 @@ mockup 主窗口右侧 = `scan_page.py` 装载：
 
 GUI 行为：toggle 只控 `enable_roi`；选预设 / 保存预设只动 `roi_rect` / `roi_presets`；两键完全解耦。
 
-**重命名波及面**（迁移期同步改）：`defaults.py` / `app.py`（被新版替换，只需改完前确保旧 tk 版能跑）/ `cli.py` / `old_version/app.py` / `old_version/cli.py` / `old_version/src/core/scan_service.py`，约 10 处文本替换。
+**ROI 数据流 + 边界规约**：
+
+```
+GUI / CLI 启动时：
+  if config.get('scan.enable_roi'):
+      roi = config.get('scan.roi_rect')
+      if roi is None:
+          logger.warning('enable_roi=True 但 roi_rect 未设置，本次回退全屏')
+          roi = None
+  else:
+      roi = None
+  pipeline.set_roi(roi)
+
+capture.py.grab(roi=...)：
+  # 防御性二次校验
+  if not config.get('scan.enable_roi'):
+      roi = None
+  # 后续按 roi 是否为 None 走 ROI / 全屏分支
+```
+
+`enable_roi=True && roi_rect=None` 的边界：**不报错**，回退全屏 + warn 日志一次。GUI 此时应在 ROI 区域块灰一行提示"未设置 ROI 坐标，当前为全屏扫描"，但不强制 disable toggle（保留用户随时切换的自由）。
+
+**重命名波及面**（迁移期同步改，截至本文档落档时**尚未执行**）：
+
+| 文件 | 残留 `scan.roi` 引用数 |
+|---|---|
+| `defaults.py` | 1（line 28）|
+| `app.py` | 4（lines 522/579/664/684 — 被新版替换前需保持现 tk 能跑） |
+| `cli.py` | 1（line 21）|
+| `old_version/app.py` | 4（lines 642/645/657）|
+| `old_version/cli.py` | 0（grep 后只有 `roi_padding`）|
+| `old_version/src/core/scan_service.py` | 间接引用（通过 `self.roi`）|
+
+**阶段 3a 必须把这 6 个文件一次性改完，否则现版 tk + 新版 PySide6 会读不同的 key 互相打架**。
 
 **ROI 预设 select 行为约定**：
 - 下拉项 = `scan.roi_presets`（dict）的 keys；defaults 内置 `'4+2': [1170, 256, 1880, 843]`
 - 选中后把对应 value 写到 `scan.roi_rect`
 - **不持久化"当前选中的预设名"**——重启后下拉回到默认项；避免新增 `scan.current_preset` 键
-| Action | config_panel | 开始扫描 / 停止扫描 大按钮 + 热键提示 | — |
-| 日志 | log_panel | QPlainTextEdit + 着色 + 清空按钮 | — |
-| 状态 | status_bar | 4 字段，详见下文 | — |
 
 ## 设置页（5 卡）
 
@@ -114,7 +147,7 @@ def reset_to_defaults():
     main_window.reload_all_widgets_from_config()  # 触发各 widget 从 config 重读
 ```
 
-直写 `_data` 是有意为之——走 `config.set('scan', dict)` 在顶层 key 时会触发"按子树覆盖"（参 `src/config/config.py:66-73`），但 walker 写到叶子又啰嗦；而"重置全部配置"语义本就是清空所有用户改动，直接整块替换最干净。
+直写 `_data` 是有意为之——走 `config.set('scan', dict)` 在顶层 key 时会触发"按子树覆盖"（参 `Config.set` 方法），但 walker 写到叶子又啰嗦；而"重置全部配置"语义本就是清空所有用户改动，直接整块替换最干净。`Config._loaded` 标志不需复位，因为紧跟的 `save()` 已把 `_data` 同步回 yaml，下次 `get()` 读到的就是 defaults。
 
 **告知**：重置会清空所有用户自定义，包括 `scan.roi_presets` 里用户保存的预设、`scan.roi_rect` 里当前 ROI、关键词文件路径等——`QMessageBox` 二次确认时必须明文提示"会清空所有自定义预设和 ROI 坐标"。
 
@@ -206,20 +239,39 @@ self.setWindowFlags(
 ### 阶段 3a：pipeline 接入（1 天）
 
 - 把 `ScanPipeline` 实例化挪到 `MainWindow.__init__`
-- 用 `QThread` 跑扫描循环（替代当前 `threading.Thread + Event`）；worker 内部完成 OCR init 后读 `paddleocr.__version__` 推 Signal 给状态栏
-- 用 `Signal` 把 `ScanResult` 传回主线程更新 UI 与状态栏
-- 日志走新的 `ui/log_bridge.py`：`logging.Handler` → `Signal` → `LogPanel`
-- ROI 重命名 + 解耦：`defaults.py` / `cli.py` / `old_version/*` 同步把 `scan.roi` 改成 `scan.roi_rect`；`capture.py` 加一行 `if not config.get('scan.enable_roi'): roi = None`
-- **3a 阶段无浮窗能力**——老 `shared/overlay.py` 是 tkinter 实现，无法挂到 Qt 主循环；浮窗到阶段 4 才回来。GUI 里相关代码先写 `OverlayStub`（仅打日志）
+- 用 `QThread` 跑扫描循环（替代当前 `threading.Thread + Event`）；worker 暴露：
 
-**验证**：能完整跑 OCR 流程，启动/停止按钮正常；状态栏能显示运行状态、内存、引擎版本；日志着色与现版一致；ROI toggle off 时确实跑全屏 OCR。
+  ```python
+  class ScanWorker(QObject):
+      init_done = Signal(str)        # 参数 = PaddleOCR 版本字符串，OCR init 完成时发射
+      result_ready = Signal(object)  # 参数 = ScanResult，每次 scan_once 完成时发射
+      log_message = Signal(str, str) # 参数 = (level, message)，作为 logging.Handler 的桥
+  ```
+
+  `init_done` 会同时连接：状态栏「引擎」字段 slot + auto 启动 hook（见 3b）
+- 日志走新的 `ui/log_bridge.py`：`logging.Handler` → `worker.log_message` Signal → `LogPanel`
+- ROI 重命名 + 解耦（**6 处文件必须一次性改完**，见上文「重命名波及面」表）：把 `scan.roi` 改成 `scan.roi_rect`；`capture.py` 加一行 `if not config.get('scan.enable_roi'): roi = None`
+- **3a 阶段无浮窗能力**——老 `shared/overlay.py` 是 tkinter 实现，无法挂到 Qt 主循环；浮窗到阶段 4 才回来。GUI 里相关代码先写 `OverlayStub`：
+
+  ```python
+  class OverlayStub:
+      """阶段 3a 占位实现，全部 no-op + debug 日志，方法签名与 shared/overlay.Overlay 完全一致。"""
+      def setup(self): pass
+      def update(self, ocr_results, matches):
+          if matches: logger.debug(f'[stub overlay] matches={[m["keyword"] for m in matches]}')
+      def hide(self): pass
+      def clear_session(self): pass
+      def destroy(self): pass
+  ```
+
+**验证**：能完整跑 OCR 流程，启动/停止按钮正常；状态栏能显示运行状态、内存、引擎版本；日志着色与现版一致；ROI toggle off 时确实跑全屏 OCR；命中关键词只在日志里看到（无浮窗，由 stub 行为决定）。
 
 ### 阶段 3b：设置页 + 关于页（1 天）
 
 - `ui/pages/settings_page.py` — 5 张卡（其中"热键设置"整卡 `setEnabled(False)` + 灰底"敬请期待"）
 - `ui/pages/about_page.py` — 静态布局
 - "重置配置"按钮走 `config._data = copy.deepcopy(DEFAULT_CONFIG); config.save(); reload_all_widgets_from_config()`，弹 `QMessageBox` 二次确认（明文提示"会清空所有自定义预设和 ROI"）
-- "启动后默认状态"接入：`app.startup_mode='auto'` 时**等到 OCR worker init-done Signal 后才触发扫描启动**，不在 `MainWindow.__init__` 调用——否则 UI 卡在"初始化中"且 pipeline 还没 ready
+- "启动后默认状态"接入：`app.startup_mode='auto'` 时**连接 `ScanWorker.init_done` Signal**（3a 已定义，签名 `Signal(str)`），slot 内调用扫描启动；不在 `MainWindow.__init__` 调用——否则 UI 卡在"初始化中"且 pipeline 还没 ready
 
 **验证**：切到设置页改字号/帧差阈值能立即生效；重置配置能把 yaml 还原到出厂值并刷新 UI；改 `startup_mode='auto'` 重启后等 OCR 加载完自动开扫。
 
