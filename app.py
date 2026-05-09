@@ -366,23 +366,24 @@ class MainGUI:
         self._var_gpu = tk.BooleanVar(value=True)
         ttk.Checkbutton(row, text="GPU加速", variable=self._var_gpu).pack(side=tk.LEFT, padx=5)
 
-        # 扫描间隔
-        ttk.Separator(row, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
-        ttk.Label(row, text="间隔:").pack(side=tk.LEFT, padx=(0, 4))
-        self._var_interval = tk.DoubleVar(value=2.0)
-        ttk.Scale(row, from_=0.5, to=15, orient=tk.HORIZONTAL,
-                  variable=self._var_interval, length=160,
-                  command=self._on_interval_scale).pack(side=tk.LEFT, padx=2)
-        ttk.Entry(row, width=5, textvariable=self._var_interval).pack(side=tk.LEFT, padx=2)
-        ttk.Label(row, text="秒").pack(side=tk.LEFT, padx=(0, 5))
-
-        # 帧差阈值
+        # 第二行：扫描间隔 + 帧差阈值
         row2 = ttk.Frame(fr)
         row2.pack(fill=tk.X, pady=2)
+
+        ttk.Label(row2, text="间隔:").pack(side=tk.LEFT, padx=(0, 4))
+        self._var_interval = tk.DoubleVar(value=2.0)
+        ttk.Scale(row2, from_=0.5, to=10, orient=tk.HORIZONTAL,
+                  variable=self._var_interval, length=130,
+                  command=self._on_interval_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Entry(row2, width=5, textvariable=self._var_interval).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 8))
+
+        ttk.Separator(row2, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=8, fill=tk.Y)
+
         ttk.Label(row2, text="帧差阈值:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_diff_threshold = tk.DoubleVar(value=5.0)
         ttk.Scale(row2, from_=0, to=50, orient=tk.HORIZONTAL,
-                  variable=self._var_diff_threshold, length=160,
+                  variable=self._var_diff_threshold, length=130,
                   command=self._on_diff_scale).pack(side=tk.LEFT, padx=2)
         ttk.Entry(row2, width=5, textvariable=self._var_diff_threshold).pack(side=tk.LEFT, padx=2)
         ttk.Label(row2, text="(0=每次都OCR)").pack(side=tk.LEFT, padx=(0, 5))
@@ -406,7 +407,7 @@ class MainGUI:
         ttk.Label(row, text="最小置信度:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_confidence = tk.DoubleVar(value=0.3)
         ttk.Scale(row, from_=0, to=1, orient=tk.HORIZONTAL,
-                  variable=self._var_confidence, length=140,
+                  variable=self._var_confidence, length=120,
                   command=self._on_conf_scale).pack(side=tk.LEFT, padx=2)
         ttk.Entry(row, width=5, textvariable=self._var_confidence).pack(side=tk.LEFT, padx=2)
 
@@ -436,7 +437,7 @@ class MainGUI:
         ttk.Label(row2, text="显示时长:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_duration = tk.DoubleVar(value=3.0)
         ttk.Scale(row2, from_=1, to=10, orient=tk.HORIZONTAL,
-                  variable=self._var_duration, length=120,
+                  variable=self._var_duration, length=100,
                   command=self._on_dur_scale).pack(side=tk.LEFT, padx=2)
         ttk.Entry(row2, width=5, textvariable=self._var_duration).pack(side=tk.LEFT, padx=2)
         ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=(0, 8))
@@ -444,7 +445,7 @@ class MainGUI:
         ttk.Label(row2, text="字号:").pack(side=tk.LEFT, padx=(0, 4))
         self._var_fontsize = tk.IntVar(value=18)
         ttk.Scale(row2, from_=10, to=36, orient=tk.HORIZONTAL,
-                  variable=self._var_fontsize, length=120,
+                  variable=self._var_fontsize, length=100,
                   command=self._on_fs_scale).pack(side=tk.LEFT, padx=2)
         ttk.Entry(row2, width=4, textvariable=self._var_fontsize).pack(side=tk.LEFT, padx=2)
 
