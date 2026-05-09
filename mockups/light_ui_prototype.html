@@ -532,6 +532,41 @@
   .settings-row + .settings-row {
     border-top: 1px solid var(--border);
   }
+  .settings-row .slider-wrap {
+    width: 56%;
+  }
+  .settings-row .slider-value {
+    width: 48px;
+    height: 26px;
+    line-height: 26px;
+  }
+  .settings-row .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 8px;
+  }
+  .settings-row .row-with-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 56%;
+    justify-content: flex-end;
+  }
+  .settings-row .row-with-hint .slider-wrap { flex: 1; }
+  .reset-btn {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--danger);
+    background: white;
+    color: var(--danger);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .reset-btn:hover { background: rgba(229,72,77,0.06); }
 
   /* Switch */
   .switch {
@@ -1396,11 +1431,6 @@
           <span>版本：1.0.0</span>
           <span class="status-divider"></span>
           <span>引擎：PaddleOCR 3.x</span>
-          <span class="status-divider"></span>
-          <span class="status-action">
-            <svg class="icon-sm" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>
-            声音提醒
-          </span>
         </div>
       </div>
     </div>
@@ -1446,6 +1476,55 @@
             </div>
           </div>
 
+          <!-- 扫描配置 -->
+          <div class="settings-card">
+            <div class="settings-card-title">扫描配置</div>
+            <div class="settings-row">
+              <span>帧差阈值</span>
+              <div class="row-with-hint">
+                <div class="slider-wrap">
+                  <div class="slider"><div class="slider-fill" style="width:25%"></div><div class="slider-thumb" style="left:25%"></div></div>
+                  <div class="slider-value">5.0</div>
+                </div>
+              </div>
+            </div>
+            <div class="settings-row" style="border-top:none; padding-top:0;">
+              <span class="hint" style="margin-left:0;">0 = 每次都 OCR；越大跳过越多帧</span>
+            </div>
+          </div>
+
+          <!-- OCR 配置 -->
+          <div class="settings-card">
+            <div class="settings-card-title">OCR 配置</div>
+            <div class="settings-row">
+              <span>图像反色</span>
+              <span class="switch"></span>
+            </div>
+            <div class="settings-row" style="border-top:none; padding-top:0;">
+              <span class="hint" style="margin-left:0;">深色背景文字识别更准</span>
+            </div>
+          </div>
+
+          <!-- 浮窗提示 -->
+          <div class="settings-card">
+            <div class="settings-card-title">浮窗提示</div>
+            <div class="settings-row">
+              <span>字号</span>
+              <div class="slider-wrap">
+                <div class="slider"><div class="slider-fill" style="width:50%"></div><div class="slider-thumb" style="left:50%"></div></div>
+                <div class="slider-value">18</div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span>位置</span>
+              <div class="select" style="min-width:110px;">居中</div>
+            </div>
+            <div class="settings-row">
+              <span>音效提醒</span>
+              <span class="switch on"></span>
+            </div>
+          </div>
+
           <!-- 热键设置 -->
           <div class="settings-card">
             <div class="settings-card-title">热键设置</div>
@@ -1466,6 +1545,21 @@
             <div class="settings-row">
               <span class="reset-link">恢复默认热键</span>
               <button class="btn-sm">保存默认</button>
+            </div>
+          </div>
+
+          <!-- 配置管理 -->
+          <div class="settings-card">
+            <div class="settings-card-title">配置管理</div>
+            <div class="settings-row">
+              <div>
+                <div style="font-size:13px; color:var(--text);">重置全部配置</div>
+                <div class="hint" style="margin-left:0; margin-top:2px;">恢复到出厂默认值，不可撤销</div>
+              </div>
+              <button class="reset-btn">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 1 1 19 6.3L23 10"/></svg>
+                重置配置
+              </button>
             </div>
           </div>
         </div>

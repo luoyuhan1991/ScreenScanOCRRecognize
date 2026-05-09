@@ -27,20 +27,18 @@ def main():
     print("初始化完成，开始扫描...")
 
     interval = config.get('scan.interval_seconds')
-    scan_count = 0
 
     try:
         while True:
             start = time.time()
             result = pipeline.scan_once()
-            scan_count += 1
 
             status = (
                 "跳过(无变化)" if result.skipped
                 else f"{len(result.ocr_results)}行"
             )
             print(
-                f"[#{scan_count}] OCR: {status}, "
+                f"OCR: {status}, "
                 f"匹配: {len(result.matches)}, "
                 f"耗时: {result.duration:.3f}s"
             )

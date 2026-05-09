@@ -270,8 +270,6 @@ class MainGUI:
         self.is_running = False
         self.scan_thread = None
         self.stop_event = threading.Event()
-        self.scan_count = 0
-        self.last_scan_time = None
         self.roi = None
 
         # ROI 可视化边框窗口
@@ -334,12 +332,6 @@ class MainGUI:
 
         self._lbl_status = ttk.Label(fr, text="状态: 已停止", font=("Microsoft YaHei", 10))
         self._lbl_status.pack(side=tk.LEFT, padx=5)
-
-        self._lbl_count = ttk.Label(fr, text="扫描: 0", font=("Microsoft YaHei", 10))
-        self._lbl_count.pack(side=tk.LEFT, padx=5)
-
-        self._lbl_last = ttk.Label(fr, text="最后: --", font=("Microsoft YaHei", 10))
-        self._lbl_last.pack(side=tk.LEFT, padx=5)
 
         self._lbl_mem = ttk.Label(fr, text="内存: -- MB", font=("Microsoft YaHei", 10))
         self._lbl_mem.pack(side=tk.LEFT, padx=5)
@@ -518,8 +510,6 @@ class MainGUI:
 
         self._btn_stop = ttk.Button(fr, text="停止扫描", command=self.on_stop, state=tk.DISABLED)
         self._btn_stop.pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(fr, text="清除匹配记录", command=self._clear_session).pack(side=tk.LEFT, padx=5)
 
         ttk.Button(fr, text="重置配置", command=self._reset_config).pack(side=tk.LEFT, padx=5)
 
@@ -737,9 +727,7 @@ class MainGUI:
         try:
             while not self.stop_event.is_set():
                 interval = self._var_interval.get()
-                self.scan_count += 1
                 start = time.time()
-                self.last_scan_time = datetime.now().strftime('%H:%M:%S')
 
                 result = self.pipeline.scan_once()
 
@@ -749,7 +737,7 @@ class MainGUI:
                     status_txt = f"{len(result.ocr_results)}行"
 
                 self._append_log(
-                    f"[#{self.scan_count}] OCR: {status_txt}, "
+                    f"OCR: {status_txt}, "
                     f"匹配: {len(result.matches)}, "
                     f"耗时: {result.duration:.3f}s",
                     "INFO"
@@ -765,9 +753,6 @@ class MainGUI:
                 ocr = result.ocr_results
                 matches = result.matches
                 self.root.after(0, lambda o=ocr, m=matches: self.overlay.update(o, m))
-
-                # 更新统计（主线程）
-                self.root.after(0, self._update_stats)
 
                 # 等待
                 elapsed = time.time() - start
@@ -844,10 +829,6 @@ class MainGUI:
         btn_fr.pack(fill=tk.X, padx=5, pady=5)
         ttk.Button(btn_fr, text="保存并关闭", command=save_and_close).pack(side=tk.RIGHT, padx=5)
         ttk.Button(btn_fr, text="取消", command=win.destroy).pack(side=tk.RIGHT, padx=5)
-
-    def _clear_session(self):
-        self.overlay.clear_session()
-        self._append_log("累积匹配记录已清除", "INFO")
 
     def _reset_config(self):
         if messagebox.askyesno("确认", "重置所有配置为默认值?"):
@@ -926,10 +907,6 @@ class MainGUI:
             self.root.title(f"【初始化中】{base}")
         else:
             self.root.title(base)
-
-    def _update_stats(self):
-        self._lbl_count.config(text=f"扫描: {self.scan_count}")
-        self._lbl_last.config(text=f"最后: {self.last_scan_time or '--'}")
 
     def _schedule_memory_update(self):
         mb = _get_memory_mb()
