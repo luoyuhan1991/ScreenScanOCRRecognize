@@ -31,6 +31,10 @@ class CaptureStage:
             self.sct = mss.mss()
             self._owner_thread = tid
 
+        # 防御性二次校验：如果 config 关闭了 ROI，无视调用方传入的 roi
+        if roi is not None and not config.get('scan.enable_roi'):
+            roi = None
+
         if roi is not None:
             x1, y1, x2, y2 = roi
             padding = config.get('scan.roi_padding')

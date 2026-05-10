@@ -18,7 +18,7 @@ def main():
     pipeline = ScanPipeline()
 
     # ROI 设置
-    roi_str = config.get('scan.roi')
+    roi_str = config.get('scan.roi_rect')
     if roi_str:
         pipeline.set_roi(tuple(roi_str))
 

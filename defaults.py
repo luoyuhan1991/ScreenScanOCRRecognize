@@ -15,6 +15,8 @@
 
 DEFAULT_BANLIST_FILE = 'C:/Users/Administrator/Desktop/banlist.txt'
 
+APP_VERSION = '1.0.0'
+
 DEFAULT_CONFIG = {
     'scan': {
         'interval_seconds': 5.0,         # 两次扫描之间的间隔（秒）
@@ -23,9 +25,11 @@ DEFAULT_CONFIG = {
         'remember_roi': True,             # 启动时是否复用上次保存的 ROI（False = 每次启动都重新框选）
         'enable_diff_skip': True,         # 帧差检测：与上次画面相似时跳过 OCR
         'diff_threshold': 5.0,            # MSE 阈值，小于此值视为画面无变化（缩成 160x120 灰度图比较）
-        # 当前生效的 ROI（新旧两版统一读这个键）。格式 [x1, y1, x2, y2]，屏幕绝对像素；
-        # None = 未保存。默认 [1170, 256, 1880, 843] 是项目工作区域，开箱即用。
-        'roi': [1170, 256, 1880, 843],
+        # 当前生效的 ROI 坐标 [x1, y1, x2, y2]，屏幕绝对像素；None = 未保存。
+        # 默认 [1170, 256, 1880, 843] 是项目工作区域，开箱即用。
+        # （旧名 'roi' 已重命名为 'roi_rect'，避免「None=禁用 / coords=启用」二义性，
+        #  开关由 enable_roi 单独承担。新旧两版统一读这个键。）
+        'roi_rect': [1170, 256, 1880, 843],
         # ROI 预设字典 {名字: [x1,y1,x2,y2]}。'4+2' 是内置预设（与默认 roi_rect 同坐标，开箱即用）。
         # GUI「保存当前」会向此 dict 追加用户自定义预设。
         'roi_presets': {'4+2': [1170, 256, 1880, 843]},
@@ -85,5 +89,9 @@ DEFAULT_CONFIG = {
         'max_log_queue_size': 1000,             # GUI 日志队列最大长度
         'log_queue_cleanup_threshold': 800,     # 超过此长度时主动丢弃旧消息
         'explicit_image_cleanup': True,         # 显式 del + gc.collect 帮助回收 OCR 图像内存
+    },
+    'app': {                              # 新版专有：PySide6 GUI 通用设置
+        'minimize_to_tray': True,         # 关闭主窗口时缩进系统托盘
+        'startup_mode': 'paused',         # 'paused' = 启动后停在待机；'auto' = 等 OCR 加载完自动开扫
     },
 }

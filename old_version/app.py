@@ -639,7 +639,7 @@ class MainGUI:
             
             if self.enable_roi_var.get():
                 remember_roi = self.remember_roi_var.get()
-                saved_roi = config.get('scan.roi')
+                saved_roi = config.get('scan.roi_rect')
 
                 if remember_roi and saved_roi:
                     self.roi = tuple(saved_roi)
@@ -654,7 +654,7 @@ class MainGUI:
                     else:
                         self.append_log(f"ROI区域已设置: {self.roi}", "INFO")
                         
-                        config.set('scan.roi', list(self.roi))
+                        config.set('scan.roi_rect', list(self.roi))
                         config.save()
                         if remember_roi:
                             self.append_log("ROI区域已保存", "INFO")
