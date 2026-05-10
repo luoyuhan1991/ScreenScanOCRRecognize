@@ -9,6 +9,24 @@ import threading
 import ahocorasick
 
 
+def _is_kept(cp: int) -> bool:
+    """匹配时只保留：英文字母、阿拉伯数字、中文（CJK 基本区 + 扩展 A）。"""
+    return (
+        (0x30 <= cp <= 0x39)         # 0-9
+        or (0x61 <= cp <= 0x7A)      # a-z（casefold 后大写已转小写）
+        or (0x4E00 <= cp <= 0x9FFF)  # CJK Unified Ideographs
+        or (0x3400 <= cp <= 0x4DBF)  # CJK Extension A
+    )
+
+
+def _normalize(s: str) -> str:
+    """匹配用归一化：casefold + 只保留中文/英文字母/数字，其余字符全部忽略。"""
+    if not s:
+        return ""
+    folded = s.casefold()
+    return ''.join(c for c in folded if _is_kept(ord(c)))
+
+
 def parse_keyword_line(line: str):
     """
     解析关键词行（优先空白分隔）：
@@ -33,10 +51,13 @@ def parse_keyword_line(line: str):
 
 
 def keyword_in_text(text: str, keyword: str) -> bool:
-    """子串匹配，casefold 不区分大小写。空字符串视为不匹配。"""
+    """子串匹配，casefold 不区分大小写，并忽略标点/空白。空字符串视为不匹配。"""
     if not keyword or not text:
         return False
-    return keyword.casefold() in text.casefold()
+    nk = _normalize(keyword)
+    if not nk:
+        return False
+    return nk in _normalize(text)
 
 
 class SubstringMatcher:
@@ -53,7 +74,7 @@ class SubstringMatcher:
         self._banlist_file = banlist_file
         self._logger = logger
         self._automaton = None
-        self._keywords = {}  # {keyword_casefold: {'original': str, 'hint': str}}
+        self._keywords = {}  # {normalized_keyword: {'original': str, 'hint': str}}
         self._file_mtime = None
 
     @property
@@ -65,7 +86,7 @@ class SubstringMatcher:
         return [info['original'] for info in self._keywords.values()]
 
     def get_hint(self, keyword: str) -> str:
-        info = self._keywords.get(keyword.casefold())
+        info = self._keywords.get(_normalize(keyword))
         return info['hint'] if info else ""
 
     def load(self, banlist_file=None):
@@ -95,7 +116,10 @@ class SubstringMatcher:
                     keyword, hint = parse_keyword_line(line)
                     if not keyword:
                         continue
-                    self._keywords[keyword.casefold()] = {
+                    norm = _normalize(keyword)
+                    if not norm:
+                        continue
+                    self._keywords[norm] = {
                         'original': keyword,
                         'hint': hint,
                     }
@@ -105,8 +129,8 @@ class SubstringMatcher:
 
         if self._keywords:
             automaton = ahocorasick.Automaton()
-            for kw_cf, info in self._keywords.items():
-                automaton.add_word(kw_cf, info)
+            for kw_norm, info in self._keywords.items():
+                automaton.add_word(kw_norm, info)
             automaton.make_automaton()
             self._automaton = automaton
 
@@ -147,8 +171,10 @@ class SubstringMatcher:
             text = result.get('text', '') if isinstance(result, dict) else ''
             if not text:
                 continue
-            text_cf = text.casefold()
-            for _, info in self._automaton.iter(text_cf):
+            text_norm = _normalize(text)
+            if not text_norm:
+                continue
+            for _, info in self._automaton.iter(text_norm):
                 kw = info['original']
                 if kw in seen:
                     continue
