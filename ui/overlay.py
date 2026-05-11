@@ -19,14 +19,14 @@ except ImportError:
     _SOUND_AVAILABLE = False
 
 
-# 颜色（与旧版 shared/overlay.py 视觉一致）
-_C_MATCH        = '#FF3333'   # 命中关键词 / 命中 OCR 行
-_C_OCR_OK       = '#00FF00'   # 未命中的正常 OCR 行
-_C_MUTED        = '#888888'   # "+ N 已隐藏" 摘要
-_C_PLACEHOLDER  = '#AAAAAA'   # "暂无匹配 / 暂无识别结果"
-_C_SHADOW       = '#000000'
-_C_BG_FILL      = QColor(15, 23, 42, 215)   # 深 slate 半透明，圆角卡片底
-_C_BG_BORDER    = QColor(255, 255, 255, 30)
+# 颜色（白色半透明卡片底；文字颜色按白底可读性挑过）
+_C_MATCH        = '#E5484D'   # 命中关键词 / 命中 OCR 行（白底用稍暗的红）
+_C_OCR_OK       = '#16A34A'   # 未命中的正常 OCR 行（白底用深绿，替代旧的 #00FF00 荧光绿）
+_C_MUTED        = '#64748B'   # "+ N 已隐藏" 摘要
+_C_PLACEHOLDER  = '#94A3B8'   # "暂无匹配 / 暂无识别结果"
+_C_SHADOW       = '#000000'   # 1px 偏移阴影，在白底上仅起加粗效果
+_C_BG_FILL      = QColor(255, 255, 255, 25)   # 白色卡片底，alpha=25/255 ≈ 90% 透明
+_C_BG_BORDER    = QColor(0, 0, 0, 90)         # 边框拉到 alpha=90 让接近全透的卡片仍能看清轮廓
 
 
 class Overlay(QWidget):
