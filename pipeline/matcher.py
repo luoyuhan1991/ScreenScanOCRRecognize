@@ -1,11 +1,9 @@
-"""
-关键词子串匹配（基于 Aho-Corasick 自动机）。
-两个版本共享：根目录主版本与 new_version 都从这里 import。
-"""
+"""关键词子串匹配（基于 Aho-Corasick 自动机）。"""
 
-import ahocorasick
 import os
 import threading
+
+import ahocorasick
 
 
 def _is_kept(cp: int) -> bool:

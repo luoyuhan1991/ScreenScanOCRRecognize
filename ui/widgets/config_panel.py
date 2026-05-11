@@ -1,4 +1,5 @@
 import os
+
 from PySide6.QtCore import Qt, Signal, QByteArray
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
@@ -8,10 +9,9 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 
-from config.config import config
+from config.config import config, PROJECT_ROOT
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_ICON_DIR = os.path.join(_PROJECT_ROOT, 'ui', 'icons')
+_ICON_DIR = os.path.join(PROJECT_ROOT, 'ui', 'icons')
 
 
 def _render_svg(path, size):
@@ -326,7 +326,6 @@ class ConfigPanel(QWidget):
         if not path:
             return
         try:
-            import os
             if os.path.isfile(path):
                 os.startfile(path)  # noqa: SIM115 (Windows 专用)
         except Exception:

@@ -7,10 +7,17 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('config/config.yaml', 'config'),    # 配置文件
-        ('requirements.txt', '.'),            # 依赖清单
-        ('ui/icons/app.ico', 'ui/icons'),     # 主应用图标（运行时 QIcon 也会读这里）
-        # TODO: 打包 PySide6 资源（ui/styles/*.qss、ui/icons/*.svg）；tkinter hiddenimport 已不再使用
+        ('config/config.yaml', 'config'),     # 主配置（运行时可写回）
+        ('requirements.txt', '.'),
+        ('ui/styles/light.qss', 'ui/styles'),  # QSS 主题
+        ('ui/icons/app.ico', 'ui/icons'),     # exe / 任务栏图标
+        ('ui/icons/app.png', 'ui/icons'),
+        ('ui/icons/check.svg', 'ui/icons'),    # 控件 SVG 资源（QSS 用 {ICON_DIR}/*.svg 引用）
+        ('ui/icons/chevron-down.svg', 'ui/icons'),
+        ('ui/icons/pencil.svg', 'ui/icons'),
+        ('ui/icons/play.svg', 'ui/icons'),
+        ('ui/icons/rotate-ccw.svg', 'ui/icons'),
+        ('ui/icons/stop.svg', 'ui/icons'),
     ],
     hiddenimports=[
         'paddleocr',
@@ -19,7 +26,6 @@ a = Analysis(
         'numpy',
         'yaml',
         'PIL',
-        'tkinter',
     ],
     hookspath=[],
     hooksconfig={},

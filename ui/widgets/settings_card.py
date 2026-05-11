@@ -13,9 +13,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton,
 )
 
+from config.config import PROJECT_ROOT
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_ICON_DIR = os.path.join(_PROJECT_ROOT, 'ui', 'icons')
+_ICON_DIR = os.path.join(PROJECT_ROOT, 'ui', 'icons')
 
 
 def _svg_icon(filename, color, size=14):
