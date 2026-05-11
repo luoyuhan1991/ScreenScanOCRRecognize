@@ -26,7 +26,7 @@ scan:
   enable_diff_skip: true
   enable_roi: true
   interval_seconds: 3.0
-  remember_roi: true
+  last_roi_choice: __reselect__
   roi_padding: 10
   roi_presets:
     4+2:

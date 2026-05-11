@@ -17,7 +17,6 @@ DEFAULT_CONFIG = {
         'interval_seconds': 5.0,         # 两次扫描之间的间隔（秒）
         'roi_padding': 10,                # ROI 周围外扩像素数（避免边缘文字被裁切）
         'enable_roi': True,               # True = 用 ROI 区域；False = 全屏扫描
-        'remember_roi': True,             # 启动时是否复用上次保存的 ROI（False = 每次启动都重新框选）
         'enable_diff_skip': True,         # 帧差检测：与上次画面相似时跳过 OCR
         'diff_threshold': 5.0,            # MSE 阈值，小于此值视为画面无变化（缩成 160x120 灰度图比较）
         # 当前生效的 ROI 坐标 [x1, y1, x2, y2]，屏幕绝对像素；None = 未保存。
@@ -27,6 +26,9 @@ DEFAULT_CONFIG = {
         # ROI 预设字典 {名字: [x1,y1,x2,y2]}。'4+2' 是内置预设（与默认 roi_rect 同坐标，开箱即用）。
         # GUI「保存当前」会向此 dict 追加用户自定义预设。
         'roi_presets': {'4+2': [1170, 256, 1880, 843]},
+        # 记住 ROI 下拉上次选了哪一项；启动时下拉自动定位。
+        # 取值：'__reselect__'（首项「重新框选...」）或某个预设名。
+        'last_roi_choice': '__reselect__',
     },
     'ocr': {
         'language': 'ch',                 # PaddleOCR 一次只能加载一种语言模型

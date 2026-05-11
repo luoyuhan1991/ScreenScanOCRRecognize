@@ -6,12 +6,16 @@ from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QComboBox,
     QSlider, QLineEdit, QPushButton, QFrame, QFileDialog, QInputDialog,
-    QGraphicsOpacityEffect,
+    QMessageBox, QGraphicsOpacityEffect,
 )
 
 from config.config import config, PROJECT_ROOT
 
 _ICON_DIR = os.path.join(PROJECT_ROOT, 'ui', 'icons')
+
+# 下拉首项的特殊 data 值：选中即触发屏幕框选 UI（区别于命名预设）
+_RESELECT = '__reselect__'
+_RESELECT_LABEL = '重新框选...'
 
 
 def _render_svg(path, size):
@@ -186,16 +190,8 @@ class ConfigPanel(QWidget):
         self.cb_enable_roi.stateChanged.connect(
             lambda s: (config.set('scan.enable_roi', bool(s)), config.save())
         )
-
-        self.cb_remember_roi = QCheckBox('记住区域')
-        self.cb_remember_roi.setCursor(Qt.PointingHandCursor)
-        self.cb_remember_roi.setChecked(bool(config.get('scan.remember_roi')))
-        self.cb_remember_roi.stateChanged.connect(
-            lambda s: (config.set('scan.remember_roi', bool(s)), config.save())
-        )
         toggle_row = QHBoxLayout()
         toggle_row.addWidget(self.cb_enable_roi)
-        toggle_row.addWidget(self.cb_remember_roi)
         toggle_row.addStretch(1)
         box.addLayout(toggle_row)
 
@@ -203,7 +199,8 @@ class ConfigPanel(QWidget):
         preset_row = QHBoxLayout()
         self.combo_preset = QComboBox()
         self._reload_presets()
-        self.combo_preset.currentTextChanged.connect(self._on_preset_changed)
+        # 用 currentIndexChanged + currentData 走，避免显示文本和 data 撞 _RESELECT
+        self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
         btn_save_preset = QPushButton('保存当前')
         btn_save_preset.setCursor(Qt.PointingHandCursor)
         btn_save_preset.clicked.connect(self._on_save_preset)
@@ -213,33 +210,74 @@ class ConfigPanel(QWidget):
         return frame
 
     def _reload_presets(self):
+        """重建下拉：第 0 项「重新框选...」+ 所有命名预设；按 last_roi_choice
+        定位当前项。全程 blockSignals，不触发 _on_preset_changed。"""
         self.combo_preset.blockSignals(True)
         self.combo_preset.clear()
+        self.combo_preset.addItem(_RESELECT_LABEL, _RESELECT)
         presets = config.get('scan.roi_presets') or {}
         for name in presets.keys():
-            self.combo_preset.addItem(name)
+            self.combo_preset.addItem(name, name)
+        last = config.get('scan.last_roi_choice') or _RESELECT
+        idx = self.combo_preset.findData(last)
+        self.combo_preset.setCurrentIndex(idx if idx >= 0 else 0)
         self.combo_preset.blockSignals(False)
 
-    def _on_preset_changed(self, name):
-        if not name:
+    def _on_preset_changed(self, _index):
+        """下拉切换：
+        - 选「重新框选...」→ 弹屏幕 ROIPicker；用户取消则回退下拉到 last_roi_choice
+          （但 last 也可能本来就是 _RESELECT，那就停在第 0 项即可）。
+        - 选命名预设 → 把预设坐标拷给 roi_rect，记忆下拉项。
+        """
+        data = self.combo_preset.currentData()
+        if data == _RESELECT:
+            # 延迟 import 避免 ui/widgets 包加载期就拽 picker
+            from ..roi_picker import ROIPicker
+            rect = ROIPicker().pick()
+            if rect is not None:
+                config.set('scan.roi_rect', list(rect))
+                config.set('scan.last_roi_choice', _RESELECT)
+                config.save()
+            else:
+                # 取消：把下拉打回 last_roi_choice 指向的项（若已经是 _RESELECT 则原地）
+                last = config.get('scan.last_roi_choice') or _RESELECT
+                if last != _RESELECT:
+                    self.combo_preset.blockSignals(True)
+                    idx = self.combo_preset.findData(last)
+                    if idx >= 0:
+                        self.combo_preset.setCurrentIndex(idx)
+                    self.combo_preset.blockSignals(False)
             return
+
+        # 命名预设分支
         presets = config.get('scan.roi_presets') or {}
-        if name in presets:
-            config.set('scan.roi_rect', list(presets[name]))
+        if data in presets:
+            config.set('scan.roi_rect', list(presets[data]))
+            config.set('scan.last_roi_choice', data)
             config.save()
 
     def _on_save_preset(self):
+        """把当前 roi_rect 存为命名预设。roi_rect 为空时提示用户先框选一次。"""
         roi = config.get('scan.roi_rect')
         if not roi:
+            QMessageBox.information(
+                self, '保存预设',
+                '当前还没有框选过 ROI，请先在下拉里选「重新框选...」拖出一个区域。',
+            )
             return
         name, ok = QInputDialog.getText(self, '保存预设', '预设名称：')
-        if ok and name:
-            presets = config.get('scan.roi_presets') or {}
-            presets[name] = list(roi)
-            config.set('scan.roi_presets', presets)
-            config.save()
-            self._reload_presets()
-            self.combo_preset.setCurrentText(name)
+        if not (ok and name):
+            return
+        if name == _RESELECT:
+            # 不允许撞内部 token，避免下拉项被它顶掉
+            QMessageBox.warning(self, '保存预设', '该名称为保留字，请换一个。')
+            return
+        presets = config.get('scan.roi_presets') or {}
+        presets[name] = list(roi)
+        config.set('scan.roi_presets', presets)
+        config.set('scan.last_roi_choice', name)
+        config.save()
+        self._reload_presets()  # 内部会按 last_roi_choice=name 定位
 
     # ----- 扫描节奏 -----
     def _build_pace_group(self):
@@ -352,7 +390,6 @@ class ConfigPanel(QWidget):
         """重置配置后由 MainWindow 调用，刷新部分 widget 显示值。
         slider 由调用方重建更稳；此处仅刷新 checkbox / combo / lineedit。"""
         self.cb_enable_roi.setChecked(bool(config.get('scan.enable_roi')))
-        self.cb_remember_roi.setChecked(bool(config.get('scan.remember_roi')))
         self._reload_presets()
         self.cb_gpu.setChecked(bool(config.get('gpu.enabled')))
         cur = config.get('ocr.language') or 'ch'
