@@ -84,13 +84,14 @@ class SettingsPage(QWidget):
         content.setObjectName('settingsContent')
         scroll.setWidget(content)
 
-        # 卡片列居中、占内容区 50% 宽：左右各 1 份留白、中间 2 份装卡片
+        # 卡片列宽度上限 ≈ 默认窗口内容区的一半（1280-64 ≈ 1216 → 半 ≈ 608），
+        # 左对齐、右侧留白，让页面背景仍保持满宽，只把控件本身收窄。
         outer_h = QHBoxLayout(content)
         outer_h.setContentsMargins(0, 0, 0, 0)
         outer_h.setSpacing(0)
-        outer_h.addStretch(1)
 
         inner = QWidget()
+        inner.setMaximumWidth(620)
         v = QVBoxLayout(inner)
         v.setContentsMargins(22, 18, 22, 18)
         v.setSpacing(18)
@@ -102,7 +103,7 @@ class SettingsPage(QWidget):
         v.addWidget(self._build_reset_card())
         v.addStretch(1)
 
-        outer_h.addWidget(inner, 2)
+        outer_h.addWidget(inner)
         outer_h.addStretch(1)
 
     # -------- 常规设置 --------

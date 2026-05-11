@@ -44,6 +44,17 @@ QLabel, QFrame, QSlider, QCheckBox {
 }
 
 
+/* ============================== 标题栏分隔线 ============================== */
+
+/* 原生 Windows 标题栏在浅色主题下为白，与白色工作区融合。在标题栏正下方
+   画一条主蓝横线作为视觉分隔（跨整个窗口宽度，由 MainWindow 顶部 QFrame
+   承载）。*/
+QFrame#titleBarSeparator {
+    background-color: #2F6FEB;
+    border: none;
+}
+
+
 /* ============================== 容器背景 ============================== */
 
 QWidget#sidebar {
