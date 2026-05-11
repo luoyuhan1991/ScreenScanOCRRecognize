@@ -4,6 +4,7 @@ paintEvent 自绘双列：左列累计匹配（kw + hint），右列本次 OCR �
 半透明深色背景圆角卡片，文字带 1px 黑色阴影。
 """
 import threading
+
 from PySide6.QtCore import Qt, QTimer, QRectF, QSize
 from PySide6.QtGui import QGuiApplication, QPainter, QColor, QFont, QFontMetrics, QPen
 from PySide6.QtWidgets import QWidget
@@ -56,10 +57,16 @@ class Overlay(QWidget):
             | Qt.WindowStaysOnTopHint
             | Qt.Tool
             | Qt.WindowDoesNotAcceptFocus
+            # WindowTransparentForInput 在 Windows 下走 WS_EX_TRANSPARENT，OS 层面
+            # 让点击穿透。仅 WA_TransparentForMouseEvents 在 frameless Tool 窗口上不稳。
+            | Qt.WindowTransparentForInput
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        # 全局 QSS 给所有 QWidget 涂了 #F1F5FA 底色，会把半透明背景盖掉；这里显式
+        # 把本控件的 background 设回 transparent，paintEvent 负责画圆角卡片。
+        self.setStyleSheet('background: transparent;')
 
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
