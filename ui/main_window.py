@@ -15,7 +15,11 @@ from .pages.settings_page import SettingsPage
 from .roi_border import ROIBorder
 from .scan_worker import ScanWorker
 from .tray import TrayIcon
+from .widgets.config_panel import RESELECT_TOKEN, CUSTOM_TOKEN
 from .widgets.sidebar import Sidebar
+
+# _resolve_roi 用的哨兵：用户在屏幕 picker 上 Esc / 右键取消 → 不开扫
+_PICKER_CANCELLED = object()
 
 
 class MainWindow(QMainWindow):
@@ -104,18 +108,51 @@ class MainWindow(QMainWindow):
     # ---------- 扫描启停 ----------
 
     def _resolve_roi(self):
-        """根据 config 决定本次启动用的 ROI。enable_roi=False → None（全屏）。"""
+        """按 last_roi_choice 决定本次启动用的 ROI。
+
+        返回：
+        - tuple (x1,y1,x2,y2) — 正常 ROI
+        - None — 全屏（enable_roi=False / 预设找不到 / roi_rect 不合法）
+        - _PICKER_CANCELLED — 用户在 picker 里取消，调用方应中止启动
+        """
         if not bool(config.get('scan.enable_roi')):
             return None
-        roi = config.get('scan.roi_rect')
-        if isinstance(roi, list) and len(roi) == 4:
-            return tuple(roi)
+
+        last = config.get('scan.last_roi_choice') or RESELECT_TOKEN
+
+        if last == RESELECT_TOKEN:
+            # 弹屏幕框选 UI；确认后写 roi_rect、切下拉到「自定义区域」
+            from .roi_picker import ROIPicker
+            rect = ROIPicker().pick()
+            if rect is None:
+                return _PICKER_CANCELLED
+            config.set('scan.roi_rect', list(rect))
+            config.set('scan.last_roi_choice', CUSTOM_TOKEN)
+            config.save()
+            self.scan_page.config_panel.refresh_roi_combo()
+            return rect
+
+        if last == CUSTOM_TOKEN:
+            roi = config.get('scan.roi_rect')
+            return tuple(roi) if isinstance(roi, list) and len(roi) == 4 else None
+
+        # 命名预设：取预设坐标并同步到 roi_rect（让「保存当前」等其它逻辑也能取到）
+        presets = config.get('scan.roi_presets') or {}
+        if last in presets:
+            rect = tuple(presets[last])
+            config.set('scan.roi_rect', list(rect))
+            config.save()
+            return rect
+
+        # 预设被删了或名字不对，fallback 全屏
         return None
 
     def _on_start(self):
         if self.worker.isRunning():
             return
         roi = self._resolve_roi()
+        if roi is _PICKER_CANCELLED:
+            return  # 用户取消框选，按钮状态保持不变
         self.overlay.clear_session()  # 新一轮扫描，清掉上一轮累计
         self.roi_border.show_for(roi)  # ROI 红框（roi=None 则不画）
         self.worker.start_scan(roi=roi)

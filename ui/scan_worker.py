@@ -65,11 +65,10 @@ class ScanWorker(QThread):
         except Exception as e:
             logging.error(f'扫描线程异常: {e}')
             self.status_changed.emit('已停止')
-        finally:
-            try:
-                self.pipeline.release()
-            except Exception:
-                pass
+        # 注意：worker 退出不释放 pipeline。OCRStage 走模块级 (lang, gpu) 单例，
+        # 释放后下次启动会重新加载模型（5–15s + 打印 "初始化 PaddleOCR"），且
+        # release 调用本身有 gc 耗时。让模型驻留到进程退出，OS 收回内存。
+        # 配置变更（语言 / GPU 开关）由 _get_ocr 内部的元组比对触发重建，安全。
 
     def _do_init(self):
         self.status_changed.emit('初始化中')

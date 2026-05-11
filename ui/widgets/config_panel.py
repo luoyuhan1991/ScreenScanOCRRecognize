@@ -13,15 +13,16 @@ from config.config import config, PROJECT_ROOT
 
 _ICON_DIR = os.path.join(PROJECT_ROOT, 'ui', 'icons')
 
-# 下拉里两个特殊 data 值：
-# - _RESELECT：第 0 项「重新框选...」，是一个动作触发器（选中即弹屏幕框选 UI）
-# - _CUSTOM：第 1 项「自定义区域」，代表"刚框选完、还没存为命名预设"的状态。
-#   存在的根本原因：用户两次连点「重新框选...」时，currentIndex 没变 → Qt 不发
-#   currentIndexChanged → picker 不会再弹。所以框选完成后必须把下拉切到一个
-#   非 _RESELECT 的栖息项，下次再点「重新框选...」才能正常触发。
-_RESELECT = '__reselect__'
+# 下拉里两个特殊 data 值（公共，main_window._resolve_roi 也会读取）：
+# - RESELECT_TOKEN：第 0 项「重新框选...」，意图为"开扫时弹屏幕框选 UI"。
+# - CUSTOM_TOKEN：第 1 项「自定义区域」，代表"使用上次框出来的、未存为命名预设的坐标"。
+# 下拉本身不再有副作用——切换只更新 last_roi_choice。实际选 ROI 的动作发生在
+# MainWindow._on_start 中，根据 last_roi_choice 分支处理（弹 picker / 用 roi_rect /
+# 用预设坐标），这样：(a) 反复点「重新框选...」也能稳定触发；(b) 切错预设不会立即
+# 改 roi_rect。
+RESELECT_TOKEN = '__reselect__'
+CUSTOM_TOKEN = '__custom__'
 _RESELECT_LABEL = '重新框选...'
-_CUSTOM = '__custom__'
 _CUSTOM_LABEL = '自定义区域'
 
 
@@ -221,62 +222,28 @@ class ConfigPanel(QWidget):
         定位当前项。全程 blockSignals，不触发 _on_preset_changed。"""
         self.combo_preset.blockSignals(True)
         self.combo_preset.clear()
-        self.combo_preset.addItem(_RESELECT_LABEL, _RESELECT)
-        self.combo_preset.addItem(_CUSTOM_LABEL, _CUSTOM)
+        self.combo_preset.addItem(_RESELECT_LABEL, RESELECT_TOKEN)
+        self.combo_preset.addItem(_CUSTOM_LABEL, CUSTOM_TOKEN)
         presets = config.get('scan.roi_presets') or {}
         for name in presets.keys():
             self.combo_preset.addItem(name, name)
-        last = config.get('scan.last_roi_choice') or _RESELECT
+        last = config.get('scan.last_roi_choice') or RESELECT_TOKEN
         idx = self.combo_preset.findData(last)
         self.combo_preset.setCurrentIndex(idx if idx >= 0 else 0)
         self.combo_preset.blockSignals(False)
 
-    def _set_combo_to(self, data_value):
-        """blockSignals 内把下拉切到指定 data 项，避免再次触发 _on_preset_changed。"""
-        self.combo_preset.blockSignals(True)
-        idx = self.combo_preset.findData(data_value)
-        if idx >= 0:
-            self.combo_preset.setCurrentIndex(idx)
-        self.combo_preset.blockSignals(False)
+    def refresh_roi_combo(self):
+        """外部触发（如 picker 完成后）：按 last_roi_choice 重定位下拉。"""
+        self._reload_presets()
 
     def _on_preset_changed(self, _index):
-        """下拉切换分支：
-        - 「重新框选...」→ 弹 ROIPicker；确认后下拉切到「自定义区域」、写 roi_rect；
-          取消则回退下拉到 last_roi_choice 指向的项。
-        - 「自定义区域」→ 被动状态项：仅记 last_roi_choice，不动 roi_rect。
-        - 命名预设 → 把预设坐标拷给 roi_rect。
-        """
+        """下拉只做意图选择 —— 单纯把当前选项写进 last_roi_choice。
+        实际拿 ROI / 弹 picker 的动作发生在 MainWindow._on_start。"""
         data = self.combo_preset.currentData()
-
-        if data == _RESELECT:
-            # 延迟 import 避免 ui/widgets 包加载期就拽 picker
-            from ..roi_picker import ROIPicker
-            rect = ROIPicker().pick()
-            if rect is not None:
-                config.set('scan.roi_rect', list(rect))
-                config.set('scan.last_roi_choice', _CUSTOM)
-                config.save()
-                # 切到「自定义区域」做栖息项；信号被 blockSignals 屏蔽，避免重复 save
-                self._set_combo_to(_CUSTOM)
-            else:
-                # 取消：回退到上次的项；若上次就是 _RESELECT，停在原地
-                last = config.get('scan.last_roi_choice') or _RESELECT
-                if last != _RESELECT:
-                    self._set_combo_to(last)
+        if not data:
             return
-
-        if data == _CUSTOM:
-            # 被动状态项：仅更新 last_roi_choice。不重置 roi_rect（也没有源可重置到）。
-            config.set('scan.last_roi_choice', _CUSTOM)
-            config.save()
-            return
-
-        # 命名预设分支
-        presets = config.get('scan.roi_presets') or {}
-        if data in presets:
-            config.set('scan.roi_rect', list(presets[data]))
-            config.set('scan.last_roi_choice', data)
-            config.save()
+        config.set('scan.last_roi_choice', data)
+        config.save()
 
     def _on_save_preset(self):
         """把当前 roi_rect 存为命名预设。roi_rect 为空时提示用户先框选一次。"""
@@ -290,7 +257,7 @@ class ConfigPanel(QWidget):
         name, ok = QInputDialog.getText(self, '保存预设', '预设名称：')
         if not (ok and name):
             return
-        if name in (_RESELECT, _CUSTOM):
+        if name in (RESELECT_TOKEN, CUSTOM_TOKEN):
             # 不允许撞内部 token，避免下拉项被它顶掉
             QMessageBox.warning(self, '保存预设', '该名称为保留字，请换一个。')
             return
