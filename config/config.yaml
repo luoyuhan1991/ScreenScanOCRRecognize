@@ -26,16 +26,16 @@ scan:
   enable_diff_skip: true
   enable_roi: true
   interval_seconds: 3.0
-  last_roi_choice: __reselect__
+  last_roi_choice: 4+2
   roi_padding: 10
   roi_presets:
     4+2:
-    - 1100
-    - 256
-    - 1800
-    - 850
+    - 1136
+    - 250
+    - 1858
+    - 847
   roi_rect:
-  - 1170
-  - 256
-  - 1880
-  - 843
+  - 1136
+  - 250
+  - 1858
+  - 847
