@@ -5,7 +5,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSlider,
-    QScrollArea, QFrame, QMessageBox,
+    QScrollArea, QFrame, QMessageBox, QSizePolicy,
 )
 
 from config.config import config
@@ -84,14 +84,16 @@ class SettingsPage(QWidget):
         content.setObjectName('settingsContent')
         scroll.setWidget(content)
 
-        # 卡片列宽度上限 ≈ 默认窗口内容区的一半（1280-64 ≈ 1216 → 半 ≈ 608），
-        # 左对齐、右侧留白，让页面背景仍保持满宽，只把控件本身收窄。
+        # 让卡片列动态占内容区一半宽度（随窗口缩放）：
+        # - inner 设 QSizePolicy.Ignored，强制忽略自身 sizeHint
+        # - inner + 右侧 stretch 各取 stretch=1，于是按 1:1 严格 50/50 切分可用宽度
+        # 页面背景仍是 #settingsPage 满宽；只是把卡片们集中在左半边、右半边留白。
         outer_h = QHBoxLayout(content)
         outer_h.setContentsMargins(0, 0, 0, 0)
         outer_h.setSpacing(0)
 
         inner = QWidget()
-        inner.setMaximumWidth(620)
+        inner.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         v = QVBoxLayout(inner)
         v.setContentsMargins(22, 18, 22, 18)
         v.setSpacing(18)
@@ -103,7 +105,7 @@ class SettingsPage(QWidget):
         v.addWidget(self._build_reset_card())
         v.addStretch(1)
 
-        outer_h.addWidget(inner)
+        outer_h.addWidget(inner, 1)
         outer_h.addStretch(1)
 
     # -------- 常规设置 --------

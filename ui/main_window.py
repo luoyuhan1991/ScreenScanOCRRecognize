@@ -34,11 +34,11 @@ class MainWindow(QMainWindow):
         outer_v.setContentsMargins(0, 0, 0, 0)
         outer_v.setSpacing(0)
 
-        # 原生标题栏在浅色主题下为白色，与白色工作区融合。这里在标题栏正下方
-        # 画一条主蓝横线作为视觉分隔，跨整个窗口宽度。
+        # 原生标题栏在浅色主题下为白色，与白色工作区融合。在标题栏正下方画一条
+        # 1px 灰横线作为视觉分隔（颜色/粗细与 sidebar 右侧那条竖线统一）。
         title_sep = QFrame()
         title_sep.setObjectName('titleBarSeparator')
-        title_sep.setFixedHeight(2)
+        title_sep.setFixedHeight(1)
         outer_v.addWidget(title_sep)
 
         body = QWidget()

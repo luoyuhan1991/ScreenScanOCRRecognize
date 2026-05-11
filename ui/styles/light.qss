@@ -47,10 +47,9 @@ QLabel, QFrame, QSlider, QCheckBox {
 /* ============================== 标题栏分隔线 ============================== */
 
 /* 原生 Windows 标题栏在浅色主题下为白，与白色工作区融合。在标题栏正下方
-   画一条主蓝横线作为视觉分隔（跨整个窗口宽度，由 MainWindow 顶部 QFrame
-   承载）。*/
+   画一条 1px 灰横线作为视觉分隔，颜色/粗细与 sidebar 右侧那条竖线一致。*/
 QFrame#titleBarSeparator {
-    background-color: #2F6FEB;
+    background-color: #E3E8EF;
     border: none;
 }
 
@@ -390,11 +389,14 @@ QPlainTextEdit#logText QScrollBar::sub-page:horizontal {
 
 /* ============================== Settings page ============================== */
 
+/* 卡片列只占左半（settings_page.py 内 hbox 1:1 切分），右半留白。底色用主
+   背景 #F1F5FA 而非白色：右半才不会像一片空着的白板；左半卡片自带白底 + 灰
+   边，依然清晰可辨。中线本身不画 — 卡片右边界天然停在水平正中。*/
 QWidget#settingsPage {
-    background-color: #FFFFFF;
+    background-color: #F1F5FA;
 }
 QWidget#settingsContent {
-    background-color: #FFFFFF;
+    background-color: #F1F5FA;
 }
 QScrollArea {
     background: transparent;
