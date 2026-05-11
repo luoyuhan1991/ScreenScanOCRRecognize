@@ -5,7 +5,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSlider,
-    QScrollArea, QFrame,
+    QScrollArea, QFrame, QMessageBox,
 )
 
 from src.config.config import config
@@ -195,5 +195,18 @@ class SettingsPage(QWidget):
         return card
 
     def _on_reset(self):
-        # T17 才真正实现；先留空槽避免按钮无响应
-        pass
+        """重置全部配置到 DEFAULT_CONFIG。控件值在 build 时已绑死 init 值，
+        这里弹"重启生效"提示而非现场刷 widget——后者要遍历重写所有 setter，
+        引入歧义风险且没有功能收益。"""
+        ret = QMessageBox.question(
+            self, '确认重置',
+            '确定要恢复所有配置到出厂默认值吗？\n\n此操作不可撤销。',
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if ret != QMessageBox.Yes:
+            return
+        config.reset_to_defaults()
+        config.save()
+        QMessageBox.information(
+            self, '已重置', '配置已恢复默认值。\n请重启应用让所有界面生效。',
+        )

@@ -1,4 +1,4 @@
-"""PySide6 入口。原 tkinter 实现已重命名为 app.py.tk_backup（迁移完成后删除）。"""
+"""PySide6 GUI 入口。tkinter 旧实现已在 PySide6 迁移完成后删除。"""
 
 import os
 import sys

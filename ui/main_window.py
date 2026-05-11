@@ -1,17 +1,25 @@
 import logging
 
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QSystemTrayIcon
 
 from src.config.config import config
+from src.utils.hotkey import HotkeyManager
 from .widgets.sidebar import Sidebar
 from .pages.scan_page import ScanPage
 from .pages.settings_page import SettingsPage
 from .pages.about_page import AboutPage
 from .log_bridge import LogBridge
 from .tray import TrayIcon
+from .scan_worker import ScanWorker
+from .overlay import Overlay
 
 
 class MainWindow(QMainWindow):
+    # 热键回调跑在 keyboard 库的线程里，靠 Signal 跨线程转主线程（queued connection）
+    _hotkey_start_requested = Signal()
+    _hotkey_stop_requested = Signal()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle('屏幕扫描 OCR 识别系统')
@@ -51,12 +59,67 @@ class MainWindow(QMainWindow):
             self.tray = TrayIcon(self)
             self.tray.show()
 
+        # 屏幕浮窗（命中提示用）
+        self.overlay = Overlay(config=config)
+
+        # 后台扫描线程
+        self.worker = ScanWorker(self)
+        self.worker.status_changed.connect(self._on_status_changed)
+        self.worker.result_ready.connect(self.overlay.update)
+        # 配置面板的启停按钮 → worker
+        self.scan_page.config_panel.start_clicked.connect(self._on_start)
+        self.scan_page.config_panel.stop_clicked.connect(self._on_stop)
+
+        # 全局热键：Ctrl+Alt+1 开扫 / Ctrl+Alt+2 停扫。回调在库自己线程里跑，
+        # 通过 Signal queued connection 中转到 Qt 主线程，避免直接跨线程操作 widget。
+        self._hotkey_start_requested.connect(self._on_start)
+        self._hotkey_stop_requested.connect(self._on_stop)
+        self.hotkey = HotkeyManager()
+        self.hotkey.register('ctrl+alt+1', self._hotkey_start_requested.emit, '开始扫描')
+        self.hotkey.register('ctrl+alt+2', self._hotkey_stop_requested.emit, '停止扫描')
+
+        # startup_mode='auto'：UI 渲染稳定后自动开扫（延 200ms 让事件循环先转一圈）
+        if (config.get('app.startup_mode') or 'paused') == 'auto':
+            QTimer.singleShot(200, self._on_start)
+
+    # ---------- 扫描启停 ----------
+
+    def _resolve_roi(self):
+        """根据 config 决定本次启动用的 ROI。enable_roi=False → None（全屏）。"""
+        if not bool(config.get('scan.enable_roi')):
+            return None
+        roi = config.get('scan.roi_rect')
+        if isinstance(roi, list) and len(roi) == 4:
+            return tuple(roi)
+        return None
+
+    def _on_start(self):
+        if self.worker.isRunning():
+            return
+        roi = self._resolve_roi()
+        self.overlay.clear_session()  # 新一轮扫描，清掉上一轮累计
+        self.worker.start_scan(roi=roi)
+
+    def _on_stop(self):
+        self.worker.stop_scan()
+        self.overlay.hide()
+
+    def _on_status_changed(self, text):
+        """worker 三态：'初始化中'/'运行中'/'已停止'。
+        - 初始化中 / 运行中：start 禁、stop 启
+        - 已停止：start 启、stop 禁
+        - 状态栏文字也跟着切（颜色由 StatusBar 内 _STATUS_COLOR 表决定）"""
+        self.scan_page.status_bar.set_status(text)
+        running = text in ('初始化中', '运行中')
+        self.scan_page.config_panel.set_running(running)
+
     def request_real_quit(self):
         """托盘 → 退出菜单调用，让随后的 closeEvent 不再拦截缩托盘。"""
         self._real_quit = True
 
     def closeEvent(self, event):
-        """关闭按钮：若 app.minimize_to_tray=True 且托盘可用，则缩进托盘不退出。"""
+        """关闭按钮：若 app.minimize_to_tray=True 且托盘可用，则缩进托盘不退出。
+        真正退出路径上清理 worker + 热键 + overlay。"""
         if (
             not self._real_quit
             and self.tray is not None
@@ -64,5 +127,20 @@ class MainWindow(QMainWindow):
         ):
             event.ignore()
             self.hide()
-        else:
-            super().closeEvent(event)
+            return
+        # 真正退出
+        try:
+            self.hotkey.unregister_all()
+        except Exception:
+            pass
+        try:
+            if self.worker.isRunning():
+                self.worker.stop_scan()
+                self.worker.wait(2000)  # 给 worker 最多 2s 收尾
+        except Exception:
+            pass
+        try:
+            self.overlay.destroy()
+        except Exception:
+            pass
+        super().closeEvent(event)

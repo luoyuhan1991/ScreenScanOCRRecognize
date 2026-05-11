@@ -9,8 +9,8 @@ from PySide6.QtCore import Qt, QTimer, QRectF, QSize
 from PySide6.QtGui import QGuiApplication, QPainter, QColor, QFont, QFontMetrics, QPen
 from PySide6.QtWidgets import QWidget
 
-# 复用旧版生成好的 C 大三和弦 PCM 字节
-from shared.overlay import _CHORD_WAV
+# C 大三和弦 PCM 字节（命中提示音）
+from shared.sound import CHORD_WAV as _CHORD_WAV
 
 try:
     import winsound

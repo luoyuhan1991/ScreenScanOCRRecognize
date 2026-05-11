@@ -76,5 +76,11 @@ class Config:
         with open(self._path, 'w', encoding='utf-8') as f:
             yaml.dump(self._data, f, allow_unicode=True, default_flow_style=False)
 
+    def reset_to_defaults(self):
+        """恢复全量配置到 DEFAULT_CONFIG（不写盘，调用方决定是否 save）。"""
+        if not self._loaded:
+            self.load()
+        self._data = copy.deepcopy(DEFAULT_CONFIG)
+
 
 config = Config()
