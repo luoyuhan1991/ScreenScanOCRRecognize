@@ -12,7 +12,7 @@ logging:
   level: INFO
   max_bytes: 10485760
 matching:
-  display_duration: 2.0
+  display_duration: 2.5
   enable_sound: true
   enabled: true
   font_size: 18
@@ -20,12 +20,12 @@ matching:
 ocr:
   enable_image_invert: false
   language: ch
-  min_confidence: 0.32
+  min_confidence: 0.28
 scan:
   diff_threshold: 5.0
   enable_diff_skip: true
   enable_roi: true
-  interval_seconds: 2.0
+  interval_seconds: 3.0
   remember_roi: true
   roi_padding: 10
   roi_presets:

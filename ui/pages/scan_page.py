@@ -17,8 +17,8 @@ class ScanPage(QWidget):
         layout.setSpacing(0)
 
         self.config_panel = ConfigPanel()
-        # mockup 比例 1fr : 1.05fr，给 config 设最小宽度并通过 stretch 控制最终比例
-        self.config_panel.setMinimumWidth(380)
+        # 左侧配置区固定 360px，右侧日志区吃完剩余空间
+        self.config_panel.setFixedWidth(360)
 
         self.log_panel = LogPanel()
 
@@ -28,7 +28,6 @@ class ScanPage(QWidget):
         layout.addWidget(self.config_panel, 0, 0)
         layout.addWidget(self.log_panel, 0, 1)
         layout.addWidget(self.status_bar, 1, 0, 1, 2)
-        # 配置 vs 日志 = 1 : 1.05（mockup 一致）
-        layout.setColumnStretch(0, 100)
-        layout.setColumnStretch(1, 105)
+        layout.setColumnStretch(0, 0)
+        layout.setColumnStretch(1, 1)
         layout.setRowStretch(0, 1)

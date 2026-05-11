@@ -171,8 +171,9 @@ class ConfigPanel(QWidget):
         layout.addWidget(self._build_pace_group())
         layout.addWidget(self._build_ocr_group())
         layout.addWidget(self._build_match_group())
-        layout.addLayout(self._build_action_row())
+        # 控件和按钮之间留空，按钮贴底
         layout.addStretch(1)
+        layout.addLayout(self._build_action_row())
 
         # 初始状态：未运行 → 开始可点，停止 disabled
         self.set_running(False)
@@ -182,12 +183,14 @@ class ConfigPanel(QWidget):
         frame, box = _make_group('扫描区域')
 
         self.cb_enable_roi = QCheckBox('启用 ROI')
+        self.cb_enable_roi.setCursor(Qt.PointingHandCursor)
         self.cb_enable_roi.setChecked(bool(config.get('scan.enable_roi')))
         self.cb_enable_roi.stateChanged.connect(
             lambda s: (config.set('scan.enable_roi', bool(s)), config.save())
         )
 
         self.cb_remember_roi = QCheckBox('记住区域')
+        self.cb_remember_roi.setCursor(Qt.PointingHandCursor)
         self.cb_remember_roi.setChecked(bool(config.get('scan.remember_roi')))
         self.cb_remember_roi.stateChanged.connect(
             lambda s: (config.set('scan.remember_roi', bool(s)), config.save())
@@ -204,6 +207,7 @@ class ConfigPanel(QWidget):
         self._reload_presets()
         self.combo_preset.currentTextChanged.connect(self._on_preset_changed)
         btn_save_preset = QPushButton('保存当前')
+        btn_save_preset.setCursor(Qt.PointingHandCursor)
         btn_save_preset.clicked.connect(self._on_save_preset)
         preset_row.addWidget(self.combo_preset, 1)
         preset_row.addWidget(btn_save_preset)
@@ -246,7 +250,7 @@ class ConfigPanel(QWidget):
         box.addLayout(_slider_row(
             0.5, 10.0, float(config.get('scan.interval_seconds') or 5.0),
             lambda v: (config.set('scan.interval_seconds', round(v, 1)), config.save()),
-            scale=10,
+            scale=2,  # 0.5 秒步进
         ))
         return frame
 
@@ -267,6 +271,7 @@ class ConfigPanel(QWidget):
         )
         row.addWidget(self.combo_lang)
         self.cb_gpu = QCheckBox('GPU 加速')
+        self.cb_gpu.setCursor(Qt.PointingHandCursor)
         self.cb_gpu.setChecked(bool(config.get('gpu.enabled')))
         self.cb_gpu.stateChanged.connect(
             lambda s: (config.set('gpu.enabled', bool(s)), config.save())
@@ -292,8 +297,10 @@ class ConfigPanel(QWidget):
         self.le_banlist = QLineEdit(str(config.get('files.banlist_file') or ''))
         self.le_banlist.setReadOnly(True)
         btn_browse = QPushButton('浏览…')
+        btn_browse.setCursor(Qt.PointingHandCursor)
         btn_browse.clicked.connect(self._on_browse_banlist)
         btn_edit = QPushButton('编辑')
+        btn_edit.setCursor(Qt.PointingHandCursor)
         btn_edit.clicked.connect(self._on_edit_banlist)
         row.addWidget(self.le_banlist, 1)
         row.addWidget(btn_browse)
@@ -304,7 +311,7 @@ class ConfigPanel(QWidget):
         box.addLayout(_slider_row(
             0.5, 10.0, float(config.get('matching.display_duration') or 3.0),
             lambda v: (config.set('matching.display_duration', round(v, 1)), config.save()),
-            scale=10,
+            scale=2,  # 0.5 秒步进
         ))
         return frame
 

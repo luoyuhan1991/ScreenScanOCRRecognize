@@ -203,6 +203,13 @@ QFrame#btnPrimary[pressed="true"] {
     background-color: #1F50C5;
     border-color: #1F50C5;
 }
+/* disabled 时关闭 hover 反馈：Qt QSS 的 :hover 在 disabled QFrame 上仍会 match，
+   叠加 setEnabled 用的 0.4 opacity 后颜色变化几乎看不见，但语义上 disabled 不应有 hover。
+   这里用更高 specificity 的 :disabled:hover 把背景复原到默认色。 */
+QFrame#btnPrimary:disabled:hover {
+    background-color: #2F6FEB;
+    border-color: #2F6FEB;
+}
 QFrame#btnDanger {
     background-color: #E5484D;
     border: 1px solid #E5484D;
@@ -215,6 +222,10 @@ QFrame#btnDanger:hover {
 QFrame#btnDanger[pressed="true"] {
     background-color: #B53236;
     border-color: #B53236;
+}
+QFrame#btnDanger:disabled:hover {
+    background-color: #E5484D;
+    border-color: #E5484D;
 }
 /* 按钮内文字必须用带父级 ID 的复合选择器（specificity 200+），否则会被
    `QWidget#configPanel QLabel { color: #475569 }`（102）压过去，导致白字
@@ -310,7 +321,8 @@ QPushButton#logClear {
     min-height: 0;
 }
 QPushButton#logClear:hover {
-    background-color: #F1F5F9;
+    background-color: #E2E8F0;
+    border-color: #CBD5E1;
 }
 
 
@@ -375,7 +387,7 @@ QPushButton#hotkeyEdit {
     min-height: 0;
 }
 QPushButton#hotkeyEdit:hover {
-    background-color: #F1F5F9;
+    background-color: #E2E8F0;
     border-radius: 4px;
 }
 

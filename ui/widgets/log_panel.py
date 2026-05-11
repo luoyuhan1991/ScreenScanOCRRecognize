@@ -66,6 +66,7 @@ class LogPanel(QWidget):
         btn_clear = QPushButton(' 清空日志')
         btn_clear.setObjectName('logClear')
         btn_clear.setIcon(_make_broom_icon())
+        btn_clear.setCursor(Qt.PointingHandCursor)
         btn_clear.clicked.connect(self._clear)
         header_l.addWidget(btn_clear)
         layout.addWidget(header)
