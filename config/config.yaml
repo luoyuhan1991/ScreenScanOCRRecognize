@@ -1,8 +1,8 @@
 app:
-  minimize_to_tray: true
+  minimize_to_tray: false
   startup_mode: paused
 files:
-  banlist_file: D:/dev/reference/ScreenScanOCRRecognize/requirements.txt
+  banlist_file: C:/Users/Administrator/Desktop/banlist.txt
 gpu:
   enabled: true
 logging:
@@ -22,7 +22,7 @@ ocr:
   language: ch
   min_confidence: 0.32
 scan:
-  diff_threshold: 20.0
+  diff_threshold: 5.0
   enable_diff_skip: true
   enable_roi: true
   interval_seconds: 2.0
