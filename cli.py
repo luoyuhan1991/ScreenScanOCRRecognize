@@ -1,13 +1,13 @@
-import sys
 import os
+import sys
 import time
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(__file__))
 
-from src.config.config import config
-from src.pipeline.pipeline import ScanPipeline
-from src.utils.logger import logger, configure_from_config
+from config.config import config
+from pipeline.pipeline import ScanPipeline
+from utils.logger import logger, configure_from_config
 
 
 def main():

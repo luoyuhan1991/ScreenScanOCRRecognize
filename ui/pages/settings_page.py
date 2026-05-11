@@ -1,5 +1,5 @@
 """设置页：5 张卡 — 常规 / 扫描配置 / 浮窗提示 / 热键 / 配置管理。
-布局对照 mockups/settings_window.png。所有控件双向绑定 config 单例；
+布局对照 docs/mockups/settings_window.png。所有控件双向绑定 config 单例；
 每张卡用 SettingsCard 容器，行用 SettingsRow 拼装。"""
 
 from PySide6.QtCore import Qt
@@ -8,12 +8,10 @@ from PySide6.QtWidgets import (
     QScrollArea, QFrame, QMessageBox,
 )
 
-from src.config.config import config
-
+from config.config import config
 from ..widgets.settings_card import (
     SwitchToggle, SettingsCard, SettingsRow, HintRow, HotkeyDisplay, make_reset_button,
 )
-
 
 # 启动后默认状态选项
 _STARTUP_MODES = [

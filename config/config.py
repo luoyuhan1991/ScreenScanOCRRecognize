@@ -1,14 +1,11 @@
 import copy
 import os
-import sys
 import yaml
 
-# 把项目根放到 sys.path，让 defaults.py 与 shared.* 能跨树 import；其它 entry point
-# 也直接 from src.config.config import PROJECT_ROOT 复用，避免到处手写 dirname 链。
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-from defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG  # noqa: E402
+from .defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG
+
+# 其它模块可直接 from config.config import PROJECT_ROOT 复用，避免到处手写 dirname 链。
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _deep_merge(default, override):

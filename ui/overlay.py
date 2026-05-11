@@ -1,16 +1,15 @@
-"""屏幕浮窗（PySide6 版）— 接口对齐 shared/overlay.py。
+"""屏幕浮窗（PySide6 版）。
 
 paintEvent 自绘双列：左列累计匹配（kw + hint），右列本次 OCR 文本（命中红 / 未命中绿 / 摘要灰）。
 半透明深色背景圆角卡片，文字带 1px 黑色阴影。
 """
 import threading
-
 from PySide6.QtCore import Qt, QTimer, QRectF, QSize
 from PySide6.QtGui import QGuiApplication, QPainter, QColor, QFont, QFontMetrics, QPen
 from PySide6.QtWidgets import QWidget
 
 # C 大三和弦 PCM 字节（命中提示音）
-from shared.sound import CHORD_WAV as _CHORD_WAV
+from .sound import CHORD_WAV as _CHORD_WAV
 
 try:
     import winsound

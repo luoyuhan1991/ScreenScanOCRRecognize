@@ -6,7 +6,7 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from defaults import DEFAULT_CONFIG
+from config.defaults import DEFAULT_CONFIG
 
 
 def test_roi_renamed():
@@ -21,7 +21,7 @@ def test_enable_roi_intact():
 
 
 def test_app_block_exists():
-    from defaults import DEFAULT_CONFIG, APP_VERSION
+    from config.defaults import DEFAULT_CONFIG, APP_VERSION
     assert APP_VERSION == '1.0.0'
     assert DEFAULT_CONFIG['app']['minimize_to_tray'] is True
     assert DEFAULT_CONFIG['app']['startup_mode'] in ('paused', 'auto')

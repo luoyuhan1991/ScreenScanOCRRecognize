@@ -1,5 +1,4 @@
 import os
-
 from PySide6.QtCore import Qt, Signal, QByteArray
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
@@ -9,8 +8,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 
-from src.config.config import config
-
+from config.config import config
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _ICON_DIR = os.path.join(_PROJECT_ROOT, 'ui', 'icons')

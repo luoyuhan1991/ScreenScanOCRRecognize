@@ -1,19 +1,18 @@
 import logging
-
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QSystemTrayIcon
 
-from src.config.config import config
-from src.utils.hotkey import HotkeyManager
-from .widgets.sidebar import Sidebar
+from config.config import config
+from utils.hotkey import HotkeyManager
+from .log_bridge import LogBridge
+from .overlay import Overlay
+from .pages.about_page import AboutPage
 from .pages.scan_page import ScanPage
 from .pages.settings_page import SettingsPage
-from .pages.about_page import AboutPage
-from .log_bridge import LogBridge
-from .tray import TrayIcon
-from .scan_worker import ScanWorker
-from .overlay import Overlay
 from .roi_border import ROIBorder
+from .scan_worker import ScanWorker
+from .tray import TrayIcon
+from .widgets.sidebar import Sidebar
 
 
 class MainWindow(QMainWindow):

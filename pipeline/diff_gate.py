@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
-from ..config.config import config
-from ..utils.logger import logger
+
+from config.config import config
+from utils.logger import logger
 
 
 class DiffGate:

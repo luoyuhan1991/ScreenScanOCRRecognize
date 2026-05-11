@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.config.config import config
-from src.pipeline.capture import CaptureStage
+from config.config import config
+from pipeline.capture import CaptureStage
 
 
 def _mock_sct():
@@ -25,7 +25,7 @@ def test_enable_roi_false_forces_fullscreen():
     config.load()
     config.set('scan.enable_roi', False)
     cap = CaptureStage()
-    with patch('src.pipeline.capture.mss.mss', return_value=_mock_sct()):
+    with patch('pipeline.capture.mss.mss', return_value=_mock_sct()):
         cap.grab(roi=(100, 100, 500, 500))
     monitor = cap.sct.grab.call_args[0][0]
     assert monitor == cap.sct.monitors[1], f'未回退全屏，实际 monitor={monitor}'
@@ -35,7 +35,7 @@ def test_enable_roi_true_uses_roi():
     config.load()
     config.set('scan.enable_roi', True)
     cap = CaptureStage()
-    with patch('src.pipeline.capture.mss.mss', return_value=_mock_sct()):
+    with patch('pipeline.capture.mss.mss', return_value=_mock_sct()):
         cap.grab(roi=(100, 100, 500, 500))
     monitor = cap.sct.grab.call_args[0][0]
     # ROI 在 capture.py 里有 padding 外扩（默认 10 像素）

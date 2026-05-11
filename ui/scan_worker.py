@@ -15,11 +15,10 @@ UI 接：
 """
 import logging
 import time
-
 from PySide6.QtCore import QThread, Signal
 
-from src.pipeline.pipeline import ScanPipeline
-from src.config.config import config
+from config.config import config
+from pipeline.pipeline import ScanPipeline
 
 
 class ScanWorker(QThread):

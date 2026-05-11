@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-ScreenScanOCRRecognize 是一个 Windows 平台的屏幕扫描 OCR 应用。核心流程：定时截图 → OCR 识别 → 关键词匹配 → 屏幕弹窗提示。支持 GUI（tkinter）和 CLI 两种界面。
+ScreenScanOCRRecognize 是一个 Windows 平台的屏幕扫描 OCR 应用。核心流程：定时截图 → OCR 识别 → 关键词匹配 → 屏幕弹窗提示。支持 GUI（PySide6）和 CLI 两种界面。
 
 当前架构：pipeline（`capture → diff_gate → ocr_stage → matcher`），仅 PaddleOCR 单引擎。
 
@@ -32,27 +32,37 @@ pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/
 
 ```
 ScreenScanOCRRecognize/
-├── app.py                          # GUI 入口（~1077 行，MainGUI 类，内联托盘）
+├── app.py                          # PySide6 GUI 入口（~30 行，QApplication 启动）
 ├── cli.py                          # CLI 入口（~65 行，纯交互式循环）
 ├── gui.bat                         # GUI 启动批处理（pythonw 隐藏控制台）
-├── defaults.py                     # 项目级默认配置（DEFAULT_CONFIG / DEFAULT_BANLIST_FILE 唯一来源）
+├── build.spec                      # PyInstaller 打包脚本
 ├── config/
+│   ├── config.py                   # Config 单例（~75 行，DEFAULT_CONFIG + yaml 深合并）
+│   ├── defaults.py                 # 项目级默认值（DEFAULT_CONFIG / DEFAULT_BANLIST_FILE 唯一来源）
 │   └── config.yaml                 # 主配置文件（用户改动会写回此处）
-├── shared/
+├── pipeline/
+│   ├── capture.py                  # CaptureStage（mss 截屏，线程归属检测自动重建）
+│   ├── diff_gate.py                # DiffGate（160x120 灰度缩略图 MSE 帧差）
+│   ├── ocr_stage.py                # OCRStage（PaddleOCR v2/v3 兼容，单例复用）
 │   ├── matcher.py                  # SubstringMatcher（Aho-Corasick 子串匹配）
-│   └── sound.py                    # CHORD_WAV 字节（C 大三和弦提示音）
-├── src/
-│   ├── config/
-│   │   └── config.py               # Config 单例（~80 行，DEFAULT_CONFIG + yaml 深合并）
-│   ├── pipeline/
-│   │   ├── capture.py              # CaptureStage（mss 截屏，线程归属检测自动重建）
-│   │   ├── diff_gate.py            # DiffGate（160x120 灰度缩略图 MSE 帧差）
-│   │   ├── ocr_stage.py            # OCRStage（PaddleOCR v2/v3 兼容，单例复用）
-│   │   └── pipeline.py             # ScanPipeline（编排 + ScanResult）
-│   └── utils/
-│       ├── hotkey.py               # HotkeyManager（keyboard 库全局热键）
-│       └── logger.py               # logger 单例 + configure_from_config
-├── docs/                           # 文档（GUI_DESIGN.md / PRD_COMPARISON.md / 默认关键词）
+│   └── pipeline.py                 # ScanPipeline（编排 + ScanResult）
+├── utils/
+│   ├── hotkey.py                   # HotkeyManager（keyboard 库全局热键）
+│   └── logger.py                   # logger 单例 + configure_from_config
+├── ui/                             # PySide6 全部 UI 代码
+│   ├── main_window.py              # MainWindow（QMainWindow + 侧边栏 + StackedWidget）
+│   ├── scan_worker.py              # ScanWorker（QThread 子类，跑 ScanPipeline）
+│   ├── overlay.py                  # Overlay（无边框 QWidget，paintEvent 双列自绘）
+│   ├── tray.py                     # TrayIcon（QSystemTrayIcon 包装）
+│   ├── roi_border.py               # ROI 边框可视化
+│   ├── log_bridge.py               # logging Handler → Qt Signal 桥接
+│   ├── sound.py                    # CHORD_WAV 字节（C 大三和弦提示音）
+│   ├── pages/                      # 主路由页面：scan_page / settings_page / about_page
+│   ├── widgets/                    # 复用控件：sidebar / config_panel / log_panel / status_bar / settings_card
+│   ├── styles/light.qss            # 样式表（{ICON_DIR} 占位符运行时替换）
+│   └── icons/                      # SVG 图标
+├── tests/                          # pytest 测试（自带 sys.path 注入）
+├── docs/                           # 文档 + mockups（设计图/HTML 原型）
 └── logs/                           # 应用日志
 ```
 
@@ -70,25 +80,25 @@ app.py / cli.py → ScanPipeline.scan_once()
 
 - **`app.py`** — PySide6 GUI 启动器（~30 行）：`config.load()` → `QApplication` + 加载 `ui/styles/light.qss`（运行时把 `{ICON_DIR}` 替换为 `ui/icons` 绝对路径）→ `MainWindow.show()`。主窗口实现在 `ui/main_window.py`。
 - **`cli.py`** — CLI 入口，`config.load()` 后构建 `ScanPipeline`，循环 `scan_once()` 输出匹配。**不弹浮窗**，靠 stdout 打印结果。
-- **`shared/matcher.py`** — `SubstringMatcher` 类，基于 `pyahocorasick` 自动机的多模式子串匹配（casefold 不区分大小写）。返回 `[{'keyword','hint','ocr_text'}, ...]`。模块级 `get_cached_matcher(path)` 提供按文件路径的单例缓存 + mtime 热重载，`parse_keyword_line(line)` 解析 `关键词 提示词`（空白分隔）或 `关键词:提示词`（冒号兼容）。
-- **`src/pipeline/pipeline.py`** — `ScanPipeline` 类，组合四个阶段（capture/diff_gate/ocr/matcher）+ 上次结果缓存。`scan_once()` 返回 `ScanResult(ocr_results, matches, skipped, duration)`；diff_gate 命中时复用上次的 ocr_results 和 matches，仅刷新 `skipped=True` 与 `duration`。
-- **`src/pipeline/capture.py`** — `CaptureStage`，mss 截屏。**关键：**mss 用线程本地 Windows 设备上下文，`grab()` 内做了 `_owner_thread` 检查，跨线程时自动重建 `mss.mss()`。ROI 模式按 `scan.roi_padding` 外扩。
-- **`src/pipeline/diff_gate.py`** — `DiffGate`，把帧 BGR 缩成 160x120 灰度缩略图算 MSE，低于 `scan.diff_threshold`（默认 5.0）就跳过 OCR。`reset()` 清空上一帧（设置 ROI 时调用）。
-- **`src/pipeline/ocr_stage.py`** — `OCRStage`，封装 PaddleOCR。模块级单例 `_ocr_instance` + `_ocr_init_config = (lang, gpu)`，配置变化时重建。**PaddleOCR v3** 用 `device='gpu'/'cpu'` 并显式禁用 `use_doc_orientation_classify` / `use_doc_unwarping` / `use_textline_orientation`（屏幕截图始终正向，禁用可避免 PP-LCNet padding bug 并提速）；**v2** 用 `use_gpu=True/False` + `use_angle_cls=True`。
-- **`src/config/config.py`** — `Config` 单例，从 `config/config.yaml` 加载并与 `defaults.DEFAULT_CONFIG` 深度合并（yaml 优先，defaults 兜底）。点号路径访问：`config.get('scan.interval_seconds')`，支持 `config.set()` + `config.save()`。**注意新版不再有 `is_dirty()` / `clear_dirty()` 脏标记机制**——pipeline 各阶段每次扫描都直接 `config.get(...)` 取最新值，无需缓存刷新。
-- **`src/utils/hotkey.py`** — `HotkeyManager`，包装 `keyboard.add_hotkey/remove_hotkey`，`register(hotkey, callback, description)` / `unregister_all()`。
-- **`src/utils/logger.py`** — 模块级 `logger`（StreamHandler，禁 propagate）+ `configure_from_config(cfg)` 按 `logging.level` 调整级别。
+- **`pipeline/matcher.py`** — `SubstringMatcher` 类，基于 `pyahocorasick` 自动机的多模式子串匹配（casefold 不区分大小写）。返回 `[{'keyword','hint','ocr_text'}, ...]`。模块级 `get_cached_matcher(path)` 提供按文件路径的单例缓存 + mtime 热重载，`parse_keyword_line(line)` 解析 `关键词 提示词`（空白分隔）或 `关键词:提示词`（冒号兼容）。
+- **`pipeline/pipeline.py`** — `ScanPipeline` 类，组合四个阶段（capture/diff_gate/ocr/matcher）+ 上次结果缓存。`scan_once()` 返回 `ScanResult(ocr_results, matches, skipped, duration)`；diff_gate 命中时复用上次的 ocr_results 和 matches，仅刷新 `skipped=True` 与 `duration`。
+- **`pipeline/capture.py`** — `CaptureStage`，mss 截屏。**关键：**mss 用线程本地 Windows 设备上下文，`grab()` 内做了 `_owner_thread` 检查，跨线程时自动重建 `mss.mss()`。ROI 模式按 `scan.roi_padding` 外扩。
+- **`pipeline/diff_gate.py`** — `DiffGate`，把帧 BGR 缩成 160x120 灰度缩略图算 MSE，低于 `scan.diff_threshold`（默认 5.0）就跳过 OCR。`reset()` 清空上一帧（设置 ROI 时调用）。
+- **`pipeline/ocr_stage.py`** — `OCRStage`，封装 PaddleOCR。模块级单例 `_ocr_instance` + `_ocr_init_config = (lang, gpu)`，配置变化时重建。**PaddleOCR v3** 用 `device='gpu'/'cpu'` 并显式禁用 `use_doc_orientation_classify` / `use_doc_unwarping` / `use_textline_orientation`（屏幕截图始终正向，禁用可避免 PP-LCNet padding bug 并提速）；**v2** 用 `use_gpu=True/False` + `use_angle_cls=True`。
+- **`config/config.py`** — `Config` 单例，从 `config/config.yaml` 加载并与 `defaults.DEFAULT_CONFIG` 深度合并（yaml 优先，defaults 兜底）。点号路径访问：`config.get('scan.interval_seconds')`，支持 `config.set()` + `config.save()`。**注意新版不再有 `is_dirty()` / `clear_dirty()` 脏标记机制**——pipeline 各阶段每次扫描都直接 `config.get(...)` 取最新值，无需缓存刷新。
+- **`utils/hotkey.py`** — `HotkeyManager`，包装 `keyboard.add_hotkey/remove_hotkey`，`register(hotkey, callback, description)` / `unregister_all()`。
+- **`utils/logger.py`** — 模块级 `logger`（StreamHandler，禁 propagate）+ `configure_from_config(cfg)` 按 `logging.level` 调整级别。
+- **`ui/scan_worker.py`** — `ScanWorker(QThread)`，后台线程内 `pipeline.init()` → 循环 `scan_once()`。两个 Signal：`status_changed(str)` → StatusBar；`result_ready(ocr_results, matches)` → Overlay。`stop_scan()` 设标志位，循环以 0.3s 分段 sleep 实现 ≤300ms 退出响应。
 
 ### 线程模型（GUI 模式）
 
-- **主线程**：tkinter 事件循环
-- **OCR 初始化线程**：后台线程跑 `pipeline.init()` 加载 PaddleOCR，完成后通过 `root.after(0, callback)` 跳回主线程
-- **扫描线程**：循环调用 `pipeline.scan_once()`，由 `threading.Event` (`stop_event`) 控制停止
-- **日志线程**：`queue.Queue` 从工作线程收集日志，主线程定时读出并写入 GUI（颜色：DEBUG=cyan, INFO=green, WARNING=yellow, ERROR=red）
-- **热键线程**：`keyboard` 库全局钩子，Ctrl+Alt+1 开始 / Ctrl+Alt+2 停止，回调通过 `root.after(0, callback)` 切回主线程
-- **托盘线程**：`pystray` 系统托盘图标（在 app.py 内联实现），左键显示主窗口，右键菜单退出
+- **主线程**：Qt 事件循环。所有 UI 控件、Overlay 绘制都在这里。
+- **扫描线程**：`ScanWorker(QThread)`。线程内先 `pipeline.init()`（OCR 加载 5–15 秒），再循环 `scan_once()`。通过 Signal 把状态 / 结果跨线程递回主线程：`status_changed` → StatusBar、`result_ready` → Overlay。
+- **热键线程**：`keyboard` 库全局钩子（`HotkeyManager`），回调用 `QMetaObject.invokeMethod` 或闭包配合 `QTimer.singleShot(0, ...)` 切回主线程执行。
+- **托盘**：`QSystemTrayIcon`（在 `ui/tray.py`），不开新线程，靠 Qt 信号直连主窗口。
+- **日志桥**：`ui/log_bridge.py` 把 `logging` 的 `Handler` 包装成发 Signal 的对象，工作线程 `logging.info()` 自动转成 Qt Signal 写入 `LogPanel`。
 
-同步原语：`threading.Event`（停止信号）、`queue.Queue`（日志队列）。`mss` 截图实例在 `CaptureStage` 内做了线程归属检测，跨线程时自动重建。
+同步原语：`ScanWorker._stop`（bool 标志，循环以分段 sleep 检查）、Qt Signal/Slot（线程安全的跨线程通信）。`mss` 截图实例在 `CaptureStage` 内做了线程归属检测，跨线程时自动重建。
 
 ### 配置体系
 
@@ -101,7 +111,7 @@ app.py / cli.py → ScanPipeline.scan_once()
 - `logging.*` — 日志级别
 - `app.*` — `minimize_to_tray` / `startup_mode`
 
-`defaults.py` 是默认值唯一来源，`config.yaml` 中没有的键自动用 defaults 兜底。
+`config/defaults.py` 是默认值唯一来源，`config.yaml` 中没有的键自动用 defaults 兜底。
 
 ## 关键设计决策
 
@@ -113,22 +123,22 @@ app.py / cli.py → ScanPipeline.scan_once()
 
 **全局热键**：仅 Windows，依赖 `keyboard` 库（需管理员权限）。`HotkeyManager` 在 `register()` 内 try import，缺失时只记 warning，不影响其它功能。
 
-**跨树 import 路径**：`src/config/config.py` 在模块顶层把项目根插入 `sys.path`，让 `defaults.py` 可被 `from defaults import ...` 导入；`shared.*` 模块同样依赖项目根在 `sys.path` 上（GUI/CLI 入口也会 `sys.path.insert(0, os.path.dirname(__file__))`）。
+**扁平包结构**：项目根直接放 `config/` `pipeline/` `utils/` `ui/` 四个顶级包；入口 `app.py` / `cli.py` 在 `import` 之前 `sys.path.insert(0, os.path.dirname(__file__))` 让根目录可被识别为 import 根；`tests/test_*.py` 同样自带 sys.path 注入。包之间用绝对 import（`from config.config import ...`），包内用相对 import（`from .matcher import ...`）。
 
 ## 扩展模式
 
 ### 添加新管线阶段
-1. 在 `src/pipeline/` 新建模块，参考 `diff_gate.py` 的极简形式：构造 + 一个公开方法（如 `should_skip()` / `recognize()`）
-2. 在 `pipeline.py` 的 `ScanPipeline.__init__` 实例化，`scan_once()` 中按顺序串联
-3. 涉及配置项时在 `defaults.py` 加默认值，业务代码用 `config.get('key.path')` 读取（无需传 fallback）
+1. 在 `pipeline/` 新建模块，参考 `diff_gate.py` 的极简形式：构造 + 一个公开方法（如 `should_skip()` / `recognize()`）
+2. 在 `pipeline/pipeline.py` 的 `ScanPipeline.__init__` 实例化，`scan_once()` 中按顺序串联
+3. 涉及配置项时在 `config/defaults.py` 的 `DEFAULT_CONFIG` 加默认值，业务代码用 `config.get('key.path')` 读取（无需传 fallback）
 
-### 添加 GUI 控件
-1. 在 `MainGUI` 的 `create_widgets()` 添加控件
-2. `_load_settings()` / `_save_settings()` 绑定配置（注意：新版用内联方法而非 GUIStateManager 类）
-3. `_on_start()` / `_scan_loop()` 使用新设置
+### 添加 GUI 控件 / 页面
+1. 通用复用控件放 `ui/widgets/`，整页放 `ui/pages/`；都继承 `QWidget`，构造里把 `config` 绑定到 Qt 信号
+2. 把页面挂到 `ui/main_window.py` 的 `Sidebar` + `QStackedWidget`
+3. 控件双向绑定：构造时 `config.get(...)` 初始化，控件 valueChanged 信号回写 `config.set(...)` + `config.save()`
 
 ### 修改配置
-- 直接编辑 `config/config.yaml`（缺失键由 `defaults.py` 兜底）
+- 直接编辑 `config/config.yaml`（缺失键由 `config/defaults.py` 兜底）
 - 编程：`config.set('key.path', value)` + `config.save()`
 
 ## 匹配与提示逻辑

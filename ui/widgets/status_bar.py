@@ -2,8 +2,7 @@ from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame
 
-from defaults import APP_VERSION
-
+from config.defaults import APP_VERSION
 
 # 状态名 -> (圆点颜色, 状态文字颜色)
 _STATUS_COLOR = {

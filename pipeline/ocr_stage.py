@@ -1,8 +1,9 @@
-import time
 import cv2
 import numpy as np
-from ..config.config import config
-from ..utils.logger import logger
+import time
+
+from config.config import config
+from utils.logger import logger
 
 _ocr_instance = None
 _ocr_init_config = None  # (lang, gpu_enabled) 初始化时的配置

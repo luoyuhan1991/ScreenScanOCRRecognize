@@ -1,9 +1,9 @@
-import threading
-
 import mss
 import numpy as np
-from ..config.config import config
-from ..utils.logger import logger
+import threading
+
+from config.config import config
+from utils.logger import logger
 
 
 class CaptureStage:

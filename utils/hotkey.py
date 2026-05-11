@@ -1,5 +1,6 @@
 import threading
-from ..utils.logger import logger
+
+from .logger import logger
 
 
 class HotkeyManager:

@@ -2,7 +2,6 @@
 布局：顶部 Hero（大蓝色图标卡 + app 名 + 版本 + tagline）+ 信息卡 + 技术栈卡。"""
 import os
 import webbrowser
-
 from PySide6.QtCore import Qt, QByteArray
 from PySide6.QtGui import QPainter, QPixmap, QCursor
 from PySide6.QtSvg import QSvgRenderer
@@ -10,13 +9,11 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
 )
 
-from defaults import APP_VERSION
-
+from config.defaults import APP_VERSION
 from ..widgets.settings_card import SettingsCard, SettingsRow
 
-
 _REPO_URL = 'https://github.com/luoyuhan1991/ScreenScanOCRRecognize'
-_AUTHOR = 'yhluo9'
+_AUTHOR = 'luoyuhan'
 _LICENSE = 'MIT'
 _TAGLINE = '定时截图 → OCR 识别 → 关键词匹配 → 屏幕浮窗提示'
 

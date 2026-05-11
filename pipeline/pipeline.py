@@ -1,11 +1,12 @@
 import os
 import time
-from ..config.config import config, DEFAULT_BANLIST_FILE, PROJECT_ROOT
-from ..utils.logger import logger
+
+from config.config import config, DEFAULT_BANLIST_FILE, PROJECT_ROOT
+from utils.logger import logger
 from .capture import CaptureStage
 from .diff_gate import DiffGate
+from .matcher import SubstringMatcher
 from .ocr_stage import OCRStage
-from shared.matcher import SubstringMatcher
 
 
 class ScanResult:
