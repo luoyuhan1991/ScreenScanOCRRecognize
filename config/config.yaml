@@ -1,23 +1,10 @@
 app:
   minimize_to_tray: true
   startup_mode: paused
-cleanup:
-  enabled: true
-  interval_minutes: 10
-  max_age_hours: 1
-  scan_interval: 10
 files:
   banlist_file: D:/dev/reference/ScreenScanOCRRecognize/requirements.txt
-  folder_mode: minute
-  max_folders: 10
-  output_dir: output
-  save_ocr_result: false
-  save_screenshot: false
 gpu:
-  auto_detect: false
   enabled: true
-  force_cpu: false
-  force_gpu: true
 logging:
   backup_count: 5
   file: logs/app.log
@@ -31,36 +18,15 @@ matching:
   font_size: 18
   position: center
 ocr:
-  auto_detect_invert: false
-  default_engine: paddle
-  easyocr:
-    canvas_size: 1920
-    dynamic_params: true
-    mag_ratio: 1.5
   enable_image_invert: false
   language: ch
-  languages:
-  - ch
-  - en
   min_confidence: 0.32
-  save_processed_image: false
-performance:
-  explicit_image_cleanup: true
-  log_queue_cleanup_threshold: 800
-  max_log_queue_size: 1000
-  memory_monitor_interval_ms: 5000
-  use_psutil: true
 scan:
   diff_threshold: 20.0
   enable_diff_skip: true
   enable_roi: true
   interval_seconds: 2.0
   remember_roi: true
-  roi:
-  - 1100
-  - 256
-  - 1800
-  - 850
   roi_padding: 10
   roi_presets:
     4+2:

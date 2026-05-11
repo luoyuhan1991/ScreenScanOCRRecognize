@@ -13,6 +13,7 @@ from .log_bridge import LogBridge
 from .tray import TrayIcon
 from .scan_worker import ScanWorker
 from .overlay import Overlay
+from .roi_border import ROIBorder
 
 
 class MainWindow(QMainWindow):
@@ -61,6 +62,8 @@ class MainWindow(QMainWindow):
 
         # 屏幕浮窗（命中提示用）
         self.overlay = Overlay(config=config)
+        # ROI 红框指示窗（扫描中显示在 ROI 区域上方）
+        self.roi_border = ROIBorder()
 
         # 后台扫描线程
         self.worker = ScanWorker(self)
@@ -98,11 +101,13 @@ class MainWindow(QMainWindow):
             return
         roi = self._resolve_roi()
         self.overlay.clear_session()  # 新一轮扫描，清掉上一轮累计
+        self.roi_border.show_for(roi)  # ROI 红框（roi=None 则不画）
         self.worker.start_scan(roi=roi)
 
     def _on_stop(self):
         self.worker.stop_scan()
         self.overlay.hide()
+        self.roi_border.hide_border()
 
     def _on_status_changed(self, text):
         """worker 三态：'初始化中'/'运行中'/'已停止'。
@@ -141,6 +146,10 @@ class MainWindow(QMainWindow):
             pass
         try:
             self.overlay.destroy()
+        except Exception:
+            pass
+        try:
+            self.roi_border.hide_border()
         except Exception:
             pass
         super().closeEvent(event)

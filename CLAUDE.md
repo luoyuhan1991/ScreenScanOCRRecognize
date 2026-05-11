@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ScreenScanOCRRecognize 是一个 Windows 平台的屏幕扫描 OCR 应用。核心流程：定时截图 → OCR 识别 → 关键词匹配 → 屏幕弹窗提示。支持 GUI（tkinter）和 CLI 两种界面。
 
-当前主版本是 pipeline 架构（`capture → diff_gate → ocr_stage → matcher`），仅 PaddleOCR 单引擎。旧版（`ScanService` + 双 OCR 引擎 + 文件落盘）已归档到 `old_version/`，不再维护。
+当前架构：pipeline（`capture → diff_gate → ocr_stage → matcher`），仅 PaddleOCR 单引擎。
 
 ## 运行与构建
 
@@ -28,8 +28,6 @@ pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/
 
 注意：`gui.bat` 需要项目根目录已存在 `.venv/` 虚拟环境。`README.md` 中提到的 `gui.py`/`main.py` 是历史名称，当前入口为 `app.py` / `cli.py`。
 
-旧版（含 EasyOCR、test_gpu、buildexe 打包脚本）位于 `old_version/`，独立 `gui.bat` 通过 `..\.venv\Scripts\pythonw.exe` 复用根目录虚拟环境启动旧版 `app.py`。
-
 ## 目录结构
 
 ```
@@ -40,9 +38,9 @@ ScreenScanOCRRecognize/
 ├── defaults.py                     # 项目级默认配置（DEFAULT_CONFIG / DEFAULT_BANLIST_FILE 唯一来源）
 ├── config/
 │   └── config.yaml                 # 主配置文件（用户改动会写回此处）
-├── shared/                         # 跨树共享模块（主版本 + old_version 都 import）
+├── shared/
 │   ├── matcher.py                  # SubstringMatcher（Aho-Corasick 子串匹配）
-│   └── overlay.py                  # Overlay（持久浮窗 + 累计匹配 + 和弦音效）
+│   └── sound.py                    # CHORD_WAV 字节（C 大三和弦提示音）
 ├── src/
 │   ├── config/
 │   │   └── config.py               # Config 单例（~80 行，DEFAULT_CONFIG + yaml 深合并）
@@ -54,16 +52,9 @@ ScreenScanOCRRecognize/
 │   └── utils/
 │       ├── hotkey.py               # HotkeyManager（keyboard 库全局热键）
 │       └── logger.py               # logger 单例 + configure_from_config
-├── old_version/                    # 归档：旧版 ScanService 架构（双 OCR 引擎、文件落盘、buildexe）
-│   ├── app.py / cli.py / gui.bat   # 独立入口（gui.bat 用 ..\.venv 复用根虚拟环境）
-│   ├── requirements.txt
-│   └── src/{config,core,gui,ocr,tests,utils}/
 ├── docs/                           # 文档（GUI_DESIGN.md / PRD_COMPARISON.md / 默认关键词）
-├── output/                         # 历史版本截图/OCR 结果输出（新版默认零文件 I/O）
 └── logs/                           # 应用日志
 ```
-
-注意：`old_version/src/` 下的 `gui/` 和 `ocr/` 仅残留 `__pycache__`，是更早历史布局的遗物。在主版本下新增代码请放到 `src/pipeline/` 或 `src/utils/`。
 
 ## 架构
 
@@ -77,10 +68,9 @@ app.py / cli.py → ScanPipeline.scan_once()
 
 ### 核心模块
 
-- **`app.py`** — GUI 入口，`MainGUI` 类，内联托盘图标实现（`_setup_tray` + `_make_tray_icon_image`）。管理扫描配置面板（ROI/GPU/间隔/语言/置信度）、匹配配置面板（关键词文件/显示时长/位置/字号）、日志显示区。OCR 初始化在后台线程完成后通过 `root.after(0, callback)` 通知 GUI。`self.overlay`（`shared.overlay.Overlay`）持续累积匹配 + 新匹配音效一站式处理。
-- **`cli.py`** — CLI 入口，`config.load()` 后构建 `ScanPipeline`，循环 `scan_once()` 输出匹配。**不弹浮窗**，靠 stdout 打印结果。无位置参数（与旧版 cli.py 不同）。
+- **`app.py`** — PySide6 GUI 启动器（~30 行）：`config.load()` → `QApplication` + 加载 `ui/styles/light.qss`（运行时把 `{ICON_DIR}` 替换为 `ui/icons` 绝对路径）→ `MainWindow.show()`。主窗口实现在 `ui/main_window.py`。
+- **`cli.py`** — CLI 入口，`config.load()` 后构建 `ScanPipeline`，循环 `scan_once()` 输出匹配。**不弹浮窗**，靠 stdout 打印结果。
 - **`shared/matcher.py`** — `SubstringMatcher` 类，基于 `pyahocorasick` 自动机的多模式子串匹配（casefold 不区分大小写）。返回 `[{'keyword','hint','ocr_text'}, ...]`。模块级 `get_cached_matcher(path)` 提供按文件路径的单例缓存 + mtime 热重载，`parse_keyword_line(line)` 解析 `关键词 提示词`（空白分隔）或 `关键词:提示词`（冒号兼容）。
-- **`shared/overlay.py`** — `Overlay` 类，持久透明浮窗。构造时注入 config 对象（duck-typed `.get()`，新旧两版 Config 都满足）。左列展示 `_session_matches` 累计匹配，右列本次 OCR；新匹配触发 C 大三和弦 WAV（`winsound.PlaySound(SND_MEMORY)`）。`update()` 每次扫描都调用（包括 diff-skip 与无匹配），`display_duration` 后自动 withdraw。
 - **`src/pipeline/pipeline.py`** — `ScanPipeline` 类，组合四个阶段（capture/diff_gate/ocr/matcher）+ 上次结果缓存。`scan_once()` 返回 `ScanResult(ocr_results, matches, skipped, duration)`；diff_gate 命中时复用上次的 ocr_results 和 matches，仅刷新 `skipped=True` 与 `duration`。
 - **`src/pipeline/capture.py`** — `CaptureStage`，mss 截屏。**关键：**mss 用线程本地 Windows 设备上下文，`grab()` 内做了 `_owner_thread` 检查，跨线程时自动重建 `mss.mss()`。ROI 模式按 `scan.roi_padding` 外扩。
 - **`src/pipeline/diff_gate.py`** — `DiffGate`，把帧 BGR 缩成 160x120 灰度缩略图算 MSE，低于 `scan.diff_threshold`（默认 5.0）就跳过 OCR。`reset()` 清空上一帧（设置 ROI 时调用）。
@@ -104,13 +94,14 @@ app.py / cli.py → ScanPipeline.scan_once()
 
 配置文件 `config/config.yaml`，主要分组：
 - `scan.*` — 间隔秒数、ROI 开关/保存/边距、帧差检测开关/阈值
-- `ocr.*` — 语言、最低置信度（PaddleOCR 单引擎，无引擎选择项）
-- `gpu.*` — `enabled`（pipeline 直接读取，不再走 `force_cpu/force_gpu/auto_detect` 三级优先级）
-- `files.*` — 关键词文件路径（其余落盘相关项已不再使用，新版默认零文件 I/O）
+- `ocr.*` — 语言、最低置信度、可选图像反色（`enable_image_invert`，黑底白字时开）
+- `gpu.*` — `enabled`（pipeline 直接读取的 bool）
+- `files.*` — 关键词文件路径（`banlist_file`）
 - `matching.*` — 匹配开关、显示时长/位置/字号、声音提示开关
 - `logging.*` — 日志级别
+- `app.*` — `minimize_to_tray` / `startup_mode`
 
-`defaults.py` 是默认值唯一来源，`config.yaml` 中没有的键自动用 defaults 兜底。`old_version/` 仍会消费 yaml 里的 `ocr.engine` / `ocr.enable_image_invert` / `cleanup.*` / `performance.*` 等扩展键。
+`defaults.py` 是默认值唯一来源，`config.yaml` 中没有的键自动用 defaults 兜底。
 
 ## 关键设计决策
 
@@ -122,7 +113,7 @@ app.py / cli.py → ScanPipeline.scan_once()
 
 **全局热键**：仅 Windows，依赖 `keyboard` 库（需管理员权限）。`HotkeyManager` 在 `register()` 内 try import，缺失时只记 warning，不影响其它功能。
 
-**跨树 import 路径**：`src/config/config.py` 在模块顶层把项目根插入 `sys.path`，让 `defaults.py` 可被 `from defaults import ...` 导入；`shared.*` 模块同样依赖项目根在 `sys.path` 上（GUI/CLI 入口也会 `sys.path.insert(0, os.path.dirname(__file__))`）。`old_version/src/config/config.py` 上溯 4 层（`parents[3]`）也指向项目根，与新版共用同一份 `defaults.py` 与 `config/config.yaml`。
+**跨树 import 路径**：`src/config/config.py` 在模块顶层把项目根插入 `sys.path`，让 `defaults.py` 可被 `from defaults import ...` 导入；`shared.*` 模块同样依赖项目根在 `sys.path` 上（GUI/CLI 入口也会 `sys.path.insert(0, os.path.dirname(__file__))`）。
 
 ## 扩展模式
 
@@ -140,20 +131,7 @@ app.py / cli.py → ScanPipeline.scan_once()
 - 直接编辑 `config/config.yaml`（缺失键由 `defaults.py` 兜底）
 - 编程：`config.set('key.path', value)` + `config.save()`
 
-## old_version 旧版本
+## 匹配与提示逻辑
 
-`old_version/` 是已归档的独立完整目录（自带 `app.py` / `cli.py` / `gui.bat` / `requirements.txt` / `src/`），保留 `ScanService` 架构以便回溯：
-
-- **`old_version/src/core/scan_service.py`** — `ScanService` 类，把整套扫描流程封装在一个文件里（截图 → 帧差 → OCR → 匹配 → 输出清理），通过 `Config.is_dirty()` / `clear_dirty()` 脏标记按需刷新缓存。
-- **`old_version/src/core/ocr/`** — `OCRConfig` 适配器 + `paddle_ocr.py` / `easy_ocr.py` 双引擎实现（含图像预处理、自适应阈值、auto_detect_invert 等）。
-- **`old_version/src/utils/buildexe/`** — PyInstaller 打包脚本与 spec。
-- **`old_version/src/tests/`** — `test_gpu.py` / `test_memory_optimization.py` / `test_ocr_performance.py`。
-- **`old_version/src/config/config_editor.py`** + **`gui_state.py`** — GUI 内置 YAML 编辑器与 `GUIStateManager` 窗口状态管理（新版未保留）。
-
-`old_version/src/config/config.py` 用 `Path(__file__).resolve().parents[3]` 找项目根，与主版本共用 `defaults.py` / `config/config.yaml` / `shared/`。`old_version/gui.bat` 以 `..\.venv\Scripts\pythonw.exe` 复用根目录虚拟环境。
-
-匹配与提示逻辑（两版统一，定义在 `shared/`）：
 - `SubstringMatcher` 基于 Aho-Corasick 多模式子串匹配，casefold 不区分大小写。**不做任何模糊/比例匹配**——历史上的"按字符顺序匹配比例"会让短关键词（如 `034`、`da`）误判长串中分散字符的 ID。
 - `Overlay` 每次扫描都刷新（包括 diff-skip 和无匹配），左列累计匹配 + 右列本次 OCR；新匹配触发 C 大三和弦 WAV。
-
-两版的 `Config` 单例彼此独立、不共享实例，但读取的是同一份 `config/config.yaml`。

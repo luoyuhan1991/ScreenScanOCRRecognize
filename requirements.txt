@@ -1,3 +1,10 @@
+# ⚠ paddleocr 不会自动拉核心运行时 paddlepaddle，需手动单装：
+#   CPU 版： pip install paddlepaddle
+#   GPU 版（CUDA 11.8）：
+#     pip install paddlepaddle-gpu==3.2.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+# 默认 config 里 gpu.enabled=True，装 CPU 版后请到设置页关掉 GPU 加速，
+# 或改 config/config.yaml: gpu.enabled: false。
+
 mss>=9.0.0
 numpy>=2.2.0
 opencv-python>=4.10.0

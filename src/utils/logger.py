@@ -14,7 +14,10 @@ def setup_logger(name='screen_scan', level=logging.INFO):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(level)
-        logger.propagate = False  # 不向 root logger 传播，避免 GUI 日志重复
+        # propagate=True：让消息向上传到 root logger，新版 PySide6 GUI 在 root
+        # 上挂 LogBridge 收日志（所以 pipeline/matcher/hotkey 的输出能进 GUI 日志区）。
+        # root 没有 console StreamHandler，不会和这里的 console handler 重复。
+        logger.propagate = True
     return logger
 
 
