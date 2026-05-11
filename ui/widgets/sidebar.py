@@ -10,18 +10,23 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QLabel
 # ----- SVG 图标（搬自 mockup HTML） -----
 # 颜色用 currentColor，运行时通过两次渲染（gray / white）生成两套 pixmap
 
+# mockup 用 Lucide 风格的极简描边图标。28px 下细笔画发糊，这里用 viewBox 24x24 +
+# 加粗到 1.8（mockup 默认）+ 关键节点纯填充，确保缩到 22-24px 仍清晰可辨。
+
 _SVG_SCAN = b'''
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="7"/>
-  <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>
-  <line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/>
-  <line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/>
+     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="8"/>
+  <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+  <line x1="12" y1="2"  x2="12" y2="5"/>
+  <line x1="12" y1="19" x2="12" y2="22"/>
+  <line x1="2"  y1="12" x2="5"  y2="12"/>
+  <line x1="19" y1="12" x2="22" y2="12"/>
 </svg>'''
 
 _SVG_SETTINGS = b'''
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round">
+     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
   <circle cx="12" cy="12" r="3"/>
   <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3
     1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1
@@ -34,26 +39,27 @@ _SVG_SETTINGS = b'''
 
 _SVG_ABOUT = b'''
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="9.5"/>
-  <line x1="12" y1="16" x2="12" y2="11.5"/>
-  <circle cx="12" cy="8" r="0.6" fill="currentColor" stroke="none"/>
+     stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10"/>
+  <line x1="12" y1="16" x2="12" y2="12"/>
+  <line x1="12" y1="8"  x2="12" y2="8"/>
 </svg>'''
 
 
-def _render_svg_to_pixmap(svg_bytes, color, size=24):
+def _render_svg_to_pixmap(svg_bytes, color, size=22):
     """把 currentColor 替换为目标颜色后渲染成 pixmap。
-    用 4x oversample 再 smooth scale，避免低分辨率下笔画糊掉。"""
+    QSvgRenderer 缩放本身已矢量平滑，不再做 4x 缩；此前 oversample+downscale
+    反而在 22-24px 像素网格上让圆形/直线对齐失真，看起来发糊。"""
     svg = svg_bytes.replace(b'currentColor', color.encode())
     renderer = QSvgRenderer(QByteArray(svg))
-    big = QPixmap(size * 4, size * 4)
-    big.fill(Qt.transparent)
-    p = QPainter(big)
+    pix = QPixmap(size, size)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
     p.setRenderHint(QPainter.Antialiasing, True)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     renderer.render(p)
     p.end()
-    return big.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return pix
 
 
 class _NavItem(QFrame):
@@ -68,8 +74,10 @@ class _NavItem(QFrame):
         self.setObjectName('navItem')
         self.setCursor(Qt.PointingHandCursor)
 
-        self._pix_inactive = _render_svg_to_pixmap(svg_bytes, '#475569', size=28)
-        self._pix_active = _render_svg_to_pixmap(svg_bytes, '#FFFFFF', size=28)
+        # 22px 是 mockup .icon-lg (20px) 与 sidebar 卡片视觉的折中尺寸；
+        # 颜色：未选中用 #475569（mockup --text-secondary），选中用纯白
+        self._pix_inactive = _render_svg_to_pixmap(svg_bytes, '#475569', size=22)
+        self._pix_active = _render_svg_to_pixmap(svg_bytes, '#FFFFFF', size=22)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 8, 4, 8)
@@ -91,10 +99,15 @@ class _NavItem(QFrame):
             return
         self._active = active
         self._icon.setPixmap(self._pix_active if active else self._pix_inactive)
-        # 重新触发 QSS 选择器
+        # 重新触发 QSS 选择器：active 属性变化使 [active="true"] 选择器命中/失效。
+        # 注意 polish self 不会级联到子 QLabel；后代选择器
+        # `QFrame#navItem[active="true"] QLabel { color: white }` 必须显式 polish
+        # 每个子控件，否则切换后子文字颜色不更新（默认打开正确是因为初始 polish）。
         self.setProperty('active', active)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        for w in (self, self._icon, self._text):
+            w.style().unpolish(w)
+            w.style().polish(w)
+        self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -113,6 +126,8 @@ class Sidebar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 子类 QWidget 必须显式 styled-background 才会真画 QSS 给的背景色
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setObjectName('sidebar')
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 16, 8, 16)

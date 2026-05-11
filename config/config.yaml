@@ -1,10 +1,13 @@
+app:
+  minimize_to_tray: true
+  startup_mode: paused
 cleanup:
   enabled: true
   interval_minutes: 10
   max_age_hours: 1
   scan_interval: 10
 files:
-  banlist_file: C:/Users/Administrator/Desktop/banlist.txt
+  banlist_file: D:/dev/reference/ScreenScanOCRRecognize/requirements.txt
   folder_mode: minute
   max_folders: 10
   output_dir: output
@@ -39,7 +42,7 @@ ocr:
   languages:
   - ch
   - en
-  min_confidence: 0.3
+  min_confidence: 0.32
   save_processed_image: false
 performance:
   explicit_image_cleanup: true
@@ -48,7 +51,7 @@ performance:
   memory_monitor_interval_ms: 5000
   use_psutil: true
 scan:
-  diff_threshold: 4.8
+  diff_threshold: 20.0
   enable_diff_skip: true
   enable_roi: true
   interval_seconds: 2.0
@@ -65,3 +68,8 @@ scan:
     - 256
     - 1800
     - 850
+  roi_rect:
+  - 1170
+  - 256
+  - 1880
+  - 843

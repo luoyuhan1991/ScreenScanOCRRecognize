@@ -1,23 +1,33 @@
 /* ===========================================================================
-   light.qss —— 浅色主题，色板与 mockup/light_ui_prototype.html :root 对齐
-   --bg            #F1F5FA   主窗口背景
-   --canvas        #FFFFFF   卡片/面板背景
-   --sidebar-bg    #F4F7FB   侧栏背景
-   --sidebar-active #E6EFFD
-   --primary       #2F6FEB   品牌蓝
-   --primary-hover #2A60D1
-   --primary-soft  #DCE8FB
-   --danger        #E5484D
-   --danger-hover  #CC3B40
-   --border        #E3E8EF
-   --border-strong #CBD5E1
-   --text          #1E293B
-   --text-secondary #475569
-   --text-muted    #94A3B8
-   --log-bg        #F7F9FC
-   --log-time      #6B7280
-   --log-info      #16A34A
+   light.qss — PySide6 浅色主题，与 mockup/light_ui_prototype.html 对齐
+
+   设计原则
+   --------
+   1. 容器（sidebar / configPanel / logPanel / logHeader / logText / statusBar）
+      显式画自己的背景色。
+   2. 控件（QLabel / QSlider / QCheckBox 文字区 / configGroup 等）默认透明，
+      由所在容器决定底色。
+   3. 输入承载面（QLineEdit / QComboBox / QPushButton / sliderValue /
+      checkbox indicator / 大按钮 / groupPill）保留独立白底/彩底 + 边框。
+   4. QSS 注意点：`border: none` 会把 border-bottom 一并清掉，需要分边声明。
+   5. 子类化的 QWidget 必须在 Python 端 `setAttribute(Qt.WA_StyledBackground, True)`
+      并用 objectName 选择器（`#configPanel`），否则 background 不会真画出来。
+
+   色板（与 mockup :root CSS 变量同步）
+   ------------------------------------
+   bg              #F1F5FA   主窗口兜底
+   canvas          #FFFFFF   配置 / 日志 header / 输入框
+   sidebar-bg      #F4F7FB
+   primary         #2F6FEB / hover #2A60D1 / soft #DCE8FB
+   danger          #E5484D / hover #CC3B40 / soft #F5B5B7
+   border          #E3E8EF / strong #CBD5E1
+   text            #1E293B / secondary #475569 / muted #94A3B8
+   log-bg          #F7F9FC
+   log-time        #6B7280 / log-info #16A34A / log-warn #E0A82E
    ============================================================================ */
+
+
+/* ============================== 全局 ============================== */
 
 QMainWindow, QWidget {
     background-color: #F1F5FA;
@@ -26,13 +36,51 @@ QMainWindow, QWidget {
     font-size: 13px;
 }
 
-/* ----- Sidebar (自绘 QWidget) ----- */
+/* 默认透明：QSS 把 QWidget 的 background 也应用到所有非容器子类，会在白色
+   ConfigPanel / 白色 LogHeader 上盖一层 #F1F5FA 灰矩形。需要白盒的（sliderValue
+   / 输入框 / 按钮 / sliderValue 等）已在下面显式 override。*/
+QLabel, QFrame, QSlider, QCheckBox {
+    background: transparent;
+}
+
+
+/* ============================== 容器背景 ============================== */
+
 QWidget#sidebar {
     background-color: #F4F7FB;
     border-right: 1px solid #E3E8EF;
 }
+QWidget#configPanel {
+    background-color: #FFFFFF;
+    border-right: 1px solid #E3E8EF;
+}
+QWidget#logPanel {
+    background-color: #FFFFFF;
+}
+QFrame#logHeader {
+    background-color: #FFFFFF;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    border-bottom: 1px solid #E3E8EF;
+}
+QPlainTextEdit#logText {
+    background-color: #F7F9FC;
+    border: none;
+    padding: 12px 16px;
+    font-family: "Consolas", "Microsoft YaHei", monospace;
+    font-size: 12px;
+    color: #1E293B;
+}
+QWidget#statusBar {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FAFBFD, stop:1 #F4F6FA);
+    border-top: 1px solid #E3E8EF;
+}
+
+
+/* ============================== Sidebar nav-item ============================== */
+
 QFrame#navItem {
-    background: transparent;
     border-radius: 8px;
 }
 QFrame#navItem:hover {
@@ -41,53 +89,44 @@ QFrame#navItem:hover {
 QFrame#navItem[active="true"] {
     background: #2F6FEB;
 }
-QFrame#navItem QLabel#navItemText {
+QFrame#navItem QLabel {
     color: #475569;
     font-size: 11px;
 }
-QFrame#navItem[active="true"] QLabel#navItemText {
+QFrame#navItem[active="true"] QLabel {
     color: #FFFFFF;
     font-weight: 500;
 }
 
-/* ----- Scan page = white canvas ----- */
-ScanPage {
-    background-color: #FFFFFF;
-}
 
-/* ----- Config panel ----- */
-ConfigPanel {
-    background-color: #FFFFFF;
-    border-right: 1px solid #E3E8EF;
-}
+/* ============================== Config 区组件 ============================== */
 
-/* group 容器：扁平，不画边框/阴影；视觉分组靠 spacing + group-title 蓝条 */
-QFrame#configGroup {
-    background: transparent;
-    border: none;
-}
-
-/* group title 用左侧 3px 蓝条 + 加粗文字（mockup 的 ::before 伪元素近似） */
+/* group title 文字（左侧蓝色色块由独立 QFrame#groupPill 渲染） */
 QLabel#groupTitle {
     font-size: 13px;
     font-weight: 600;
     color: #1E293B;
-    border-left: 3px solid #2F6FEB;
-    padding: 0px 0px 0px 8px;
-    margin-bottom: 4px;
+}
+QFrame#groupPill {
+    background-color: #2F6FEB;
+    border-radius: 2px;
+    border: none;
 }
 
-/* ----- 普通 label（如「扫描间隔（秒）」「ROI 预设」） ----- */
-ConfigPanel QLabel {
+/* config 区内的次级 label（"扫描间隔（秒）" "ROI 预设" 等） */
+QWidget#configPanel QLabel {
     color: #475569;
     font-size: 12px;
 }
-ConfigPanel QLabel#groupTitle {
+/* 上一条会把 groupTitle 也覆盖，特例补回 */
+QWidget#configPanel QLabel#groupTitle {
     color: #1E293B;
     font-size: 13px;
 }
 
-/* ----- 输入框 / 下拉框 ----- */
+
+/* ============================== 输入框 / 下拉框 ============================== */
+
 QLineEdit, QComboBox {
     background-color: #FFFFFF;
     border: 1px solid #CBD5E1;
@@ -100,14 +139,25 @@ QLineEdit:focus, QComboBox:focus {
     border-color: #2F6FEB;
     outline: 2px solid #DCE8FB;
 }
+/* 只读 QLineEdit：mockup .input 始终白底，靠 monospace + 偏淡文字色作只读提示 */
 QLineEdit:read-only {
-    background-color: #F7F9FC;
     color: #475569;
     font-family: "Consolas", "Microsoft YaHei", monospace;
     font-size: 12px;
 }
-/* drop-down 与 down-arrow 留 Qt 原生（自定义 border 拼三角 QSS 不支持 transform；
-   如需精细化箭头，需嵌入 SVG 资源，留作后续优化） */
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+QComboBox::down-arrow {
+    image: url({ICON_DIR}/chevron-down.svg);
+    width: 12px;
+    height: 12px;
+}
 QComboBox QAbstractItemView {
     background-color: #FFFFFF;
     border: 1px solid #E3E8EF;
@@ -117,7 +167,10 @@ QComboBox QAbstractItemView {
     outline: 0;
 }
 
-/* ----- 按钮 ----- */
+
+/* ============================== 按钮 ============================== */
+
+/* 通用 QPushButton：白底 + 灰边（"浏览…/编辑/保存当前"等小按钮） */
 QPushButton {
     background-color: #FFFFFF;
     border: 1px solid #CBD5E1;
@@ -133,7 +186,10 @@ QPushButton:hover {
 QPushButton:pressed {
     background-color: #F1F5FA;
 }
-/* LargeButton（自定义 QFrame，两行内容） */
+
+/* LargeButton 主操作（自定义 QFrame）— mockup 主要按钮 4 状态规范：
+   默认 / 悬停 / 按下（更深底，inset shadow）/ 禁用（整体 opacity 0.4，由代码层
+   QGraphicsOpacityEffect 实现，非 QSS） */
 QFrame#btnPrimary {
     background-color: #2F6FEB;
     border: 1px solid #2F6FEB;
@@ -143,9 +199,9 @@ QFrame#btnPrimary:hover {
     background-color: #2A60D1;
     border-color: #2A60D1;
 }
-QFrame#btnPrimary[disabled="true"] {
-    background-color: #B5CDF4;
-    border-color: #B5CDF4;
+QFrame#btnPrimary[pressed="true"] {
+    background-color: #1F50C5;
+    border-color: #1F50C5;
 }
 QFrame#btnDanger {
     background-color: #E5484D;
@@ -156,30 +212,26 @@ QFrame#btnDanger:hover {
     background-color: #CC3B40;
     border-color: #CC3B40;
 }
-QFrame#btnDanger[disabled="true"] {
-    background-color: #F5B5B7;
-    border-color: #F5B5B7;
+QFrame#btnDanger[pressed="true"] {
+    background-color: #B53236;
+    border-color: #B53236;
 }
+/* 按钮内文字必须用带父级 ID 的复合选择器（specificity 200+），否则会被
+   `QWidget#configPanel QLabel { color: #475569 }`（102）压过去，导致白字
+   被涂成暗灰，看起来跟没设一样。 */
 QFrame#btnPrimary QLabel#lbBtnTitle,
-QFrame#btnDanger QLabel#lbBtnTitle {
+QFrame#btnDanger  QLabel#lbBtnTitle {
     color: #FFFFFF;
     font-size: 14px;
     font-weight: 600;
-    background: transparent;
 }
 QFrame#btnPrimary QLabel#lbBtnHint,
-QFrame#btnDanger QLabel#lbBtnHint {
+QFrame#btnDanger  QLabel#lbBtnHint {
     color: rgba(255, 255, 255, 0.85);
     font-size: 11px;
-    background: transparent;
-}
-/* disabled 文字也变浅一点保持一致感 */
-QFrame#btnPrimary[disabled="true"] QLabel,
-QFrame#btnDanger[disabled="true"] QLabel {
-    color: rgba(255, 255, 255, 0.95);
 }
 
-/* slider value 小盒子 */
+/* slider 值小盒子（白底灰边，独立"输入承载面") */
 QLabel#sliderValue {
     background-color: #FFFFFF;
     border: 1px solid #CBD5E1;
@@ -188,7 +240,9 @@ QLabel#sliderValue {
     font-size: 12px;
 }
 
-/* ----- Checkbox ----- */
+
+/* ============================== Checkbox ============================== */
+
 QCheckBox {
     spacing: 6px;
     color: #1E293B;
@@ -207,10 +261,12 @@ QCheckBox::indicator:hover {
 QCheckBox::indicator:checked {
     background-color: #2F6FEB;
     border-color: #2F6FEB;
-    /* Qt 没有 ::after content，对勾用图片替代；为保持简洁先用纯色填充表示选中。 */
+    image: url({ICON_DIR}/check.svg);
 }
 
-/* ----- Slider ----- */
+
+/* ============================== Slider ============================== */
+
 QSlider::groove:horizontal {
     border: none;
     height: 4px;
@@ -233,61 +289,161 @@ QSlider::handle:horizontal:hover {
     background: #DCE8FB;
 }
 
-/* ----- Log panel ----- */
-LogPanel {
-    background-color: #FFFFFF;
-}
-/* 日志头部带底分隔线（mockup .log-header { border-bottom }）*/
-QFrame#logHeader {
-    background-color: #FFFFFF;
-    border-bottom: 1px solid #E3E8EF;
-    min-height: 40px;
-    max-height: 40px;
-}
+
+/* ============================== Log panel 局部 ============================== */
+
 QLabel#logTitle {
     font-size: 13px;
     font-weight: 600;
     color: #1E293B;
 }
-/* 清空日志按钮——比通用 QPushButton 更窄/更轻 */
+
+/* 清空日志按钮：比通用 QPushButton 更轻、透明底（衬白色 logHeader） */
 QPushButton#logClear {
-    height: 26px;
-    padding: 0 10px;
-    font-size: 12px;
     background: transparent;
     border: 1px solid #E3E8EF;
     border-radius: 6px;
+    padding: 0 10px;
     color: #475569;
+    font-size: 12px;
+    height: 26px;
     min-height: 0;
 }
 QPushButton#logClear:hover {
     background-color: #F1F5F9;
-    border-color: #E3E8EF;
 }
-QPlainTextEdit#logText {
-    background-color: #F7F9FC;
+
+
+/* ============================== Settings page ============================== */
+
+QWidget#settingsPage {
+    background-color: #FFFFFF;
+}
+QWidget#settingsContent {
+    background-color: #FFFFFF;
+}
+QScrollArea {
+    background: transparent;
     border: none;
-    border-radius: 0;
-    padding: 12px 16px;
+}
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
+QFrame#settingsCard {
+    background-color: #FFFFFF;
+    border: 1px solid #E3E8EF;
+    border-radius: 8px;
+}
+QLabel#settingsCardTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1E293B;
+}
+
+/* row 容器：with_separator 的版本顶部 1px 灰线（mockup `.settings-row + .settings-row`）*/
+QFrame#settingsRow, QFrame#settingsRowSep, QFrame#settingsHintRow {
+    background: transparent;
+    border: none;
+}
+QFrame#settingsRowSep {
+    border-top: 1px solid #E3E8EF;
+}
+QLabel#settingsRowLabel {
+    color: #1E293B;
+    font-size: 13px;
+}
+QLabel#settingsHint {
+    color: #94A3B8;
+    font-size: 11px;
+}
+
+/* hotkey display：mockup .kbd 白底灰边等宽小标签 + 铅笔编辑按钮 */
+QLabel#kbd {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    padding: 2px 8px;
     font-family: "Consolas", "Microsoft YaHei", monospace;
     font-size: 12px;
     color: #1E293B;
 }
-
-/* ----- Status bar ----- */
-QWidget#statusBar {
-    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FAFBFD, stop:1 #F4F6FA);
-    border-top: 1px solid #E3E8EF;
+QPushButton#hotkeyEdit {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-height: 0;
 }
+QPushButton#hotkeyEdit:hover {
+    background-color: #F1F5F9;
+    border-radius: 4px;
+}
+
+/* 重置按钮：mockup .reset-btn 白底 + 红边 + 红字 */
+QPushButton#resetBtn {
+    background-color: #FFFFFF;
+    border: 1px solid #E5484D;
+    border-radius: 6px;
+    padding: 6px 14px;
+    color: #E5484D;
+    min-height: 22px;
+}
+QPushButton#resetBtn:hover {
+    background-color: #FCEBEB;
+}
+
+
+/* ============================== About page ============================== */
+
+QWidget#aboutPage {
+    background-color: #FFFFFF;
+}
+QFrame#aboutContent {
+    background-color: #FFFFFF;
+}
+
+QFrame#aboutHero {
+    background: transparent;
+}
+/* 大蓝底圆角图标卡（与 sidebar active 同色） */
+QFrame#aboutHeroIcon {
+    background-color: #2F6FEB;
+    border-radius: 16px;
+}
+QLabel#aboutAppName {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1E293B;
+}
+QLabel#aboutVersion {
+    font-size: 13px;
+    color: #475569;
+}
+QLabel#aboutTagline {
+    font-size: 12px;
+    color: #94A3B8;
+}
+
+/* 仓库链接：蓝色文字（点击开浏览器） */
+QLabel#aboutLink {
+    color: #2F6FEB;
+    text-decoration: underline;
+}
+QLabel#aboutLink:hover {
+    color: #2A60D1;
+}
+
+
+/* ============================== Status bar 局部 ============================== */
+
 QWidget#statusBar QLabel {
     color: #475569;
     font-size: 12px;
 }
+QLabel#statusValue {
+    color: #1E293B;
+    font-weight: 500;
+}
 QFrame#statusSep {
     color: #CBD5E1;
-}
-/* 当前运行状态文字（运行中/已停止…）加粗，颜色由代码动态注入 */
-QLabel#statusValue {
-    font-weight: 500;
-    color: #1E293B;
 }

@@ -90,6 +90,8 @@ class StatusBar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 子类 QWidget 必须显式 styled-background 才会真画 QSS 给的渐变背景
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setObjectName('statusBar')
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 0, 16, 0)

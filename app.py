@@ -17,8 +17,10 @@ def main():
     config.load()
     app = QApplication(sys.argv)
     qss_path = os.path.join(PROJECT_ROOT, 'ui', 'styles', 'light.qss')
+    icon_dir = os.path.join(PROJECT_ROOT, 'ui', 'icons').replace('\\', '/')
     with open(qss_path, encoding='utf-8') as f:
-        app.setStyleSheet(f.read())
+        # QSS 中用 {ICON_DIR}/xxx.svg 引用，运行时替换成绝对路径（跨工作目录稳定）
+        app.setStyleSheet(f.read().replace('{ICON_DIR}', icon_dir))
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
