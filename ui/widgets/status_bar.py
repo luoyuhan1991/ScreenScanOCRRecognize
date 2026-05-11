@@ -115,7 +115,7 @@ class StatusBar(QWidget):
         sep.setFixedHeight(14)
 
         self.lbl_version = QLabel(f'版本：{APP_VERSION}')
-        self.lbl_engine = QLabel('引擎：加载中')
+        self.lbl_engine = QLabel('引擎：PaddleOCR')
 
         # 左侧组：dot + 运行状态 / 内存
         layout.addWidget(self.dot)
@@ -133,7 +133,7 @@ class StatusBar(QWidget):
         layout.addSpacing(12)
         layout.addWidget(self.lbl_engine)
 
-        self.set_status('初始化中')
+        self.set_status('待机')
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh_memory)
@@ -153,9 +153,3 @@ class StatusBar(QWidget):
         self.dot.set_color(dot_color)
         self.lbl_status_value.setText(text)
         self.lbl_status_value.setStyleSheet(f'color: {text_color}; font-weight: 500;')
-
-    @Slot(str)
-    def set_engine(self, version_str):
-        """version_str 形如 '3.2.2'，显示成 'PaddleOCR 3.x'。"""
-        major = version_str.split('.')[0]
-        self.lbl_engine.setText(f'引擎：PaddleOCR {major}.x')
