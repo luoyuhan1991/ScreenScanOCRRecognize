@@ -84,7 +84,14 @@ class SettingsPage(QWidget):
         content.setObjectName('settingsContent')
         scroll.setWidget(content)
 
-        v = QVBoxLayout(content)
+        # 卡片列居中、占内容区 50% 宽：左右各 1 份留白、中间 2 份装卡片
+        outer_h = QHBoxLayout(content)
+        outer_h.setContentsMargins(0, 0, 0, 0)
+        outer_h.setSpacing(0)
+        outer_h.addStretch(1)
+
+        inner = QWidget()
+        v = QVBoxLayout(inner)
         v.setContentsMargins(22, 18, 22, 18)
         v.setSpacing(18)
 
@@ -94,6 +101,9 @@ class SettingsPage(QWidget):
         v.addWidget(self._build_hotkey_card())
         v.addWidget(self._build_reset_card())
         v.addStretch(1)
+
+        outer_h.addWidget(inner, 2)
+        outer_h.addStretch(1)
 
     # -------- 常规设置 --------
     def _build_general_card(self):

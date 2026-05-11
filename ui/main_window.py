@@ -1,4 +1,5 @@
 import logging
+import sys
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QSystemTrayIcon
 
@@ -83,6 +84,33 @@ class MainWindow(QMainWindow):
         # startup_mode='auto'：UI 渲染稳定后自动开扫（延 200ms 让事件循环先转一圈）
         if (config.get('app.startup_mode') or 'paused') == 'auto':
             QTimer.singleShot(200, self._on_start)
+
+        # Win11 22H2+ 标题栏染色，避免与白色界面融合（旧系统/非 Win 静默忽略）
+        self._apply_native_title_bar_color()
+
+    # ---------- 标题栏 ----------
+
+    def _apply_native_title_bar_color(self):
+        """DWM API 直接给原生标题栏染色：底色品牌主蓝、文字白。
+        Win11 22H2 (build 22621) 起支持 DWMWA_CAPTION_COLOR / TEXT_COLOR；
+        旧 Windows 调用会返回错误码但不会崩，try 兜底即可。"""
+        if sys.platform != 'win32':
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            # COLORREF 是 0x00BBGGRR，#2F6FEB → 0x00EB6F2F
+            caption_bgr = (0xEB << 16) | (0x6F << 8) | 0x2F
+            text_bgr = 0x00FFFFFF
+            dwmapi = ctypes.windll.dwmapi
+            hwnd = wintypes.HWND(int(self.winId()))  # 触发原生窗口创建
+            for attr, val in ((35, caption_bgr), (36, text_bgr)):
+                v = ctypes.c_uint(val)
+                dwmapi.DwmSetWindowAttribute(
+                    hwnd, ctypes.c_uint(attr), ctypes.byref(v), ctypes.sizeof(v),
+                )
+        except Exception:
+            pass
 
     # ---------- 扫描启停 ----------
 
