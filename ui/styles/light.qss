@@ -177,20 +177,29 @@ QComboBox::down-arrow {
     height: 10px;
 }
 
-/* 弹出列表容器（mockup .dropdown-menu）：1px 灰边 + 圆角 + 13px 字号。
-   注意：不写 ::item / ::item:hover / ::item:selected — 一旦写了，QStyleSheetStyle
-   会接管 item 绘制，DeletableComboBox 的 itemDelegate.paint（含 X 删除标记）
-   会被覆盖掉。item 的背景色 / 文字色 / 选中态 / hover 态全交给 delegate 自绘
-   （见 ui/widgets/deletable_combo.py）。普通 QComboBox（仅项无需 X）也享受同
-   一套配色，因为我们让所有下拉都用 DeletableComboBox 的样式约定。
-   font-size 在容器上设 13，让 delegate 拿到的 option.font 自动是 13；mockup
-   .dropdown-menu 没有上下 padding，这里也不加。*/
+/* 弹出列表容器（mockup .dropdown-menu）：1px 灰边 + 圆角 + 13px 字号。 */
 QComboBox QAbstractItemView {
     background-color: #FFFFFF;
     border: 1px solid #E3E8EF;
     border-radius: 6px;
     outline: 0;
     font-size: 13px;
+}
+/* 弹出列表 item（mockup .dropdown-menu .item / .item:hover / .item.active）。 */
+QComboBox QAbstractItemView::item {
+    min-height: 20px;
+    padding: 7px 12px;
+    color: #1E293B;
+    border: none;
+}
+QComboBox QAbstractItemView::item:hover {
+    background-color: #F4F6FA;
+    color: #1E293B;
+}
+QComboBox QAbstractItemView::item:selected {
+    background-color: #E6EFFD;
+    color: #2F6FEB;
+    font-weight: 500;
 }
 
 

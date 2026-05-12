@@ -4,12 +4,11 @@
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSlider,
     QScrollArea, QFrame, QMessageBox, QSizePolicy,
 )
 
 from config.config import config
-from ..widgets.deletable_combo import DeletableComboBox
 from ..widgets.settings_card import (
     SwitchToggle, SettingsCard, SettingsRow, HintRow, HotkeyDisplay, make_reset_button,
 )
@@ -54,12 +53,10 @@ def _slider(min_v, max_v, value, on_change, scale=1, fmt='{:.1f}'):
 
 
 def _combo(items, current_value, on_change):
-    """items: [(value, display), ...]；current_value 决定初始选中。
-    用 DeletableComboBox + deletable=False 复用 mockup 配色（hover/selected 由
-    delegate 自绘），避免普通 QComboBox 走默认 Qt 样式与 ROI 下拉视觉不一致。"""
-    cb = DeletableComboBox()
+    """items: [(value, display), ...]；current_value 决定初始选中。"""
+    cb = QComboBox()
     for v, d in items:
-        cb.add_item(d, v, deletable=False)
+        cb.addItem(d, v)
     idx = cb.findData(current_value)
     if idx >= 0:
         cb.setCurrentIndex(idx)

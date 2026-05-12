@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
 )
 
 from config.config import config, PROJECT_ROOT
-from .deletable_combo import DeletableComboBox
 from .save_preset_dialog import SavePresetDialog
 
 _ICON_DIR = os.path.join(PROJECT_ROOT, 'ui', 'icons')
@@ -207,35 +206,48 @@ class ConfigPanel(QWidget):
 
         box.addWidget(QLabel('ROI 预设'))
         preset_row = QHBoxLayout()
-        self.combo_preset = DeletableComboBox()
+        self.combo_preset = QComboBox()
         self._reload_presets()
         # 用 currentIndexChanged + currentData 走，避免显示文本和 data 撞 RESELECT
         self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
-        # 下拉项右侧 X 删除请求 → 走 _on_delete_preset
-        self.combo_preset.item_delete_requested.connect(self._on_delete_preset)
         btn_save_preset = QPushButton('保存当前')
         btn_save_preset.setCursor(Qt.PointingHandCursor)
         btn_save_preset.clicked.connect(self._on_save_preset)
+        # 「删除」按钮：仅当下拉是命名预设时启用；点击弹确认 → 删 config + reload
+        self.btn_delete_preset = QPushButton('删除')
+        self.btn_delete_preset.setCursor(Qt.PointingHandCursor)
+        self.btn_delete_preset.clicked.connect(self._on_delete_preset)
         preset_row.addWidget(self.combo_preset, 1)
         preset_row.addWidget(btn_save_preset)
+        preset_row.addWidget(self.btn_delete_preset)
         box.addLayout(preset_row)
+        self._refresh_delete_btn()
         return frame
 
     def _reload_presets(self):
         """重建下拉：[重新框选...][自定义区域] + 所有命名预设；按 last_roi_choice
-        定位当前项。全程 blockSignals，不触发 _on_preset_changed。
-        前两项 deletable=False，不画 X；命名预设画 X。"""
+        定位当前项。全程 blockSignals，不触发 _on_preset_changed。"""
         self.combo_preset.blockSignals(True)
         self.combo_preset.clear()
-        self.combo_preset.add_item(_RESELECT_LABEL, RESELECT_TOKEN, deletable=False)
-        self.combo_preset.add_item(_CUSTOM_LABEL, CUSTOM_TOKEN, deletable=False)
+        self.combo_preset.addItem(_RESELECT_LABEL, RESELECT_TOKEN)
+        self.combo_preset.addItem(_CUSTOM_LABEL, CUSTOM_TOKEN)
         presets = config.get('scan.roi_presets') or {}
         for name in presets.keys():
-            self.combo_preset.add_item(name, name, deletable=True)
+            self.combo_preset.addItem(name, name)
         last = config.get('scan.last_roi_choice') or RESELECT_TOKEN
         idx = self.combo_preset.findData(last)
         self.combo_preset.setCurrentIndex(idx if idx >= 0 else 0)
         self.combo_preset.blockSignals(False)
+        self._refresh_delete_btn()
+
+    def _refresh_delete_btn(self):
+        """删除按钮仅在选中命名预设时启用（特殊伪项 / 还没建按钮 都不启用）。"""
+        if not hasattr(self, 'btn_delete_preset'):
+            return
+        data = self.combo_preset.currentData()
+        self.btn_delete_preset.setEnabled(
+            isinstance(data, str) and data not in (RESELECT_TOKEN, CUSTOM_TOKEN)
+        )
 
     def refresh_roi_combo(self):
         """外部触发（如 picker 完成后）：按 last_roi_choice 重定位下拉。"""
@@ -249,10 +261,10 @@ class ConfigPanel(QWidget):
             return
         config.set('scan.last_roi_choice', data)
         config.save()
+        self._refresh_delete_btn()
 
     def _on_save_preset(self):
-        """弹 SavePresetDialog；保存名（新建/覆盖均走同一路径）。
-        对话框内 X 删除会直接落 config，所以无论 accept/reject 都需 reload 主下拉。"""
+        """弹 SavePresetDialog 取名字（新建 / 覆盖均走同一路径）。"""
         roi = config.get('scan.roi_rect')
         if not roi:
             QMessageBox.information(
@@ -261,32 +273,35 @@ class ConfigPanel(QWidget):
             )
             return
         dlg = SavePresetDialog(self)
-        result = dlg.exec()
-        # 删除可能在对话框里发生过，无论 accept/reject 都重 reload 主下拉
-        try:
-            if result != dlg.Accepted:
-                return
-            name = dlg.chosen_name()
-            if not name:
-                return
-            if name in (RESELECT_TOKEN, CUSTOM_TOKEN):
-                QMessageBox.warning(self, '保存预设', '该名称为保留字，请换一个。')
-                return
-            presets = config.get('scan.roi_presets') or {}
-            presets[name] = list(roi)
-            config.set('scan.roi_presets', presets)
-            config.set('scan.last_roi_choice', name)
-            config.save()
-        finally:
-            self._reload_presets()
+        if dlg.exec() != dlg.Accepted:
+            return
+        name = dlg.chosen_name()
+        if not name:
+            return
+        if name in (RESELECT_TOKEN, CUSTOM_TOKEN):
+            QMessageBox.warning(self, '保存预设', '该名称为保留字，请换一个。')
+            return
+        presets = config.get('scan.roi_presets') or {}
+        presets[name] = list(roi)
+        config.set('scan.roi_presets', presets)
+        config.set('scan.last_roi_choice', name)
+        config.save()
+        self._reload_presets()
 
-    def _on_delete_preset(self, name):
-        """主下拉里点了某项的 X：从 config 删；若 last_roi_choice 指向它，回退到
-        自定义区域，避免下次启动 fallback 全屏。"""
-        if not isinstance(name, str):
+    def _on_delete_preset(self):
+        """点击「删除」按钮：删当前选中的命名预设。弹确认对话框防误删。"""
+        name = self.combo_preset.currentData()
+        if not isinstance(name, str) or name in (RESELECT_TOKEN, CUSTOM_TOKEN):
             return
         presets = config.get('scan.roi_presets') or {}
         if name not in presets:
+            return
+        ret = QMessageBox.question(
+            self, '删除预设',
+            f'确定删除预设「{name}」吗？此操作不可撤销。',
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if ret != QMessageBox.Yes:
             return
         del presets[name]
         config.set('scan.roi_presets', presets)
@@ -311,9 +326,9 @@ class ConfigPanel(QWidget):
         frame, box = _make_group('OCR 识别')
         row = QHBoxLayout()
         row.addWidget(QLabel('语言'))
-        self.combo_lang = DeletableComboBox()
+        self.combo_lang = QComboBox()
         for code, name in (('ch', 'ch (中文)'), ('en', 'en (English)')):
-            self.combo_lang.add_item(name, code, deletable=False)
+            self.combo_lang.addItem(name, code)
         cur = config.get('ocr.language') or 'ch'
         idx = self.combo_lang.findData(cur)
         if idx >= 0:
