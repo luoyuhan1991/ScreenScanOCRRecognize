@@ -5,11 +5,13 @@ from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QComboBox,
-    QSlider, QLineEdit, QPushButton, QFrame, QFileDialog, QInputDialog,
+    QSlider, QLineEdit, QPushButton, QFrame, QFileDialog,
     QMessageBox, QGraphicsOpacityEffect,
 )
 
 from config.config import config, PROJECT_ROOT
+from .deletable_combo import DeletableComboBox
+from .save_preset_dialog import SavePresetDialog
 
 _ICON_DIR = os.path.join(PROJECT_ROOT, 'ui', 'icons')
 
@@ -205,10 +207,12 @@ class ConfigPanel(QWidget):
 
         box.addWidget(QLabel('ROI 预设'))
         preset_row = QHBoxLayout()
-        self.combo_preset = QComboBox()
+        self.combo_preset = DeletableComboBox()
         self._reload_presets()
-        # 用 currentIndexChanged + currentData 走，避免显示文本和 data 撞 _RESELECT
+        # 用 currentIndexChanged + currentData 走，避免显示文本和 data 撞 RESELECT
         self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
+        # 下拉项右侧 X 删除请求 → 走 _on_delete_preset
+        self.combo_preset.item_delete_requested.connect(self._on_delete_preset)
         btn_save_preset = QPushButton('保存当前')
         btn_save_preset.setCursor(Qt.PointingHandCursor)
         btn_save_preset.clicked.connect(self._on_save_preset)
@@ -219,14 +223,15 @@ class ConfigPanel(QWidget):
 
     def _reload_presets(self):
         """重建下拉：[重新框选...][自定义区域] + 所有命名预设；按 last_roi_choice
-        定位当前项。全程 blockSignals，不触发 _on_preset_changed。"""
+        定位当前项。全程 blockSignals，不触发 _on_preset_changed。
+        前两项 deletable=False，不画 X；命名预设画 X。"""
         self.combo_preset.blockSignals(True)
         self.combo_preset.clear()
-        self.combo_preset.addItem(_RESELECT_LABEL, RESELECT_TOKEN)
-        self.combo_preset.addItem(_CUSTOM_LABEL, CUSTOM_TOKEN)
+        self.combo_preset.add_item(_RESELECT_LABEL, RESELECT_TOKEN, deletable=False)
+        self.combo_preset.add_item(_CUSTOM_LABEL, CUSTOM_TOKEN, deletable=False)
         presets = config.get('scan.roi_presets') or {}
         for name in presets.keys():
-            self.combo_preset.addItem(name, name)
+            self.combo_preset.add_item(name, name, deletable=True)
         last = config.get('scan.last_roi_choice') or RESELECT_TOKEN
         idx = self.combo_preset.findData(last)
         self.combo_preset.setCurrentIndex(idx if idx >= 0 else 0)
@@ -246,7 +251,8 @@ class ConfigPanel(QWidget):
         config.save()
 
     def _on_save_preset(self):
-        """把当前 roi_rect 存为命名预设。roi_rect 为空时提示用户先框选一次。"""
+        """弹 SavePresetDialog；保存名（新建/覆盖均走同一路径）。
+        对话框内 X 删除会直接落 config，所以无论 accept/reject 都需 reload 主下拉。"""
         roi = config.get('scan.roi_rect')
         if not roi:
             QMessageBox.information(
@@ -254,19 +260,40 @@ class ConfigPanel(QWidget):
                 '当前还没有框选过 ROI，请先在下拉里选「重新框选...」拖出一个区域。',
             )
             return
-        name, ok = QInputDialog.getText(self, '保存预设', '预设名称：')
-        if not (ok and name):
-            return
-        if name in (RESELECT_TOKEN, CUSTOM_TOKEN):
-            # 不允许撞内部 token，避免下拉项被它顶掉
-            QMessageBox.warning(self, '保存预设', '该名称为保留字，请换一个。')
+        dlg = SavePresetDialog(self)
+        result = dlg.exec()
+        # 删除可能在对话框里发生过，无论 accept/reject 都重 reload 主下拉
+        try:
+            if result != dlg.Accepted:
+                return
+            name = dlg.chosen_name()
+            if not name:
+                return
+            if name in (RESELECT_TOKEN, CUSTOM_TOKEN):
+                QMessageBox.warning(self, '保存预设', '该名称为保留字，请换一个。')
+                return
+            presets = config.get('scan.roi_presets') or {}
+            presets[name] = list(roi)
+            config.set('scan.roi_presets', presets)
+            config.set('scan.last_roi_choice', name)
+            config.save()
+        finally:
+            self._reload_presets()
+
+    def _on_delete_preset(self, name):
+        """主下拉里点了某项的 X：从 config 删；若 last_roi_choice 指向它，回退到
+        自定义区域，避免下次启动 fallback 全屏。"""
+        if not isinstance(name, str):
             return
         presets = config.get('scan.roi_presets') or {}
-        presets[name] = list(roi)
+        if name not in presets:
+            return
+        del presets[name]
         config.set('scan.roi_presets', presets)
-        config.set('scan.last_roi_choice', name)
+        if config.get('scan.last_roi_choice') == name:
+            config.set('scan.last_roi_choice', CUSTOM_TOKEN)
         config.save()
-        self._reload_presets()  # 内部会按 last_roi_choice=name 定位
+        self._reload_presets()
 
     # ----- 扫描节奏 -----
     def _build_pace_group(self):
@@ -284,9 +311,9 @@ class ConfigPanel(QWidget):
         frame, box = _make_group('OCR 识别')
         row = QHBoxLayout()
         row.addWidget(QLabel('语言'))
-        self.combo_lang = QComboBox()
+        self.combo_lang = DeletableComboBox()
         for code, name in (('ch', 'ch (中文)'), ('en', 'en (English)')):
-            self.combo_lang.addItem(name, code)
+            self.combo_lang.add_item(name, code, deletable=False)
         cur = config.get('ocr.language') or 'ch'
         idx = self.combo_lang.findData(cur)
         if idx >= 0:

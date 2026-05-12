@@ -137,13 +137,19 @@ QWidget#configPanel QLabel#groupTitle {
 
 /* ============================== 输入框 / 下拉框 ============================== */
 
+/* 输入框 / 下拉框（对齐 mockup .input / .select：高 32 = 22 内容 + 4*2 padding + 2 border，
+   下拉再额外右内距 30px 给箭头让位）*/
 QLineEdit, QComboBox {
     background-color: #FFFFFF;
     border: 1px solid #CBD5E1;
     border-radius: 6px;
     padding: 4px 10px;
-    min-height: 24px;
+    min-height: 22px;
     color: #1E293B;
+    font-size: 13px;
+}
+QComboBox {
+    padding-right: 30px;
 }
 QLineEdit:focus, QComboBox:focus {
     border-color: #2F6FEB;
@@ -159,22 +165,32 @@ QLineEdit:read-only {
 QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
-    width: 22px;
+    width: 28px;
     border: none;
     background: transparent;
 }
+/* mockup .select::after 是个 8x8 的 V 形（border 旋转得到），这里 SVG chevron 等效，
+   尺寸压到 10x10 跟 mockup 视觉一致。色与 stroke 已在 svg 里写死 #94A3B8。*/
 QComboBox::down-arrow {
     image: url({ICON_DIR}/chevron-down.svg);
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
 }
+
+/* 弹出列表容器（mockup .dropdown-menu）：1px 灰边 + 圆角 + 13px 字号。
+   注意：不写 ::item / ::item:hover / ::item:selected — 一旦写了，QStyleSheetStyle
+   会接管 item 绘制，DeletableComboBox 的 itemDelegate.paint（含 X 删除标记）
+   会被覆盖掉。item 的背景色 / 文字色 / 选中态 / hover 态全交给 delegate 自绘
+   （见 ui/widgets/deletable_combo.py）。普通 QComboBox（仅项无需 X）也享受同
+   一套配色，因为我们让所有下拉都用 DeletableComboBox 的样式约定。
+   font-size 在容器上设 13，让 delegate 拿到的 option.font 自动是 13；mockup
+   .dropdown-menu 没有上下 padding，这里也不加。*/
 QComboBox QAbstractItemView {
     background-color: #FFFFFF;
     border: 1px solid #E3E8EF;
     border-radius: 6px;
-    selection-background-color: #DCE8FB;
-    selection-color: #1E293B;
     outline: 0;
+    font-size: 13px;
 }
 
 
