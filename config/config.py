@@ -32,33 +32,20 @@ class Config:
         return cls._instance
 
     def load(self, path=None):
-        """加载配置：DEFAULT_CONFIG 兜底，yaml 覆盖（与旧版 Config 行为一致）"""
+        """加载配置：DEFAULT_CONFIG 兜底，yaml 覆盖（叶子粒度 deep merge）。
+        语义：yaml 中没有的字段从 defaults 取；yaml 中有的字段以 yaml 为准。
+        要求"用户管理字典"（如 roi_presets）在 defaults 里设为空 {}，否则 deep
+        merge 的加法行为会让 default 项在用户删除后"复活"。"""
         if path is None:
             path = os.path.join(PROJECT_ROOT, 'config', 'config.yaml')
 
         self._data = copy.deepcopy(DEFAULT_CONFIG)
-        file_data = None
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 file_data = yaml.safe_load(f) or {}
                 self._data = _deep_merge(self._data, file_data)
         except FileNotFoundError:
             pass
-
-        # roi_presets 是"用户管理字典"——GUI 里增/删都应持久化。但 _deep_merge 对
-        # dict 子字段做"加法合并"：yaml 缺失的 key 由 default 兜底。如果用户在 GUI
-        # 里删了 default 里硬编码的预设（如 4+2），下次启动 default 会把它"复活"。
-        # 这里只要 yaml 中显式出现 roi_presets（哪怕是 {}），就整体替换 default，
-        # 尊重用户的删除；只有 yaml 中完全缺失 roi_presets 时（首次启动 / 旧版本
-        # 升级），才让 default 接管。
-        if (
-            file_data
-            and isinstance(file_data.get('scan'), dict)
-            and 'roi_presets' in file_data['scan']
-        ):
-            self._data.setdefault('scan', {})['roi_presets'] = copy.deepcopy(
-                file_data['scan']['roi_presets']
-            )
 
         self._path = path
         self._loaded = True
