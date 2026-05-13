@@ -75,8 +75,6 @@ class LogPanel(QWidget):
         self.text.setReadOnly(True)
         self.text.setMaximumBlockCount(10000)
         self.text.setObjectName('logText')
-        # 让 viewport 也用 #F7F9FC（QPlainTextEdit 的实际绘制区是 viewport widget）
-        self.text.viewport().setStyleSheet('background-color: #F7F9FC;')
         layout.addWidget(self.text, 1)
 
     @Slot(str, str)

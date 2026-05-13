@@ -148,7 +148,7 @@ class StatusBar(QWidget):
 
     @Slot(str)
     def set_status(self, text):
-        dot_color, text_color = _STATUS_COLOR.get(text, ('#94A3B8', '#1E293B'))
+        # 文字颜色由 QSS #statusValue 统一管；这里只切自绘圆点的颜色（QSS 不能进 paintEvent）
+        dot_color, _ = _STATUS_COLOR.get(text, ('#94A3B8', '#1E293B'))
         self.dot.set_color(dot_color)
         self.lbl_status_value.setText(text)
-        self.lbl_status_value.setStyleSheet(f'color: {text_color}; font-weight: 500;')
