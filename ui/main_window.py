@@ -1,7 +1,7 @@
 import logging
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxLayout,
+    QApplication, QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QSystemTrayIcon,
 )
 
@@ -150,13 +150,31 @@ class MainWindow(QMainWindow):
     def _on_start(self):
         if self.worker.isRunning():
             return
+        # picker 与主窗口共享主屏，会被主窗口挡住，所以先最小化让屏幕空出来再弹
+        will_show_picker = (
+            bool(config.get('scan.enable_roi'))
+            and (config.get('scan.last_roi_choice') or RESELECT_TOKEN) == RESELECT_TOKEN
+        )
+        if will_show_picker:
+            self._minimize_for_scan()
+            QApplication.processEvents()  # 让最小化先落地再弹 picker
         roi = self._resolve_roi()
         if roi is _PICKER_CANCELLED:
-            return  # 用户取消框选，按钮状态保持不变
+            # 取消框选：之前为 picker 最小化过的话要恢复，否则窗口凭空消失
+            if will_show_picker:
+                self.showNormal()
+                self.activateWindow()
+                self.raise_()
+            return
         self.overlay.clear_session()  # 新一轮扫描，清掉上一轮累计
         self.roi_border.show_for(roi)  # ROI 红框（roi=None 则不画）
         self.worker.start_scan(roi=roi)
-        # 开扫即最小化：托盘可用且配置允许就缩托盘，否则退化为最小化到任务栏
+        # picker 路径已经最小化过，这里跳过；其它路径正常最小化
+        if not will_show_picker:
+            self._minimize_for_scan()
+
+    def _minimize_for_scan(self):
+        """开扫最小化：托盘可用且配置允许就缩托盘，否则退化为最小化到任务栏。"""
         if self.tray is not None and bool(config.get('app.minimize_to_tray')):
             self.hide()
         else:
