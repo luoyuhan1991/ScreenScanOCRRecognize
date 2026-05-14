@@ -156,6 +156,11 @@ class MainWindow(QMainWindow):
         self.overlay.clear_session()  # 新一轮扫描，清掉上一轮累计
         self.roi_border.show_for(roi)  # ROI 红框（roi=None 则不画）
         self.worker.start_scan(roi=roi)
+        # 开扫即最小化：托盘可用且配置允许就缩托盘，否则退化为最小化到任务栏
+        if self.tray is not None and bool(config.get('app.minimize_to_tray')):
+            self.hide()
+        else:
+            self.showMinimized()
 
     def _on_stop(self):
         self.worker.stop_scan()
