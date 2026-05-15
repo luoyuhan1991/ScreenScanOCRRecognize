@@ -6,6 +6,17 @@
 
 ---
 
+## Changelog
+
+- **2026-05-13**：第一轮 + 第二轮审计完成，30 条修复项。
+- **2026-05-14（增量更新）**：
+  - 删 §一.6（`build.spec` 与运行时分歧）—— spec 文件已在 commit 47f2ff1 中删除。
+  - 更新 §十一.4 中"当前 yaml 值"—— commit 6df901f 修改了 `roi_rect` 坐标和 `last_roi_choice` 值，记录新观测值。
+  - 新增 §十.9 评估 commit 622543b 引入的 `_minimize_for_scan` 自动最小化逻辑的边界状态。
+  - 优先级总览相应顺移，立即修 / 短期修编号未变。
+
+---
+
 ## 一、技术框架/架构层面
 
 ### 1. 多个声明了但根本没生效的配置项（建议直接清理）
@@ -66,11 +77,6 @@ if roi_str:
 **不看 `scan.enable_roi`**——只依赖 `capture.py:35` 的"防御性二次校验"救场。这把判断放在 `capture` 既职责错位也容易让人误解（cli 改了配置以为关掉 ROI 了，其实是 capture 救了）。
 
 **修法**：判断挪到 cli/scan_worker 的"准备 roi"那一步，capture 不应承担。
-
-### 6. `build.spec` 与运行时分歧
-
-- defaults 里默认 `banlist_file` 指向桌面但 spec 没打包示例文件；
-- `hiddenimports` 列了 `paddlepaddle`（实际包名是 `paddle`）。打包过的话八成踩过。
 
 ---
 
@@ -471,6 +477,16 @@ matcher.load 失败只记 warning，状态栏 / 标题栏 / 用户视野零提�
 ### 10.8 拖 slider 期间 yaml 持续写盘 → 偶发 UI 卡顿
 前文已记。用户视觉感受是 slider 拖动不流畅，看不到底层原因。
 
+### 10.9 开扫自动最小化（2026-05-14 新增）的几个边界问题
+`ui/main_window.py:_on_start` + `_minimize_for_scan` 是 2026-05-14 的新增逻辑：开扫前自动最小化（托盘可用 + `app.minimize_to_tray=True` → `self.hide()`；否则 `self.showMinimized()`）。新增动机正确（picker 与主窗共享主屏会被挡住），但有几个边界状态值得注意：
+
+1. **picker 取消时 `self.showNormal()` 会丢失原窗口状态**：若用户原本是 maximized，`showNormal` 把窗口缩成普通大小。修法：取消路径用 `self.setWindowState(self._prev_state)` 还原，或在最小化前 stash `windowState()`。
+2. **托盘隐藏后用户从托盘恢复时无视觉反馈扫描是否在跑**：审计 §十.5 已经说过"关键词匹配失败无提示"，现在叠加上"窗口都没了"，新用户更难判断状态。修法：托盘图标加 tooltip "扫描中 - 已运行 N 分钟"，或托盘图标随状态变色。
+3. **`_minimize_for_scan` 的 fallback 路径分裂**：托盘可用 `hide()` vs 不可用 `showMinimized()`，两者的恢复路径不一样（一个走托盘菜单/单击，一个走任务栏点击）。用户切换设备时（笔记本独立用 vs 接外接屏幕带托盘 vs 任意 Linux/旧 Windows 无托盘）行为不一致。当前是有意为之，但应在 `app.minimize_to_tray` 旁加一句说明文字。
+4. **picker 取消后窗口先 `showNormal` 再 `activateWindow + raise_`，但 worker 已经 emit 了状态变更吗？** 看代码不会——`worker.start_scan` 还没被调，没问题。但若未来重构成 "worker 在 picker 之前就 init"，需要重新核对。
+
+这一节没有"高优"标记，是新功能的伴随债——记下来在下一轮 review 时一并审。
+
 ---
 
 ## 十一、配置 schema 演化
@@ -490,10 +506,10 @@ defaults.py 注释（`config/defaults.py:26-29`）说 `roi_presets` 必须默认
 **修法**：要么在 `_deep_merge` 加一个 "用户管理" 标记白名单，要么在 Config 内显式做"用户字典 = yaml 优先且不合并"的特殊处理。
 
 ### 11.4 默认配置与当前 yaml 冲突需要决定
-- defaults.py：`minimize_to_tray: True`、`interval_seconds: 5.0`、`min_confidence: 0.3`、`display_duration: 3.0`
-- config.yaml：`minimize_to_tray: false`、`interval_seconds: 3.0`、`min_confidence: 0.28`、`display_duration: 2.5`、`roi_presets: {4+2: ...}`
+- defaults.py：`minimize_to_tray: True`、`interval_seconds: 5.0`、`min_confidence: 0.3`、`display_duration: 3.0`、`last_roi_choice: '__reselect__'`、`roi_rect: [1136,250,1858,850]`
+- config.yaml（2026-05-14 用户保存的运行时值）：`minimize_to_tray: false`、`interval_seconds: 3.0`、`min_confidence: 0.28`、`display_duration: 2.5`、`last_roi_choice: '__custom__'`、`roi_rect: [1136,224,1893,850]`、`roi_presets: {4+2: [1136,224,1893,850]}`
 
-这些是用户在使用中改出来的值。**问题**：`tests/test_config_keys.py:26` 还在断言 `minimize_to_tray is True`——defaults 真要改 `False` 测试就过了，目前是矛盾的（defaults True、当前 yaml False、测试期望 True）。
+这些是用户在使用中改出来的值。**问题**：`tests/test_config_keys.py:26` 还在断言 `minimize_to_tray is True`——defaults 真要改 `False` 测试就过了，目前是矛盾的（defaults True、当前 yaml False、测试期望 True）。**新增**：用户已把 `last_roi_choice` 从默认 `'__reselect__'` 改成 `'__custom__'`——这进一步说明 §11.5 的两份意图打架不只是理论问题，用户已经在用脚投票绕开默认值。
 
 ### 11.5 `roi_rect` 默认值与 `last_roi_choice='__reselect__'` 自相矛盾
 defaults 同时给了：
