@@ -12,6 +12,7 @@ if PROJECT_ROOT not in sys.path:
 from config.config import config
 from ui.main_window import MainWindow
 from ui.tray import make_app_icon
+from utils.logger import configure_from_config
 
 
 def _set_windows_app_user_model_id():
@@ -31,6 +32,7 @@ def _set_windows_app_user_model_id():
 def main():
     _set_windows_app_user_model_id()
     config.load()
+    configure_from_config(config)
     app = QApplication(sys.argv)
     app.setWindowIcon(make_app_icon(256))
     qss_path = os.path.join(PROJECT_ROOT, 'ui', 'styles', 'light.qss')
