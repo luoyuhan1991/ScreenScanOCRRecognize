@@ -44,29 +44,29 @@ def _get_ocr():
 
 class OCRStage:
     def __init__(self):
-        self._ocr = None
+        # 模型走模块级单例 _ocr_instance，不缓存实例字段，避免配置切换后引用不同步。
+        pass
 
     def init(self):
-        """预初始化 OCR 模型"""
-        self._ocr = _get_ocr()
+        """预初始化 OCR 模型（让 5-15s 加载发生在 scan 循环之前）"""
+        _get_ocr()
 
     def recognize(self, frame_bgr):
         """
-        OCR 识别
+        OCR 识别。每次取最新模型实例，配置变更自动生效。
         Args:
             frame_bgr: numpy BGR 数组
         Returns:
             list of dict: [{'text': str, 'confidence': float, 'bbox': list}, ...]
         """
-        if self._ocr is None:
-            self._ocr = _get_ocr()
+        ocr = _get_ocr()
 
         # 可选图像反色
         if config.get('ocr.enable_image_invert'):
             frame_bgr = cv2.bitwise_not(frame_bgr)
 
         start = time.time()
-        result = self._ocr.ocr(frame_bgr)
+        result = ocr.ocr(frame_bgr)
         duration = time.time() - start
         logger.debug(f"OCR 耗时: {duration:.3f}s")
 
@@ -112,6 +112,5 @@ class OCRStage:
         global _ocr_instance, _ocr_init_config
         _ocr_instance = None
         _ocr_init_config = None
-        self._ocr = None
         import gc
         gc.collect()
