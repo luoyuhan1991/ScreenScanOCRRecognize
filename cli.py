@@ -17,10 +17,13 @@ def main():
     # 创建管道
     pipeline = ScanPipeline()
 
-    # ROI 设置
-    roi_str = config.get('scan.roi_rect')
-    if roi_str:
-        pipeline.set_roi(tuple(roi_str))
+    # ROI 设置：尊重 enable_roi 开关，与 GUI 行为对齐
+    if config.get('scan.enable_roi'):
+        roi = config.get('scan.roi_rect')
+        if roi:
+            pipeline.set_roi(tuple(roi))
+        else:
+            print("scan.enable_roi=True 但 roi_rect 未设置，按全屏扫描")
 
     print("正在初始化 OCR 模型...")
     pipeline.init()
