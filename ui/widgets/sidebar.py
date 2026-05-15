@@ -155,6 +155,3 @@ class Sidebar(QWidget):
         self._items[idx].set_active(True)
         self._current = idx
         self.currentRowChanged.emit(idx)
-
-    def setCurrentRow(self, idx):
-        self._on_item_clicked(idx)

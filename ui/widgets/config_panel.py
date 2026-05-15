@@ -416,15 +416,3 @@ class ConfigPanel(QWidget):
         """更新启动/停止按钮的可用态。"""
         self.btn_start.setEnabled(not running)
         self.btn_stop.setEnabled(running)
-
-    def reload_from_config(self):
-        """重置配置后由 MainWindow 调用，刷新部分 widget 显示值。
-        slider 由调用方重建更稳；此处仅刷新 checkbox / combo / lineedit。"""
-        self.cb_enable_roi.setChecked(bool(config.get('scan.enable_roi')))
-        self._reload_presets()
-        self.cb_gpu.setChecked(bool(config.get('gpu.enabled')))
-        cur = config.get('ocr.language') or 'ch'
-        idx = self.combo_lang.findData(cur)
-        if idx >= 0:
-            self.combo_lang.setCurrentIndex(idx)
-        self.le_banlist.setText(str(config.get('files.banlist_file') or ''))

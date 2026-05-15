@@ -1,7 +1,6 @@
 """关键词子串匹配（基于 Aho-Corasick 自动机）。"""
 
 import os
-import threading
 
 import ahocorasick
 
@@ -47,16 +46,6 @@ def parse_keyword_line(line: str):
     return keyword, ""
 
 
-def keyword_in_text(text: str, keyword: str) -> bool:
-    """子串匹配，casefold 不区分大小写，并忽略标点/空白。空字符串视为不匹配。"""
-    if not keyword or not text:
-        return False
-    nk = _normalize(keyword)
-    if not nk:
-        return False
-    return nk in _normalize(text)
-
-
 class SubstringMatcher:
     """
     Aho-Corasick 多模式子串匹配器。
@@ -75,16 +64,8 @@ class SubstringMatcher:
         self._file_mtime = None
 
     @property
-    def banlist_file(self):
-        return self._banlist_file
-
-    @property
     def keywords(self):
         return [info['original'] for info in self._keywords.values()]
-
-    def get_hint(self, keyword: str) -> str:
-        info = self._keywords.get(_normalize(keyword))
-        return info['hint'] if info else ""
 
     def load(self, banlist_file=None):
         """加载关键词文件并构建自动机。失败时保留旧数据，不清空。"""
@@ -197,21 +178,6 @@ class SubstringMatcher:
     def _log(self, level, msg):
         if self._logger is None:
             return
-        getattr(self._logger, level, lambda *_: None)(msg)
-
-
-_cache = {}
-_cache_lock = threading.Lock()
-
-
-def get_cached_matcher(banlist_file: str, logger=None) -> SubstringMatcher:
-    """按文件绝对路径缓存 SubstringMatcher 单例；返回前会触发 reload_if_changed。"""
-    path = os.path.abspath(banlist_file)
-    with _cache_lock:
-        m = _cache.get(path)
-        if m is None:
-            m = SubstringMatcher(banlist_file=path, logger=logger)
-            m.load()
-            _cache[path] = m
-    m.reload_if_changed()
-    return m
+        method = getattr(self._logger, level, None)
+        if method is not None:
+            method(msg)

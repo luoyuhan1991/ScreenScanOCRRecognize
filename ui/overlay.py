@@ -259,10 +259,7 @@ class Overlay(QWidget):
     def _cfg(self, key, default):
         if self._config is None:
             return default
-        try:
-            v = self._config.get(key, default)
-        except TypeError:
-            v = self._config.get(key)
+        v = self._config.get(key, default)
         return v if v is not None else default
 
     def _play_chord(self):

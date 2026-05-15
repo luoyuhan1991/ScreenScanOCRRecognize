@@ -37,12 +37,6 @@ class ScanWorker(QThread):
 
     # ---------- 公开 API ----------
 
-    def set_roi(self, roi):
-        """run 之前或运行中都可以调；运行中改 ROI 立即生效。"""
-        self._roi = roi
-        if self._initialized:
-            self.pipeline.set_roi(roi)
-
     def start_scan(self, roi=None):
         """启动扫描线程。若已在跑则忽略（防重复 start 抛 RuntimeError）。"""
         if self.isRunning():

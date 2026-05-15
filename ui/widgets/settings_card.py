@@ -155,9 +155,6 @@ class HotkeyDisplay(QFrame):
         self.kbd.setObjectName('kbd')
         h.addWidget(self.kbd)
 
-    def set_hotkey(self, text):
-        self.kbd.setText(text)
-
 
 def make_reset_button(text='重置配置'):
     """红边白底红字按钮（mockup .reset-btn），左侧带 rotate-ccw 图标。"""
