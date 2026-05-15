@@ -87,16 +87,16 @@ class SubstringMatcher:
         return info['hint'] if info else ""
 
     def load(self, banlist_file=None):
-        """加载关键词文件并构建自动机。banlist_file 不传则使用构造时路径。"""
+        """加载关键词文件并构建自动机。失败时保留旧数据，不清空。"""
         if banlist_file is not None:
             self._banlist_file = banlist_file
         path = self._banlist_file
-        self._keywords = {}
-        self._automaton = None
-        self._file_mtime = None
 
         if not path:
             self._log('warning', "未提供关键词文件路径")
+            self._keywords = {}
+            self._automaton = None
+            self._file_mtime = None
             return
 
         path = os.path.abspath(path)
@@ -104,10 +104,15 @@ class SubstringMatcher:
 
         if not os.path.exists(path):
             self._log('warning', f"关键词文件不存在: {path}")
+            self._keywords = {}
+            self._automaton = None
+            self._file_mtime = None
             return
 
+        # 先收集到局部变量，全部成功后才替换实例字段
+        new_keywords = {}
         try:
-            self._file_mtime = os.path.getmtime(path)
+            new_mtime = os.path.getmtime(path)
             with open(path, 'r', encoding='utf-8') as f:
                 for line in f:
                     keyword, hint = parse_keyword_line(line)
@@ -116,21 +121,24 @@ class SubstringMatcher:
                     norm = _normalize(keyword)
                     if not norm:
                         continue
-                    self._keywords[norm] = {
+                    new_keywords[norm] = {
                         'original': keyword,
                         'hint': hint,
                     }
         except Exception as e:
-            self._log('error', f"加载关键词文件失败: {e}")
+            self._log('error', f"加载关键词文件失败，保留旧关键词 ({len(self._keywords)} 条): {e}")
             return
 
-        if self._keywords:
-            automaton = ahocorasick.Automaton()
-            for kw_norm, info in self._keywords.items():
-                automaton.add_word(kw_norm, info)
-            automaton.make_automaton()
-            self._automaton = automaton
+        new_automaton = None
+        if new_keywords:
+            new_automaton = ahocorasick.Automaton()
+            for kw_norm, info in new_keywords.items():
+                new_automaton.add_word(kw_norm, info)
+            new_automaton.make_automaton()
 
+        self._keywords = new_keywords
+        self._automaton = new_automaton
+        self._file_mtime = new_mtime
         self._log('info', f"已加载 {len(self._keywords)} 个关键词")
 
     def reload_if_changed(self):
