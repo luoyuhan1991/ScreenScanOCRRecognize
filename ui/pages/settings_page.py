@@ -130,9 +130,10 @@ class SettingsPage(QWidget):
     # -------- 扫描配置 --------
     def _build_scan_card(self):
         card = SettingsCard('扫描配置')
+        _v = config.get('scan.diff_threshold')
         slider_box = _slider(
             0.0, 20.0,
-            float(config.get('scan.diff_threshold') or 5.0),
+            float(_v) if _v is not None else 5.0,
             lambda v: (config.set('scan.diff_threshold', round(v, 1)), config.save_debounced()),
             scale=10,
         )

@@ -80,7 +80,8 @@ class ScanWorker(QThread):
         FAILURE_THRESHOLD = 5
 
         while not self._stop:
-            interval = float(config.get('scan.interval_seconds') or 5.0)
+            iv = config.get('scan.interval_seconds')
+            interval = float(iv) if iv is not None else 5.0
             t0 = time.time()
             try:
                 result = self.pipeline.scan_once()

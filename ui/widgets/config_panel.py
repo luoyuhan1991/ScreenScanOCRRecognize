@@ -314,8 +314,9 @@ class ConfigPanel(QWidget):
     def _build_pace_group(self):
         frame, box = _make_group('扫描节奏')
         box.addWidget(QLabel('扫描间隔（秒）'))
+        _v = config.get('scan.interval_seconds')
         box.addLayout(_slider_row(
-            0.5, 10.0, float(config.get('scan.interval_seconds') or 5.0),
+            0.5, 10.0, float(_v) if _v is not None else 5.0,
             lambda v: (config.set('scan.interval_seconds', round(v, 1)), config.save_debounced()),
             scale=2,  # 0.5 秒步进
         ))
@@ -375,8 +376,9 @@ class ConfigPanel(QWidget):
         box.addLayout(row)
 
         box.addWidget(QLabel('匹配后显示时长（秒）'))
+        _v = config.get('matching.display_duration')
         box.addLayout(_slider_row(
-            0.5, 10.0, float(config.get('matching.display_duration') or 3.0),
+            0.5, 10.0, float(_v) if _v is not None else 3.0,
             lambda v: (config.set('matching.display_duration', round(v, 1)), config.save_debounced()),
             scale=2,  # 0.5 秒步进
         ))
