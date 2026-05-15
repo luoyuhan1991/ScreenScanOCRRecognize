@@ -133,7 +133,7 @@ class SettingsPage(QWidget):
         slider_box = _slider(
             0.0, 20.0,
             float(config.get('scan.diff_threshold') or 5.0),
-            lambda v: (config.set('scan.diff_threshold', round(v, 1)), config.save()),
+            lambda v: (config.set('scan.diff_threshold', round(v, 1)), config.save_debounced()),
             scale=10,
         )
         card.add_row(SettingsRow('帧差阈值', slider_box,
@@ -148,7 +148,7 @@ class SettingsPage(QWidget):
         font_box = _slider(
             10, 36,
             int(config.get('matching.font_size') or 18),
-            lambda v: (config.set('matching.font_size', int(v)), config.save()),
+            lambda v: (config.set('matching.font_size', int(v)), config.save_debounced()),
             scale=1, fmt='{:.0f}',
         )
         card.add_row(SettingsRow('字号', font_box,

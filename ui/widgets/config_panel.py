@@ -316,7 +316,7 @@ class ConfigPanel(QWidget):
         box.addWidget(QLabel('扫描间隔（秒）'))
         box.addLayout(_slider_row(
             0.5, 10.0, float(config.get('scan.interval_seconds') or 5.0),
-            lambda v: (config.set('scan.interval_seconds', round(v, 1)), config.save()),
+            lambda v: (config.set('scan.interval_seconds', round(v, 1)), config.save_debounced()),
             scale=2,  # 0.5 秒步进
         ))
         return frame
@@ -350,7 +350,7 @@ class ConfigPanel(QWidget):
         box.addWidget(QLabel('最小置信度'))
         box.addLayout(_slider_row(
             0.0, 1.0, float(config.get('ocr.min_confidence') or 0.3),
-            lambda v: (config.set('ocr.min_confidence', round(v, 2)), config.save()),
+            lambda v: (config.set('ocr.min_confidence', round(v, 2)), config.save_debounced()),
             scale=100,
         ))
         return frame
@@ -377,7 +377,7 @@ class ConfigPanel(QWidget):
         box.addWidget(QLabel('匹配后显示时长（秒）'))
         box.addLayout(_slider_row(
             0.5, 10.0, float(config.get('matching.display_duration') or 3.0),
-            lambda v: (config.set('matching.display_duration', round(v, 1)), config.save()),
+            lambda v: (config.set('matching.display_duration', round(v, 1)), config.save_debounced()),
             scale=2,  # 0.5 秒步进
         ))
         return frame

@@ -1,5 +1,6 @@
 import copy
 import os
+import threading
 import yaml
 
 from .defaults import DEFAULT_BANLIST_FILE, DEFAULT_CONFIG
@@ -75,6 +76,20 @@ class Config:
     def save(self):
         with open(self._path, 'w', encoding='utf-8') as f:
             yaml.dump(self._data, f, allow_unicode=True, default_flow_style=False)
+
+    def save_debounced(self, delay_ms=200):
+        """节流保存。在 delay_ms 内多次调用只产生一次磁盘写。
+        Timer 回调在独立线程跑，但当前事实上只有主线程 set/save，故未额外加锁。"""
+        if not hasattr(self, '_save_timer_lock'):
+            self._save_timer_lock = threading.Lock()
+            self._save_timer = None
+
+        with self._save_timer_lock:
+            if self._save_timer is not None:
+                self._save_timer.cancel()
+            self._save_timer = threading.Timer(delay_ms / 1000.0, self.save)
+            self._save_timer.daemon = True
+            self._save_timer.start()
 
     def reset_to_defaults(self):
         """恢复全量配置到 DEFAULT_CONFIG（不写盘，调用方决定是否 save）。"""
