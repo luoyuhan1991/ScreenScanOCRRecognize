@@ -19,10 +19,10 @@ DEFAULT_CONFIG = {
         'enable_roi': True,               # True = 用 ROI 区域；False = 全屏扫描
         'enable_diff_skip': True,         # 帧差检测：与上次画面相似时跳过 OCR
         'diff_threshold': 5.0,            # MSE 阈值，小于此值视为画面无变化（缩成 160x120 灰度图比较）
-        # 当前生效的 ROI 坐标 [x1, y1, x2, y2]，屏幕绝对像素；None = 未保存。
-        # 默认 [1136, 250, 1858, 850] 是项目工作区域，开箱即用。
+        # 当前生效的 ROI 坐标 [x1, y1, x2, y2]，屏幕绝对像素；None = 未保存，首启弹 picker。
+        # 与 last_roi_choice='__reselect__' 配合：两者必须保持一致意图（见 §十一.5）。
         # 开关由 enable_roi 单独承担，避免「None=禁用 / coords=启用」二义性。
-        'roi_rect': [1136, 250, 1858, 850],
+        'roi_rect': None,
         # ROI 预设字典 {名字: [x1,y1,x2,y2]}。完全由用户管理：GUI「保存当前」追加，
         # 「删除」按钮移除。default 不预置任何项 —— 否则用户删除后下次启动 deep_merge
         # 会把 default 里的项"复活"。

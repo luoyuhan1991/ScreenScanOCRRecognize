@@ -13,7 +13,7 @@ def test_roi_renamed():
     scan = DEFAULT_CONFIG['scan']
     assert 'roi' not in scan, "旧 key 'roi' 仍存在，重命名未完成"
     assert 'roi_rect' in scan, "新 key 'roi_rect' 不存在"
-    assert scan['roi_rect'] == [1136, 250, 1858, 850]
+    assert scan['roi_rect'] is None
 
 
 def test_enable_roi_intact():
