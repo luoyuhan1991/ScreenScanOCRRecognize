@@ -82,13 +82,24 @@ class ScanWorker(QThread):
 
     def _do_loop(self):
         self.status_changed.emit('运行中')
+        consecutive_failures = 0
+        FAILURE_THRESHOLD = 5
+
         while not self._stop:
             interval = float(config.get('scan.interval_seconds') or 5.0)
             t0 = time.time()
             try:
                 result = self.pipeline.scan_once()
+                consecutive_failures = 0
             except Exception:
                 logging.exception('scan_once 失败')
+                consecutive_failures += 1
+                if consecutive_failures >= FAILURE_THRESHOLD:
+                    logging.error(
+                        f'scan_once 连续失败 {FAILURE_THRESHOLD} 次，自动停止扫描'
+                    )
+                    self.status_changed.emit('异常停止')
+                    return
                 self._sleep_with_check(interval)
                 continue
 
