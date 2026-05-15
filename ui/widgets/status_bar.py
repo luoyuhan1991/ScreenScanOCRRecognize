@@ -44,7 +44,7 @@ class _StatusDot(QWidget):
 
 
 def _get_memory_mb():
-    """搬自 app.py.tk_backup:_get_memory_mb，纯 Win32 ctypes，不依赖 psutil。
+    """纯 Win32 ctypes 读 WorkingSetSize，不依赖 psutil。
     必须正确声明 HANDLE 的 restype，否则 64 位 Python 上伪句柄 -1 会被截断。"""
     try:
         import ctypes

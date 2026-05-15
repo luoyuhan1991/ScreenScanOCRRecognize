@@ -1,8 +1,4 @@
-"""命中提示音字节（C 大三和弦 PCM WAV，淡入淡出）。
-
-被 ui/overlay.py（新 PySide6 版）和 shared/overlay.py（旧 tkinter 版）共用，
-独立成模块避免新版 import 时被迫拉 tkinter。
-"""
+"""命中提示音字节（C 大三和弦 PCM WAV，淡入淡出）。由 ui/overlay.py 使用。"""
 import io
 import math
 import struct

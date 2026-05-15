@@ -172,7 +172,7 @@ class SettingsPage(QWidget):
     # -------- 热键设置 --------
     def _build_hotkey_card(self):
         card = SettingsCard('热键设置')
-        # T23 接入 HotkeyManager 后这里改成可编辑；当前只读显示
+        # 当前只读显示，编辑功能未实现
         card.add_row(SettingsRow('开始/暂停扫描',
                                  HotkeyDisplay('Ctrl + Alt + 1'),
                                  with_separator=False))
@@ -200,7 +200,7 @@ class SettingsPage(QWidget):
         h.addLayout(text_col)
         h.addStretch(1)
         btn = make_reset_button('重置配置')
-        btn.clicked.connect(self._on_reset)  # T17 才真正接入；当前是空槽
+        btn.clicked.connect(self._on_reset)
         h.addWidget(btn)
         card.add_row(row)
         return card

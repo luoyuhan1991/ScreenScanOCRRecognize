@@ -74,7 +74,7 @@ class Overlay(QWidget):
 
         self.hide()
 
-    # ============ 公开 API（与 shared/overlay.py 对齐）============
+    # ============ 公开 API ============
 
     def update(self, ocr_results, matches):
         """每次扫描后调用。无匹配也调用以保持显示连续。"""
@@ -116,7 +116,7 @@ class Overlay(QWidget):
         except Exception:
             pass
 
-    # ============ 渲染：行数据计算（搬自 shared/overlay.py 视觉规则）============
+    # ============ 渲染：行数据计算 ============
 
     def _compute_rows(self, ocr_results, matches):
         # 字体
