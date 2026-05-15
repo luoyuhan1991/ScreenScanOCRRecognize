@@ -2,7 +2,7 @@
 - SwitchToggle：mockup .switch 36×20 药丸开关，QSS 不支持，自绘 paintEvent
 - SettingsCard：mockup .settings-card 白底圆角卡片
 - SettingsRow：HBox 行 [label][控件]，相邻 row 之间画 1px 灰底分隔线
-- HotkeyDisplay：[kbd 标签][编辑铅笔]，只读展示当前热键
+- HotkeyDisplay：[kbd 标签]，只读展示当前热键
 """
 import os
 
@@ -143,10 +143,7 @@ class HintRow(QFrame):
 
 
 class HotkeyDisplay(QFrame):
-    """[kbd 标签][铅笔编辑按钮]。展示当前热键、点击铅笔进入编辑（占位空槽，
-    具体编辑流由 T23 HotkeyManager 接入）。"""
-
-    edit_clicked = Signal()
+    """[kbd 标签]。展示当前热键（只读）。"""
 
     def __init__(self, hotkey_text, parent=None):
         super().__init__(parent)
@@ -157,14 +154,6 @@ class HotkeyDisplay(QFrame):
         self.kbd = QLabel(hotkey_text)
         self.kbd.setObjectName('kbd')
         h.addWidget(self.kbd)
-        self.btn_edit = QPushButton()
-        self.btn_edit.setObjectName('hotkeyEdit')
-        self.btn_edit.setIcon(_svg_icon('pencil.svg', '#94A3B8', size=14))
-        self.btn_edit.setIconSize(QSize(14, 14))
-        self.btn_edit.setFixedSize(24, 24)
-        self.btn_edit.setCursor(Qt.PointingHandCursor)
-        self.btn_edit.clicked.connect(self.edit_clicked.emit)
-        h.addWidget(self.btn_edit)
 
     def set_hotkey(self, text):
         self.kbd.setText(text)
