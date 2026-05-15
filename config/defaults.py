@@ -8,7 +8,9 @@
 新增配置项：在 DEFAULT_CONFIG 加默认值；业务代码用 config.get('key.path')；GUI 改动走 config.set + config.save。
 """
 
-DEFAULT_BANLIST_FILE = 'C:/Users/Administrator/Desktop/banlist.txt'
+import os as _os
+_PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+DEFAULT_BANLIST_FILE = _os.path.join(_PROJECT_ROOT, 'config', 'banlist.example.txt')
 
 APP_VERSION = '1.0.0'
 
