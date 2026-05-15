@@ -3,41 +3,47 @@ import os
 from logging.handlers import RotatingFileHandler
 
 
-def setup_logger(name='screen_scan', level=logging.INFO):
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        # 把默认的逗号毫秒分隔符（"...27,582"）改成点（"...27.582"），与 GUI 内 _append_log 对齐
-        formatter.default_msec_format = '%s.%03d'
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(level)
-        # propagate=True：让消息向上传到 root logger，新版 PySide6 GUI 在 root
-        # 上挂 LogBridge 收日志（所以 pipeline/matcher/hotkey 的输出能进 GUI 日志区）。
-        # root 没有 console StreamHandler，不会和这里的 console handler 重复。
-        logger.propagate = True
-    return logger
+def _ensure_root_console_handler(level=logging.INFO):
+    """在 root 装一个 console StreamHandler（幂等）。
+    旧版 screen_scan 命名 logger 自己装 StreamHandler 又 propagate=True，
+    会让 root 上的 LogBridge 再 format 一次同样消息（双重格式化）。
+    现在统一让 root 持有 console handler，screen_scan 不再持。"""
+    root = logging.getLogger()
+    has_stream = any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
+        for h in root.handlers
+    )
+    if has_stream:
+        return
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    formatter.default_msec_format = '%s.%03d'
+    handler.setFormatter(formatter)
+    handler.setLevel(level)
+    root.addHandler(handler)
+    if root.level > level or root.level == logging.WARNING:  # WARNING 是 root 默认
+        root.setLevel(level)
 
 
-logger = setup_logger()
+_ensure_root_console_handler()
+
+# 业务代码 import 这个别名；它仅 propagate 到 root，handler 全在 root 上。
+logger = logging.getLogger('screen_scan')
+logger.propagate = True
 
 
 def configure_from_config(cfg):
-    """根据配置调整日志级别 + 装 RotatingFileHandler 到 root（让所有模块日志都进文件）。"""
+    """根据配置调整 root 级别 + 装 RotatingFileHandler。"""
     level_str = cfg.get('logging.level', 'INFO')
     level = getattr(logging, level_str.upper(), logging.INFO)
 
-    # 1. 调整 screen_scan logger 和 root 的级别
-    logging.getLogger().setLevel(level)
-    logger.setLevel(level)
-    for h in logger.handlers:
+    root = logging.getLogger()
+    root.setLevel(level)
+    for h in root.handlers:
         h.setLevel(level)
 
-    # 2. 装 RotatingFileHandler 到 root，避免重复装
-    root = logging.getLogger()
     has_file = any(isinstance(h, RotatingFileHandler) for h in root.handlers)
     if has_file:
         return
