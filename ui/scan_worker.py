@@ -62,8 +62,8 @@ class ScanWorker(QThread):
         try:
             self._do_init()
             self._do_loop()
-        except Exception as e:
-            logging.error(f'扫描线程异常: {e}')
+        except Exception:
+            logging.exception('扫描线程异常')
             self.status_changed.emit('已停止')
         # 注意：worker 退出不释放 pipeline。OCRStage 走模块级 (lang, gpu) 单例，
         # 释放后下次启动会重新加载模型（5–15s + 打印 "初始化 PaddleOCR"），且
@@ -87,8 +87,8 @@ class ScanWorker(QThread):
             t0 = time.time()
             try:
                 result = self.pipeline.scan_once()
-            except Exception as e:
-                logging.error(f'scan_once 失败: {e}')
+            except Exception:
+                logging.exception('scan_once 失败')
                 self._sleep_with_check(interval)
                 continue
 

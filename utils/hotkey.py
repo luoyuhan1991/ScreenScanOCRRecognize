@@ -17,8 +17,8 @@ class HotkeyManager:
             logger.info(f"热键已注册: {hotkey} - {description}")
         except ImportError:
             logger.warning("keyboard 库未安装，热键不可用")
-        except Exception as e:
-            logger.error(f"注册热键失败 {hotkey}: {e}")
+        except Exception:
+            logger.exception(f"注册热键失败 {hotkey}")
 
     def unregister_all(self):
         try:

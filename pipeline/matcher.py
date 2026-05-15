@@ -125,8 +125,8 @@ class SubstringMatcher:
                         'original': keyword,
                         'hint': hint,
                     }
-        except Exception as e:
-            self._log('error', f"加载关键词文件失败，保留旧关键词 ({len(self._keywords)} 条): {e}")
+        except Exception:
+            self._log('exception', f"加载关键词文件失败，保留旧关键词 ({len(self._keywords)} 条)")
             return
 
         new_automaton = None
