@@ -8,6 +8,8 @@ ScreenScanOCRRecognize 是一个 Windows 平台的屏幕扫描 OCR 应用。核�
 
 当前架构：pipeline（`capture → diff_gate → ocr_stage → matcher`），仅 PaddleOCR 单引擎。
 
+> **重要：开发机 ≠ 运行机。** 本仓库所在的机器**只用于编辑代码**，应用实际运行在另一台机器上。所以**不要**用本机的 `Get-Process pythonw` / `logs/app.log` 的 mtime 来判断 GUI 是否在运行——本机看不到运行机的进程和日志。需要验证行为时，让用户在运行机上启动/查看，或请用户把运行机的日志/截图贴回来。
+
 ## 运行与构建
 
 ```bash

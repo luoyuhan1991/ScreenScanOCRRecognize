@@ -1,4 +1,5 @@
 import cv2
+import logging
 import numpy as np
 import time
 
@@ -24,6 +25,14 @@ def _get_ocr():
     device = 'gpu' if use_gpu else 'cpu'
 
     logger.info(f"初始化 PaddleOCR: lang={lang}, device={device}")
+
+    # PaddleOCR/paddlex 构造函数会偷偷调 logging.basicConfig 或把 root level 改成 WARNING，
+    # 导致后续 INFO 日志全被吞掉（症状：日志只能看到 WARNING+）。前后快照 + 恢复 root level
+    # 和所有 handler 的 level。
+    _root = logging.getLogger()
+    _saved_root_level = _root.level
+    _saved_handler_levels = [(h, h.level) for h in list(_root.handlers)]
+
     if major >= 3:
         # 屏幕截图始终正向，禁用文档方向/矫正模型以避免 PP-LCNet padding bug 并提速
         _ocr_instance = PaddleOCR(
@@ -37,6 +46,11 @@ def _get_ocr():
             lang=lang, use_gpu=use_gpu,
             use_angle_cls=True, enable_mkldnn=False
         )
+
+    _root.setLevel(_saved_root_level)
+    for h, lvl in _saved_handler_levels:
+        h.setLevel(lvl)
+
     _ocr_init_config = current_config
     logger.info("PaddleOCR 初始化完成")
     return _ocr_instance
