@@ -52,36 +52,43 @@ class ScanPipeline:
                 skipped=True,
                 duration=time.time() - start
             )
-            return result
-
-        ocr_results = self.ocr.recognize(frame)
-        matches = self.matcher.match(ocr_results)
-
-        # 把本轮每一行 OCR 文本写入日志：命中行用 MATCH 级别（红），其余 INFO（绿）。
-        matched_texts = {m.get('ocr_text', '') for m in matches}
-        hints_by_text = {}
-        for m in matches:
-            hints_by_text.setdefault(m.get('ocr_text', ''), []).append(
-                f"{m.get('keyword', '')}({m.get('hint', '')})"
-                if m.get('hint') else m.get('keyword', '')
+        else:
+            ocr_results = self.ocr.recognize(frame)
+            matches = self.matcher.match(ocr_results)
+            self._last_result = ScanResult(
+                ocr_results=ocr_results,
+                matches=matches,
+                skipped=False,
+                duration=time.time() - start
             )
+            result = self._last_result
+
+        # 每轮都打印本次 OCR 文本：命中行 MATCH 级别（红），其余 INFO（绿）。
+        # 帧差跳过时打印的是上次缓存的内容，保证用户每个 interval 都能在日志看到 OCR 结果。
+        self._log_ocr_lines(result.ocr_results, result.matches, result.skipped)
+        return result
+
+    @staticmethod
+    def _log_ocr_lines(ocr_results, matches, skipped):
+        if not ocr_results:
+            return
+        matched_texts = {m.get('ocr_text', '') for m in matches}
+        tags_by_text = {}
+        for m in matches:
+            t = m.get('ocr_text', '')
+            kw = m.get('keyword', '')
+            hint = m.get('hint', '')
+            tags_by_text.setdefault(t, []).append(f"{kw}({hint})" if hint else kw)
+        prefix = "OCR(缓存)" if skipped else "OCR"
         for r in ocr_results:
             text = r.get('text', '') if isinstance(r, dict) else ''
             if not text:
                 continue
             if text in matched_texts:
-                tags = ' '.join(hints_by_text.get(text, []))
-                logger.log(MATCH_LEVEL, f"OCR | {text}  ← {tags}")
+                tags = ' '.join(tags_by_text.get(text, []))
+                logger.log(MATCH_LEVEL, f"{prefix} | {text}  ← {tags}")
             else:
-                logger.info(f"OCR | {text}")
-
-        self._last_result = ScanResult(
-            ocr_results=ocr_results,
-            matches=matches,
-            skipped=False,
-            duration=time.time() - start
-        )
-        return self._last_result
+                logger.info(f"{prefix} | {text}")
 
     def release(self):
         self.capture.close()
