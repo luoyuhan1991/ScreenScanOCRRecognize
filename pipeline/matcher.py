@@ -6,12 +6,16 @@ import ahocorasick
 
 
 def _is_kept(cp: int) -> bool:
-    """匹配时只保留：英文字母、阿拉伯数字、中文（CJK 基本区 + 扩展 A）。"""
+    """匹配时只保留：英文字母、阿拉伯数字、中文（CJK 基本区 + 扩展 A）、日文假名。
+    日文汉字与中文共用 CJK Unified Ideographs，已被覆盖。"""
     return (
         (0x30 <= cp <= 0x39)         # 0-9
         or (0x61 <= cp <= 0x7A)      # a-z（casefold 后大写已转小写）
-        or (0x4E00 <= cp <= 0x9FFF)  # CJK Unified Ideographs
+        or (0x4E00 <= cp <= 0x9FFF)  # CJK Unified Ideographs（含日文汉字）
         or (0x3400 <= cp <= 0x4DBF)  # CJK Extension A
+        or (0x3040 <= cp <= 0x309F)  # Hiragana 平假名
+        or (0x30A0 <= cp <= 0x30FF)  # Katakana 片假名
+        or (0xFF66 <= cp <= 0xFF9D)  # 半角片假名
     )
 
 

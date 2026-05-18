@@ -2,7 +2,7 @@ import os
 import time
 
 from config.config import config, DEFAULT_BANLIST_FILE, PROJECT_ROOT
-from utils.logger import logger
+from utils.logger import logger, MATCH_LEVEL
 from .capture import CaptureStage
 from .diff_gate import DiffGate
 from .matcher import SubstringMatcher
@@ -56,6 +56,24 @@ class ScanPipeline:
 
         ocr_results = self.ocr.recognize(frame)
         matches = self.matcher.match(ocr_results)
+
+        # 把本轮每一行 OCR 文本写入日志：命中行用 MATCH 级别（红），其余 INFO（绿）。
+        matched_texts = {m.get('ocr_text', '') for m in matches}
+        hints_by_text = {}
+        for m in matches:
+            hints_by_text.setdefault(m.get('ocr_text', ''), []).append(
+                f"{m.get('keyword', '')}({m.get('hint', '')})"
+                if m.get('hint') else m.get('keyword', '')
+            )
+        for r in ocr_results:
+            text = r.get('text', '') if isinstance(r, dict) else ''
+            if not text:
+                continue
+            if text in matched_texts:
+                tags = ' '.join(hints_by_text.get(text, []))
+                logger.log(MATCH_LEVEL, f"OCR | {text}  ← {tags}")
+            else:
+                logger.info(f"OCR | {text}")
 
         self._last_result = ScanResult(
             ocr_results=ocr_results,

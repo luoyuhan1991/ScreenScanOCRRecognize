@@ -2,6 +2,11 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
+# MATCH 介于 INFO(20) 与 WARNING(30) 之间，用于命中关键词的 OCR 行。
+# LogPanel 据此把这类消息染红，区别于普通 OCR(INFO/绿)。
+MATCH_LEVEL = 25
+logging.addLevelName(MATCH_LEVEL, 'MATCH')
+
 
 def _ensure_root_console_handler(level=logging.INFO):
     """在 root 装一个 console StreamHandler（幂等）。

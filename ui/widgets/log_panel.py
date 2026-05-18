@@ -29,6 +29,7 @@ def _make_broom_icon(color='#475569'):
 _LEVEL_COLORS = {
     'DEBUG':   '#1E293B',  # mockup 普通文本（默认黑），DEBUG 不刻意上色避免喧宾夺主
     'INFO':    '#16A34A',
+    'MATCH':   '#E5484D',  # 命中关键词的 OCR 行（与 overlay _C_MATCH 同色）
     'WARNING': '#E0A82E',
     'ERROR':   '#E5484D',
 }
