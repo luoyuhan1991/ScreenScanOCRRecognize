@@ -145,13 +145,18 @@ class Overlay(QWidget):
         else:
             left_rows = [(kw, hint, _C_MATCH, _C_MATCH) for kw, hint in left_pairs]
 
-        # 右列：命中行先（红，按命中 kw 字母序）+ 未命中前 10（绿）+ 多余摘要 + 占位
+        # 右列：命中行先（红，按命中 kw 字母序）+ 未命中前 N（绿）+ 多余摘要 + 占位
+        # 同一行文本只显示一次（OCR 偶尔会重复返回同一行 / 屏上重复出现的内容）。
+        MATCH_CAP = 10
+        UNMATCH_CAP = 10
         matched_with_keys = []
         unmatched_lines = []
+        seen_texts = set()
         for r in ocr_results:
             text = r.get('text', '') if isinstance(r, dict) else ''
-            if not text:
+            if not text or text in seen_texts:
                 continue
+            seen_texts.add(text)
             text_cf = text.casefold()
             hit = [kw for kw in matched_keywords if kw.casefold() in text_cf]
             if hit:
@@ -160,12 +165,15 @@ class Overlay(QWidget):
                 unmatched_lines.append(text)
         matched_with_keys.sort(key=lambda x: x[0])
 
-        right_rows = [(t, _C_MATCH) for _, t in matched_with_keys]
-        for text in unmatched_lines[:10]:
+        matched_extra = max(0, len(matched_with_keys) - MATCH_CAP)
+        right_rows = [(t, _C_MATCH) for _, t in matched_with_keys[:MATCH_CAP]]
+        if matched_extra > 0:
+            right_rows.append((f'+ {matched_extra} 条命中未显示', _C_MUTED))
+        for text in unmatched_lines[:UNMATCH_CAP]:
             right_rows.append((text, _C_OCR_OK))
-        extra = len(unmatched_lines) - 10
-        if extra > 0:
-            right_rows.append((f'+ {extra} 行未显示', _C_MUTED))
+        unmatched_extra = max(0, len(unmatched_lines) - UNMATCH_CAP)
+        if unmatched_extra > 0:
+            right_rows.append((f'+ {unmatched_extra} 行未显示', _C_MUTED))
         if not right_rows:
             right_rows.append(('暂无识别结果', _C_PLACEHOLDER))
 
