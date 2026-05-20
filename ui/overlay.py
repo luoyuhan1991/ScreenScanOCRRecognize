@@ -134,7 +134,7 @@ class Overlay(QWidget):
         kw_cap = int(screen_w * 0.20)
         hint_cap = int(screen_w * 0.20)
         ocr_cap = int(screen_w * 0.40)
-        height_cap = int(screen_h * 0.50)
+        height_cap = int(screen_h * 0.80)
 
         matched_keywords = {m['keyword'] for m in matches if m.get('keyword')}
 
@@ -145,10 +145,9 @@ class Overlay(QWidget):
         else:
             left_rows = [(kw, hint, _C_MATCH, _C_MATCH) for kw, hint in left_pairs]
 
-        # 右列：命中行先（红，按命中 kw 字母序）+ 未命中前 N（绿）+ 多余摘要 + 占位
+        # 右列：命中行先（红，按命中 kw 字母序）+ 未命中（绿）+ 占位
         # 同一行文本只显示一次（OCR 偶尔会重复返回同一行 / 屏上重复出现的内容）。
-        MATCH_CAP = 10
-        UNMATCH_CAP = 10
+        # 行数不在这里硬截断；下方 max_visible 按 height_cap 统一处理截断与"+ N 已隐藏"。
         matched_with_keys = []
         unmatched_lines = []
         seen_texts = set()
@@ -165,15 +164,9 @@ class Overlay(QWidget):
                 unmatched_lines.append(text)
         matched_with_keys.sort(key=lambda x: x[0])
 
-        matched_extra = max(0, len(matched_with_keys) - MATCH_CAP)
-        right_rows = [(t, _C_MATCH) for _, t in matched_with_keys[:MATCH_CAP]]
-        if matched_extra > 0:
-            right_rows.append((f'+ {matched_extra} 条命中未显示', _C_MUTED))
-        for text in unmatched_lines[:UNMATCH_CAP]:
+        right_rows = [(t, _C_MATCH) for _, t in matched_with_keys]
+        for text in unmatched_lines:
             right_rows.append((text, _C_OCR_OK))
-        unmatched_extra = max(0, len(unmatched_lines) - UNMATCH_CAP)
-        if unmatched_extra > 0:
-            right_rows.append((f'+ {unmatched_extra} 行未显示', _C_MUTED))
         if not right_rows:
             right_rows.append(('暂无识别结果', _C_PLACEHOLDER))
 
@@ -213,8 +206,8 @@ class Overlay(QWidget):
         screen = QGuiApplication.primaryScreen()
         if screen:
             sg = screen.geometry()
-            w = min(w, int(sg.width() * 0.95))
-            h = min(h, int(sg.height() * 0.95))
+            w = min(w, int(sg.width() * 0.80))
+            h = min(h, int(sg.height() * 0.80))
         return QSize(max(w, 100), max(h, 40))
 
     # ============ paintEvent 自绘 ============
