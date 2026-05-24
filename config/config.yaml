@@ -27,7 +27,6 @@ scan:
   enable_roi: true
   interval_seconds: 3.0
   last_roi_choice: __custom__
-  roi_padding: 10
   roi_presets:
     4+2:
     - 1136

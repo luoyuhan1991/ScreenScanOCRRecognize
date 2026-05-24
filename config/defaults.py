@@ -17,7 +17,6 @@ APP_VERSION = '1.0.0'
 DEFAULT_CONFIG = {
     'scan': {
         'interval_seconds': 5.0,         # 两次扫描之间的间隔（秒）
-        'roi_padding': 10,                # ROI 周围外扩像素数（避免边缘文字被裁切）
         'enable_roi': True,               # True = 用 ROI 区域；False = 全屏扫描
         'diff_threshold': 5.0,            # MSE 阈值，小于此值视为画面无变化（缩成 160x120 灰度图比较）
         # 当前生效的 ROI 坐标 [x1, y1, x2, y2]，屏幕绝对像素；None = 未保存，首启弹 picker。
