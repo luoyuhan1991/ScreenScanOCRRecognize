@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QWidget
 class ROIBorder(QWidget):
     """覆盖在 ROI 区域上的红框。show_for(rect) 显示，hide_border() 收。"""
 
-    BORDER_WIDTH = 2
+    BORDER_WIDTH = 1
     BORDER_COLOR = QColor(229, 72, 77)  # 与 mockup --danger 同色
 
     def __init__(self, parent=None):
